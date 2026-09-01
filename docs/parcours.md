@@ -111,12 +111,14 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 - ✅ **Vérifié end-to-end** : facture BOUTIQUE-FAC-2026-0001 émise + PDF valide avec toutes les mentions
 - ⬜ Avoir (correction) · conversion devis→facture · stockage R2 · envoi email · ⚖️ valider mentions DGI
 
-## Étape 6 — Commandes / missions (cœur, libellé adaptatif)
-- ⬜ CRUD commande (type commande|mission selon secteur), statuts (en_attente→en_cours→livrée→annulée)
-- ⬜ Libellé/vocabulaire adapté (terminologie)
-- ⬜ Conversion commande livrée → vente
-- ⬜ Écran suivi (kanban simple ou liste par statut)
-- ⬜ 🧪 Tests statuts + terminologie
+## Étape 6 — Commandes / missions (cœur, libellé adaptatif) ✅
+- ✅ CRUD commande (type commande|mission selon secteur), statuts en_attente→en_cours→livrée/annulée
+- ✅ Libellé/vocabulaire adapté au secteur (TERMINOLOGIE : commande/mission)
+- ✅ Écran suivi (liste + avancement des statuts) accessible depuis la carte « Commandes » du dashboard
+- ✅ Compteur de commandes actives sur le dashboard
+- ✅ 🧪 Tests : création, changement de statut, compteur d'actives, type mission (service)
+- ✅ **Vérifié end-to-end** : commande créée → Démarrer → En cours → Terminée
+- ⬜ Conversion commande livrée → vente/facture · client optionnel dans le formulaire · échéance
 
 ## Étape 7 — Offline complet (le plus critique terrain)
 - ⬜ Câbler la file de mutations sur les vraies routes (ventes, tiers, achats, factures)

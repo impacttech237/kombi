@@ -419,6 +419,43 @@ export class EntrepriseDO extends DurableObject {
     return { ...f, lignes };
   }
 
+  // ══════════════ Commandes / missions ══════════════
+  async creerCommande(cmd: {
+    type?: 'commande' | 'mission'; tiersId?: string | null; libelle: string;
+    montant?: number | null; datePrevue?: string | null;
+  }): Promise<string> {
+    const id = uid();
+    this.sql.exec(
+      `INSERT INTO commande (id, type, tiers_id, libelle, montant, date_prevue)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      id, cmd.type ?? 'commande', cmd.tiersId ?? null, cmd.libelle,
+      cmd.montant ?? null, cmd.datePrevue ?? null,
+    );
+    return id;
+  }
+
+  async listerCommandes(): Promise<Record<string, unknown>[]> {
+    return this.sql.exec(
+      `SELECT c.id, c.type, c.libelle, c.statut, c.montant, c.date_prevue, t.nom AS tiers_nom
+         FROM commande c LEFT JOIN tiers t ON t.id = c.tiers_id
+        ORDER BY c.created_at DESC`,
+    ).toArray() as never;
+  }
+
+  async changerStatutCommande(id: string, statut: string): Promise<void> {
+    const ok = ['en_attente', 'en_cours', 'livree', 'annulee'];
+    if (!ok.includes(statut)) throw new Error('Statut invalide');
+    this.sql.exec("UPDATE commande SET statut = ?, updated_at = datetime('now') WHERE id = ?", statut, id);
+  }
+
+  /** Nombre de commandes actives (non livrées, non annulées) — pour le tableau de bord. */
+  async commandesActives(): Promise<number> {
+    const r = this.sql.exec(
+      "SELECT COUNT(*) AS n FROM commande WHERE statut IN ('en_attente','en_cours')",
+    ).toArray()[0] as { n: number };
+    return r.n;
+  }
+
   /** Chiffre d'affaires cumulé de l'exercice (crédits classe 7, écritures validées) — pour l'IGS. */
   async caCumule(): Promise<number> {
     const row = this.sql

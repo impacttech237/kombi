@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { formaterFCFA } from '@kombi/shared';
-import { api, statsJour, type EntrepriseResume } from '../lib/api.js';
+import { formaterFCFA, TERMINOLOGIE, type Secteur } from '@kombi/shared';
+import { api, statsJour, listerCommandes, type EntrepriseResume } from '../lib/api.js';
 import { Bouton, CarteStat, Icon } from '../components/ui.js';
 
 interface IgsResp {
@@ -9,9 +9,13 @@ interface IgsResp {
   igs: { igsAnnuel: number; classe: number } | null;
 }
 
-export function Dashboard({ entreprise, onCaisse }: { entreprise: EntrepriseResume; onCaisse?: () => void }) {
+export function Dashboard({ entreprise, onCaisse, onCommandes }: {
+  entreprise: EntrepriseResume; onCaisse?: () => void; onCommandes?: () => void;
+}) {
+  const term = TERMINOLOGIE[(entreprise.secteur as Secteur) ?? 'commerce'];
   const [igs, setIgs] = useState<IgsResp | null>(null);
   const [jour, setJour] = useState<{ nbVentes: number; totalJour: number } | null>(null);
+  const [nbCmd, setNbCmd] = useState<number | null>(null);
   const [erreur, setErreur] = useState('');
 
   useEffect(() => {
@@ -19,6 +23,9 @@ export function Dashboard({ entreprise, onCaisse }: { entreprise: EntrepriseResu
       .then(setIgs)
       .catch((e) => setErreur(e instanceof Error ? e.message : 'Erreur'));
     statsJour(entreprise.id).then(setJour).catch(() => {});
+    listerCommandes(entreprise.id)
+      .then((cs) => setNbCmd(cs.filter((c) => c.statut === 'en_attente' || c.statut === 'en_cours').length))
+      .catch(() => {});
   }, [entreprise.id]);
 
   return (
@@ -40,7 +47,10 @@ export function Dashboard({ entreprise, onCaisse }: { entreprise: EntrepriseResu
         <CarteStat titre="Ventes du jour" icone="caisse"
           valeur={jour ? formaterFCFA(jour.totalJour) : '—'}
           delta={jour ? `${jour.nbVentes} vente${jour.nbVentes > 1 ? 's' : ''}` : undefined} positif />
-        <CarteStat titre="Commandes" icone="boite" valeur="0" delta="en cours" positif />
+        <button onClick={onCommandes} style={{ all: 'unset', cursor: 'pointer' }}>
+          <CarteStat titre={term.commandes[0]!.toUpperCase() + term.commandes.slice(1)} icone="boite"
+            valeur={nbCmd !== null ? String(nbCmd) : '—'} delta="en cours" positif />
+        </button>
       </div>
 
       <div className="carte" style={{ marginTop: 14 }}>

@@ -7,6 +7,7 @@ import { Dashboard } from './pages/Dashboard.js';
 import { Caisse } from './pages/Caisse.js';
 import { Stock } from './pages/Stock.js';
 import { Factures } from './pages/Factures.js';
+import { Commandes } from './pages/Commandes.js';
 import { Ecran, TopBar, BottomNav } from './components/Layout.js';
 import { Bouton, Logo } from './components/ui.js';
 
@@ -54,10 +55,11 @@ function Espace() {
       masquer={active.secteur === 'service' ? ['stock'] : []} />}>
       <TopBar nomEntreprise={active.raison_sociale} onChangeEntreprise={() => setOnglet('dashboard')} />
       <div style={{ marginTop: 14 }}>
-        {onglet === 'dashboard' ? <Dashboard entreprise={active} onCaisse={() => setOnglet('caisse')} />
+        {onglet === 'dashboard' ? <Dashboard entreprise={active} onCaisse={() => setOnglet('caisse')} onCommandes={() => setOnglet('commandes')} />
           : onglet === 'caisse' ? <Caisse entreprise={active} />
           : onglet === 'stock' ? <Stock entreprise={active} />
           : onglet === 'factures' ? <Factures entreprise={active} />
+          : onglet === 'commandes' ? <Commandes entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : <Bientot titre="Comptabilité" />}
       </div>
       <div style={{ textAlign: 'center', marginTop: 18 }}>
