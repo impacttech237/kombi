@@ -58,7 +58,7 @@ export function Dashboard({ entreprise }: { entreprise: EntrepriseResume }) {
 function FauxGraphe() {
   return (
     <svg viewBox="0 0 300 110" style={{ width: '100%', height: 110 }} aria-hidden>
-      <polyline fill="none" stroke="var(--lime)" strokeWidth="3" strokeLinecap="round"
+      <polyline fill="none" stroke="var(--vert)" strokeWidth="3" strokeLinecap="round"
         points="0,80 40,72 80,78 120,55 160,60 200,38 240,44 300,20" />
       <polygon fill="var(--vert-clair)" opacity="0.6"
         points="0,80 40,72 80,78 120,55 160,60 200,38 240,44 300,20 300,110 0,110" />

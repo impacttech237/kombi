@@ -13,7 +13,7 @@ export default defineConfig({
         short_name: 'Kombi',
         description: "Kombi — l'ami de la gestion d'entreprise (PME zone CEMAC)",
         lang: 'fr',
-        theme_color: '#0b6e4f',
+        theme_color: '#10b981',
         background_color: '#ffffff',
         display: 'standalone',
         start_url: '/',

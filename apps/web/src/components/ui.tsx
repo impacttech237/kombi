@@ -87,7 +87,7 @@ export function CarteStat({
           color: 'var(--vert)', display: 'grid', placeItems: 'center',
         }}><Icon name={icone} size={18} /></span>
       </div>
-      <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.5px' }}>{valeur}</div>
+      <div className="chiffre" style={{ fontSize: 26, fontWeight: 700 }}>{valeur}</div>
       {delta && (
         <span className={`chip ${positif ? 'chip-ok' : 'chip-bas'}`}>
           <Icon name={positif ? 'hausse' : 'baisse'} size={13} /> {delta}
