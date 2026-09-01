@@ -19,12 +19,14 @@
 | ✅ | Service onboarding sectoriel (`planCreationEntreprise`) | typecheck |
 | ✅ | PWA shell + file de mutations offline (Dexie) + synchro idempotente | typecheck |
 
-**Total tests : 52 verts.**
+| ✅ | Auth better-auth (D1) + isolation multi-entreprises (backend) | 9 tests intégration (workerd) |
+
+**Total tests : 64 verts** (shared 8, fiscal 39, comptable 8, api 9).
 
 ## Modules de gestion (à implémenter)
 | État | Étape | Description |
 |---|---|---|
-| ⬜ | 1 | Auth (better-auth) + onboarding réel (écran choix secteur) + **test d'isolation multi-entreprises** |
+| 🚧 | 1 | Auth + multi-entreprises : **backend fait & testé** ; reste le front (onboarding, login, sélecteur) |
 | ⬜ | 2 | Tiers (clients/fournisseurs) + historique |
 | ⬜ | 3 | Ventes & caisse → reçu/facture + écriture auto (+ mouvement stock si actif) |
 | ⬜ | 4 | Stock (gated) : produits, mouvements, alertes seuil, achats fournisseurs (CMP) |

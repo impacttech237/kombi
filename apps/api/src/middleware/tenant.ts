@@ -18,13 +18,14 @@ export const tenant = createMiddleware<AppEnv>(async (c, next) => {
   if (!entrepriseId) return c.json({ erreur: 'Entreprise non spécifiée' }, 400);
 
   const membre = await c.env.DB.prepare(
-    'SELECT 1 FROM membre_entreprise WHERE utilisateur_id = ? AND entreprise_id = ? LIMIT 1',
+    'SELECT role FROM membre_entreprise WHERE utilisateur_id = ? AND entreprise_id = ? LIMIT 1',
   )
     .bind(utilisateurId, entrepriseId)
-    .first();
+    .first<{ role: import('@kombi/shared').RoleMembre }>();
 
   if (!membre) return c.json({ erreur: "Accès refusé à cette entreprise" }, 403);
 
   c.set('entrepriseId', entrepriseId);
+  c.set('role', membre.role);
   await next();
 });

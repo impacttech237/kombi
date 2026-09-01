@@ -47,19 +47,23 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 
 ---
 
-## Étape 1 — Authentification & multi-entreprises 🚧 prochaine
-- ⬜ Intégrer **better-auth** sur D1 (tables users/sessions/accounts via son schéma)
-- ⬜ Migration D1 `0003_auth.sql` (tables better-auth) + lier `utilisateur.auth_id`
-- ⬜ Inscription (email + mot de passe), connexion, déconnexion, session
-- ⬜ Middleware auth réel → pose `c.set('utilisateurId')` (remplace le placeholder `x-utilisateur-id`)
-- ⬜ Route `POST /api/entreprises` → branche `planCreationEntreprise` (batch D1 atomique)
-- ⬜ Écran **onboarding** : choix du secteur (commerce/service/mixte) + infos entreprise (NIU, nature)
-- ⬜ Sélecteur d'entreprise active (un user gère plusieurs entreprises)
-- ⬜ Gestion des membres : inviter un utilisateur, assigner rôle (admin/gérant/caissier)
-- ⬜ **Autorisation par rôle** : matrice rôle × action (caissier = ventes only, etc.)
-- ⬜ 🧪 **Test d'isolation multi-entreprises** : prouver que l'entreprise A ne lit jamais B (RLS applicative)
-- ⬜ 🧪 Tests : onboarding crée bien modules + plan comptable + exercice selon secteur
-- **Critère d'acceptation** : un « commerce » a stock actif, un « service » non ; A ≠ B étanche.
+## Étape 1 — Authentification & multi-entreprises 🚧 (backend fait, front à faire)
+- ✅ Intégrer **better-auth** sur D1 (Kysely/D1) — email + mot de passe
+- ✅ Migration D1 `0003_auth.sql` (tables better-auth, schéma dérivé de getAuthTables) + `utilisateur.auth_id`
+- ✅ Inscription/connexion/session (vérifié end-to-end en test workerd)
+- ✅ Middleware auth réel `authentifier` → pose `utilisateurId` (bridge auth→profil métier)
+- ✅ Route `POST /api/entreprises` → `planCreationEntreprise` (batch D1 atomique) + `GET /api/entreprises`
+- ✅ **Autorisation par rôle** : matrice `peut(role, permission)` (`@kombi/shared/authz`, testée)
+- ✅ Couture de sharding `TenantDb` (filtre entreprise_id auto, whitelist anti-injection, testée)
+- ✅ 🧪 **Test d'isolation multi-entreprises** : A ne lit jamais B (vérifié sur D1 réelle)
+- ✅ 🧪 Tests : onboarding crée modules + plan comptable + exercice selon secteur (commerce≠service)
+- ⬜ Écran **onboarding** (front) : choix secteur + infos entreprise (NIU, nature) — fluide, 2-3 écrans
+- ⬜ Sélecteur d'entreprise active (front) + envoi `x-entreprise-id`
+- ⬜ Écrans connexion/inscription (front) branchés sur better-auth
+- ⬜ Gestion des membres : inviter un utilisateur, assigner rôle (route + écran)
+- ⬜ Appliquer `requirePermission` sur les routes métier au fil des étapes
+- **Critère d'acceptation** : ✅ backend — commerce a stock actif, service non, A≠B étanche, auth réelle.
+  Reste le front (onboarding + login + sélecteur).
 
 ## Étape 2 — Tiers (clients & fournisseurs)
 - ⬜ CRUD tiers (nom, type, NIU, téléphone, email, adresse)

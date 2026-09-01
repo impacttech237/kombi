@@ -1,26 +1,29 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { AppEnv } from './types.js';
+import { creerAuth } from './auth/auth.js';
+import { authentifier } from './middleware/auth.js';
 import { tenant } from './middleware/tenant.js';
+import { entreprises } from './routes/entreprises.js';
 import { fiscalite } from './routes/fiscalite.js';
 
 const app = new Hono<AppEnv>();
 
-app.use('*', cors());
+app.use('*', cors({ origin: (o) => o, credentials: true }));
 
-app.get('/', (c) => c.json({ service: 'compta-api', statut: 'ok' }));
+app.get('/', (c) => c.json({ service: 'kombi-api', statut: 'ok' }));
 app.get('/health', (c) => c.json({ ok: true }));
 
-// TODO(auth): middleware better-auth posant c.set('utilisateurId', ...) avant /api/*.
-// Placeholder de dev : lit x-utilisateur-id (à REMPLACER par la vraie auth).
-app.use('/api/*', async (c, next) => {
-  const dev = c.req.header('x-utilisateur-id');
-  if (dev) c.set('utilisateurId', dev);
-  await next();
-});
+// ── Auth better-auth : /api/auth/** (inscription, connexion, session…) ──
+app.on(['GET', 'POST'], '/api/auth/*', (c) => creerAuth(c.env.DB, c.env).handler(c.req.raw));
 
-// Routes métier — protégées par l'isolation multi-entreprises.
-app.use('/api/*', tenant);
+// ── Entreprises : authentifié, sans tenant (on crée/liste avant de choisir) ──
+app.use('/api/entreprises/*', authentifier);
+app.use('/api/entreprises', authentifier);
+app.route('/api/entreprises', entreprises);
+
+// ── Routes métier : authentifié + tenant (isolation multi-entreprises) ──
+app.use('/api/fiscalite/*', authentifier, tenant);
 app.route('/api/fiscalite', fiscalite);
 
 export default app;

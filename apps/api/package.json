@@ -13,15 +13,19 @@
     "db:migrate:remote": "wrangler d1 migrations apply kombi-db --remote"
   },
   "dependencies": {
-    "@kombi/shared": "workspace:*",
-    "@kombi/fiscal": "workspace:*",
     "@kombi/comptable": "workspace:*",
-    "hono": "^4.6.0"
+    "@kombi/fiscal": "workspace:*",
+    "@kombi/shared": "workspace:*",
+    "better-auth": "^1.7.2",
+    "hono": "^4.6.0",
+    "kysely": "^0.29.5",
+    "kysely-d1": "^0.4.0"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.8.60",
     "@cloudflare/workers-types": "^4.20240909.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0",
+    "vitest": "^3.2.0",
     "wrangler": "^3.78.0"
   }
 }
