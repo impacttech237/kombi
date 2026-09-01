@@ -9,6 +9,8 @@ import { entreprises } from './routes/entreprises.js';
 import { fiscalite } from './routes/fiscalite.js';
 import { ventes } from './routes/ventes.js';
 import { produits } from './routes/produits.js';
+import { tiers } from './routes/tiers.js';
+import { factures } from './routes/factures.js';
 
 const app = new Hono<AppEnv>();
 
@@ -34,6 +36,12 @@ app.route('/api/ventes', ventes);
 
 app.use('/api/produits/*', authentifier, tenant, requireModule('stock'));
 app.route('/api/produits', produits);
+
+app.use('/api/tiers/*', authentifier, tenant, requireModule('tiers'));
+app.route('/api/tiers', tiers);
+
+app.use('/api/factures/*', authentifier, tenant, requireModule('facturation'));
+app.route('/api/factures', factures);
 
 export default app;
 

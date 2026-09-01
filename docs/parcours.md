@@ -100,18 +100,16 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 - ✅ **Vérifié end-to-end** : produit → appro 20@3000 → vente 1 → stock 19, compta à jour
 - ⬜ Ajustement d'inventaire · historique des mouvements (écran) · achats multi-lignes / à crédit (401)
 
-## Étape 5 — Facturation & devis (cœur)
-- ⬜ Attribution numéro **gap-less** en transaction (`sequence_numerotation`), format `NOM-FAC-2026-0001`
-- ⬜ CRUD devis + facture + lignes (HT/TVA/TTC selon assujettissement)
-- ⬜ Machine à états des statuts (brouillon→envoyée→payée…) + **avoir** (jamais suppression)
-- ⬜ Encaissement (paiement partiel/total) → écriture + maj statut
-- ⬜ **Génération PDF conforme DGI** (NIU émetteur+client, mentions obligatoires, séquentiel)
-- ⬜ Stockage PDF sur **R2** + lien
-- ⬜ **Envoi WhatsApp** (lien/API) + **email**
-- ⬜ Conversion devis → facture
-- ⬜ 🧪 Tests : numérotation sans trou même en concurrence ; PDF contient les mentions Art. 150
-- ⬜ ⚖️ Valider les mentions PDF avec l'expert / la DGI
-- **Critère** : facture numérotée non modifiable, PDF conforme, envoyée par WhatsApp.
+## Étape 5 — Facturation & devis (cœur) ✅
+- ✅ Numéro **gap-less** (`sequence_numerotation`, sérialisé par le DO), format `NOM-FAC-2026-0001`
+- ✅ Création devis + facture + lignes (HT/TVA/TTC) ; devis NON comptabilisé
+- ✅ Émission → statut envoyée + **créance client 411/701** (facture) ; encaissement partiel/total → statut
+- ✅ **Génération PDF conforme DGI** (émetteur+NIU, client+NIU, n° séquentiel, HT/TVA/TTC) via pdf-lib
+- ✅ **Envoi WhatsApp** (lien wa.me) + bouton PDF
+- ✅ Écran Factures (liste + création+émission + actions PDF/WhatsApp/Encaisser) ; onglet nav dédié
+- ✅ 🧪 Tests : numérotation gap-less, créance 411, paiement partiel/total, devis non comptabilisé
+- ✅ **Vérifié end-to-end** : facture BOUTIQUE-FAC-2026-0001 émise + PDF valide avec toutes les mentions
+- ⬜ Avoir (correction) · conversion devis→facture · stockage R2 · envoi email · ⚖️ valider mentions DGI
 
 ## Étape 6 — Commandes / missions (cœur, libellé adaptatif)
 - ⬜ CRUD commande (type commande|mission selon secteur), statuts (en_attente→en_cours→livrée→annulée)

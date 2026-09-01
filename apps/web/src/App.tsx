@@ -6,6 +6,7 @@ import { Onboarding } from './pages/Onboarding.js';
 import { Dashboard } from './pages/Dashboard.js';
 import { Caisse } from './pages/Caisse.js';
 import { Stock } from './pages/Stock.js';
+import { Factures } from './pages/Factures.js';
 import { Ecran, TopBar, BottomNav } from './components/Layout.js';
 import { Bouton, Logo } from './components/ui.js';
 
@@ -56,7 +57,7 @@ function Espace() {
         {onglet === 'dashboard' ? <Dashboard entreprise={active} onCaisse={() => setOnglet('caisse')} />
           : onglet === 'caisse' ? <Caisse entreprise={active} />
           : onglet === 'stock' ? <Stock entreprise={active} />
-          : onglet === 'tiers' ? <Bientot titre="Clients & fournisseurs" />
+          : onglet === 'factures' ? <Factures entreprise={active} />
           : <Bientot titre="Comptabilité" />}
       </div>
       <div style={{ textAlign: 'center', marginTop: 18 }}>

@@ -293,6 +293,132 @@ export class EntrepriseDO extends DurableObject {
     return { nouveauStock: etat.quantite, nouveauCmp: etat.cmp };
   }
 
+  // ══════════════ Facturation & devis ══════════════
+  async creerFacture(f: {
+    type: 'facture' | 'devis'; tiersId: string; dateEcheance?: string | null;
+    lignes: { designation: string; quantite: number; prixUnitaire: number; tauxTva?: number }[];
+  }): Promise<string> {
+    if (!f.lignes.length) throw new Error('Facture sans ligne');
+    const exerciceId = this.exerciceOuvert();
+    let totalHt = 0, totalTva = 0;
+    for (const l of f.lignes) {
+      const ht = Math.round(l.quantite * l.prixUnitaire);
+      totalHt += ht;
+      totalTva += Math.round(ht * (l.tauxTva ?? 0));
+    }
+    const id = uid();
+    this.sql.exec(
+      `INSERT INTO facture (id, exercice_id, type, tiers_id, date_echeance, statut, total_ht, total_tva, total_ttc)
+       VALUES (?, ?, ?, ?, ?, 'brouillon', ?, ?, ?)`,
+      id, exerciceId, f.type, f.tiersId, f.dateEcheance ?? null, totalHt, totalTva, totalHt + totalTva,
+    );
+    let ordre = 0;
+    for (const l of f.lignes) {
+      this.sql.exec(
+        `INSERT INTO ligne_facture (id, facture_id, designation, quantite, prix_unitaire, taux_tva, montant_ht, ordre)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        uid(), id, l.designation, l.quantite, l.prixUnitaire, l.tauxTva ?? 0,
+        Math.round(l.quantite * l.prixUnitaire), ordre++,
+      );
+    }
+    return id;
+  }
+
+  /** Émet la facture : numéro séquentiel gap-less + (si facture) créance client 411/701. */
+  async emettreFacture(factureId: string, prefixe: string): Promise<{ numero: string }> {
+    const f = this.sql
+      .exec('SELECT type, exercice_id, statut, numero, total_ht, total_tva, total_ttc FROM facture WHERE id = ?', factureId)
+      .toArray()[0] as
+      | { type: string; exercice_id: string; statut: string; numero: string | null; total_ht: number; total_tva: number; total_ttc: number }
+      | undefined;
+    if (!f) throw new Error('Facture introuvable');
+    if (f.statut !== 'brouillon' && f.numero) return { numero: f.numero };
+
+    // Séquence gap-less (sérialisée par le DO — pas de verrou global).
+    const seq = this.sql
+      .exec('SELECT dernier_numero FROM sequence_numerotation WHERE exercice_id = ? AND type = ?', f.exercice_id, f.type)
+      .toArray()[0] as { dernier_numero: number } | undefined;
+    const n = (seq?.dernier_numero ?? 0) + 1;
+    this.sql.exec(
+      `INSERT INTO sequence_numerotation (exercice_id, type, dernier_numero) VALUES (?, ?, ?)
+       ON CONFLICT(exercice_id, type) DO UPDATE SET dernier_numero = ?`,
+      f.exercice_id, f.type, n, n,
+    );
+    const annee = (this.sql.exec('SELECT annee FROM exercice WHERE id = ?', f.exercice_id).toArray()[0] as { annee: number }).annee;
+    const numero = `${prefixe}-${f.type === 'facture' ? 'FAC' : 'DEV'}-${annee}-${String(n).padStart(4, '0')}`;
+    this.sql.exec(
+      "UPDATE facture SET numero = ?, numero_seq = ?, statut = 'envoyee', date_emission = date('now') WHERE id = ?",
+      numero, n, factureId,
+    );
+
+    // Comptabilisation d'une facture (créance client) — pas pour un devis.
+    if (f.type === 'facture' && f.total_ttc > 0) {
+      const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
+      const compteProduit = secteur === 'service' ? '706' : '701';
+      const ecritureId = uid();
+      this.sql.exec(
+        `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, source, statut, facture_id)
+         VALUES (?, ?, date('now'), ?, 'facture', 'brouillon', ?)`,
+        ecritureId, f.exercice_id, `Facture ${numero}`, factureId,
+      );
+      const l = (numero: string, sens: string, m: number) =>
+        this.sql.exec('INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?, ?, ?, ?, ?)',
+          uid(), ecritureId, this.compteId(numero), sens, m);
+      l('411', 'debit', f.total_ttc);
+      l(compteProduit, 'credit', f.total_ht);
+      if (f.total_tva > 0) l('4431', 'credit', f.total_tva);
+      this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
+    }
+    return { numero };
+  }
+
+  /** Encaisse (total ou partiel) une facture : trésorerie / créance client 411, met à jour le statut. */
+  async payerFacture(factureId: string, montant: number, modePaiement: string): Promise<{ statut: string; regle: number }> {
+    const f = this.sql.exec('SELECT total_ttc, exercice_id FROM facture WHERE id = ?', factureId)
+      .toArray()[0] as { total_ttc: number; exercice_id: string } | undefined;
+    if (!f) throw new Error('Facture introuvable');
+    const dejaRow = this.sql.exec('SELECT COALESCE(SUM(montant),0) AS p FROM paiement_facture WHERE facture_id = ?', factureId)
+      .toArray()[0] as { p: number };
+    const regle = dejaRow.p + montant;
+
+    const ecritureId = uid();
+    this.sql.exec(
+      `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, source, statut, facture_id)
+       VALUES (?, ?, date('now'), 'Encaissement facture', ?, 'facture', 'brouillon', ?)`,
+      ecritureId, f.exercice_id, modePaiement, factureId,
+    );
+    const tresorerie = genererRecette({ montantHT: 0, modePaiement: modePaiement as never, compteProduit: '701', libelle: 'x' }).lignes[0]!.compteNumero;
+    this.sql.exec('INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?,?,?,?,?)', uid(), ecritureId, this.compteId(tresorerie), 'debit', montant);
+    this.sql.exec('INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?,?,?,?,?)', uid(), ecritureId, this.compteId('411'), 'credit', montant);
+    this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
+
+    this.sql.exec(
+      "INSERT INTO paiement_facture (id, facture_id, date, montant, mode_paiement, ecriture_id) VALUES (?, ?, date('now'), ?, ?, ?)",
+      uid(), factureId, montant, modePaiement, ecritureId,
+    );
+    const statut = regle >= f.total_ttc ? 'payee' : 'payee_partiellement';
+    this.sql.exec('UPDATE facture SET statut = ? WHERE id = ?', statut, factureId);
+    return { statut, regle };
+  }
+
+  async listerFactures(): Promise<Record<string, unknown>[]> {
+    return this.sql.exec(
+      `SELECT f.id, f.type, f.numero, f.statut, f.total_ttc, f.date_emission, f.date_echeance, t.nom AS tiers_nom
+         FROM facture f LEFT JOIN tiers t ON t.id = f.tiers_id
+        ORDER BY f.created_at DESC`,
+    ).toArray() as never;
+  }
+
+  async getFacture(factureId: string): Promise<Record<string, unknown> | null> {
+    const f = this.sql.exec(
+      `SELECT f.*, t.nom AS tiers_nom, t.niu AS tiers_niu, t.adresse AS tiers_adresse, t.telephone AS tiers_telephone
+         FROM facture f LEFT JOIN tiers t ON t.id = f.tiers_id WHERE f.id = ?`, factureId,
+    ).toArray()[0] as Record<string, unknown> | undefined;
+    if (!f) return null;
+    const lignes = this.sql.exec('SELECT designation, quantite, prix_unitaire, taux_tva, montant_ht FROM ligne_facture WHERE facture_id = ? ORDER BY ordre', factureId).toArray();
+    return { ...f, lignes };
+  }
+
   /** Chiffre d'affaires cumulé de l'exercice (crédits classe 7, écritures validées) — pour l'IGS. */
   async caCumule(): Promise<number> {
     const row = this.sql

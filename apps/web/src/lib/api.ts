@@ -67,3 +67,39 @@ export const approvisionner = (
 ) => api<{ nouveauStock: number; nouveauCmp: number }>(
   `/api/produits/${produitId}/entree`, { method: 'POST', body: data, entrepriseId },
 );
+
+// ── Tiers ──
+export interface Tiers { id: string; nom: string; type: string; niu: string | null; telephone: string | null; }
+export const listerTiers = (entrepriseId: string) =>
+  api<{ tiers: Tiers[] }>('/api/tiers', { entrepriseId }).then((r) => r.tiers);
+export const creerTiers = (entrepriseId: string, data: { nom: string; telephone?: string; niu?: string }) =>
+  api<{ tiersId: string }>('/api/tiers', { method: 'POST', body: { ...data, type: 'client' }, entrepriseId });
+
+// ── Factures ──
+export interface FactureResume {
+  id: string; type: string; numero: string | null; statut: string;
+  total_ttc: number; date_emission: string | null; tiers_nom: string | null;
+}
+export interface LigneFacture { designation: string; quantite: number; prixUnitaire: number; }
+
+export const listerFactures = (entrepriseId: string) =>
+  api<{ factures: FactureResume[] }>('/api/factures', { entrepriseId }).then((r) => r.factures);
+export const creerFacture = (
+  entrepriseId: string,
+  data: { type: string; tiersId: string; lignes: LigneFacture[]; dateEcheance?: string },
+) => api<{ factureId: string }>('/api/factures', { method: 'POST', body: data, entrepriseId });
+export const emettreFacture = (entrepriseId: string, id: string) =>
+  api<{ numero: string }>(`/api/factures/${id}/emettre`, { method: 'POST', entrepriseId });
+export const payerFacture = (entrepriseId: string, id: string, data: { montant: number; modePaiement: string }) =>
+  api<{ statut: string; regle: number }>(`/api/factures/${id}/payer`, { method: 'POST', body: data, entrepriseId });
+
+/** Récupère le PDF de la facture (avec en-têtes d'auth) et retourne une URL blob affichable. */
+export async function urlPdfFacture(entrepriseId: string, id: string): Promise<string> {
+  const BASE = import.meta.env.VITE_API_URL ?? '';
+  const res = await fetch(`${BASE}/api/factures/${id}/pdf`, {
+    headers: { 'x-entreprise-id': entrepriseId },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error('PDF indisponible');
+  return URL.createObjectURL(await res.blob());
+}

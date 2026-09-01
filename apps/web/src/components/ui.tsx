@@ -17,6 +17,7 @@ export function Icon({ name, size = 22 }: { name: string; size?: number }) {
     argent: 'M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
     boite: 'M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z',
     check: 'M20 6L9 17l-5-5',
+    facture: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6',
     hausse: 'M7 17L17 7M17 7H8M17 7v9',
     baisse: 'M7 7l10 10M17 17H8M17 17V8',
   };

@@ -5,7 +5,7 @@ const ONGLETS = [
   { code: 'dashboard', label: 'Accueil', icone: 'dashboard' },
   { code: 'caisse', label: 'Caisse', icone: 'caisse' },
   { code: 'stock', label: 'Stock', icone: 'stock' },
-  { code: 'tiers', label: 'Tiers', icone: 'tiers' },
+  { code: 'factures', label: 'Factures', icone: 'facture' },
   { code: 'compta', label: 'Compta', icone: 'graph' },
 ];
 
