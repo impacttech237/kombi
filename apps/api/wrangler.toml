@@ -1,0 +1,21 @@
+name = "kombi-api"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Base de données D1 (SQLite). Créer avec :
+#   wrangler d1 create kombi-db
+# puis coller le database_id retourné ci-dessous.
+[[d1_databases]]
+binding = "DB"
+database_name = "kombi-db"
+database_id = "90670ac1-78dc-4898-9a47-9db0143645b7"
+migrations_dir = "migrations"
+
+# Stockage R2 pour les PDF de factures et justificatifs.
+[[r2_buckets]]
+binding = "DOCS"
+bucket_name = "kombi-documents"
+
+[observability]
+enabled = true
