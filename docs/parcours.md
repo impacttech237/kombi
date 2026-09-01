@@ -15,6 +15,25 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 
 ---
 
+## Contraintes non-fonctionnelles (permanentes — voir DECISIONS D11/D12)
+### Scale — concevoir pour ~100k utilisateurs simultanés (shard = entreprise)
+- ⬜ **Couture de sharding** : tout accès D1 porte un `entreprise_id` explicite ; **zéro requête
+  cross-tenant, zéro compteur global** (règle vérifiée en revue + tests d'isolation)
+- ⬜ **Pas de compteur global** : numérotation facture isolée par entreprise (prépare Durable Object)
+- ⬜ **Cache lecture** : plan comptable / barème IGS / référentiels en KV ou Cache API
+- ⬜ **Payloads légers** + pagination systématique (coût data + charge)
+- ⬜ 🔒 *À l'échelle* : bascule **1 base D1 / entreprise** (création programmatique) + **DO / entreprise**
+  pour les compteurs chauds — NE PAS faire au MVP, garder la couture qui la rend mécanique
+- ⬜ Test de charge avant montée en charge (pas au MVP)
+
+### UX — simple, fluide, mobile-first (user friendly)
+- ⬜ Mobile-first, **gros boutons** (usage terrain au doigt), nav à une main
+- ⬜ **Saisie < 3 champs** pour vente/dépense ; jargon comptable **invisible**
+- ⬜ Caisse en **2-3 taps** + reçu immédiat
+- ⬜ **Offline transparent** : indicateur réseau + « N à synchroniser », jamais de blocage
+- ⬜ Terminologie adaptée au secteur (commande/mission, produit/prestation)
+- ⬜ États de chargement/erreur clairs, non techniques
+
 ## Transverse (à cadrer tôt, impacte toutes les étapes)
 - ⬜ **Conventions API** : format d'erreur unifié, pagination, codes HTTP, enveloppe de réponse
 - ⬜ **Validation** : schémas Zod partagés (`@kombi/shared`) pour chaque DTO entrée/sortie

@@ -44,7 +44,29 @@ Remplace proprietaire/comptable/support. Pas de module paie/CNPS ni de schéma R
 ## D10 — Exercice = année civile, un seul actif à la fois (MVP) (2026-09-01)
 Pas de clôture formelle multi-exercices au MVP.
 
+## D11 — Concevoir pour 100 000 utilisateurs simultanés, shard = entreprise (2026-09-01)
+Exigence fondateur : scale ~100k utilisateurs simultanés. Analyse : Workers scalent nativement ;
+le goulot est l'écriture D1 (SQLite sérialise les writes d'une base). **La frontière de tenant
+`entreprise_id` est la clé de sharding.**
+- **MVP** : base D1 partagée (simple, suffit pour les pilotes), MAIS code écrit avec la couture de
+  sharding — tout accès porte un `entreprise_id` explicite, **zéro requête cross-tenant, zéro
+  compteur global**.
+- **À l'échelle** : bascule vers **une base D1 par entreprise** (création programmatique) +
+  **Durable Object par entreprise** pour les compteurs chauds (numérotation facture gap-less).
+  Rendue mécanique par la couture ci-dessus.
+- Leviers : offline-first (writes bufferisés/idempotents → charge serveur divisée), KV/Cache pour
+  la donnée de référence (plan comptable, barème IGS).
+*Ne pas sur-ingénier : on ne paie la complexité per-tenant que quand le volume la justifie.*
+
+## D12 — Parcours user-friendly, simple et fluide (2026-09-01)
+Exigence fondateur. Principes appliqués partout : mobile-first, gros boutons (usage terrain au
+doigt) ; saisie minimale (< 3 champs pour vente/dépense) ; jargon comptable invisible (l'utilisateur
+voit « vente », pas « débit 571 ») ; caisse en 2-3 taps + reçu immédiat ; offline transparent
+(indicateur réseau + file à synchroniser, jamais de blocage) ; terminologie adaptée au secteur ;
+payloads légers (coût data mobile CEMAC).
+
 ## Décisions ouvertes (à trancher / valider ONECCA)
+- **Bascule sharding** : quand et comment passer à une D1 par entreprise + DO (seuil de volume).
 - Décompte exact des « 2 ans » de maintien de régime (exercices civils vs glissants).
 - Base précise du minimum de perception IS (2 % de quoi).
 - Mentions minimales d'un reçu de caisse (vs facture normalisée).
