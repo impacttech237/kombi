@@ -27,3 +27,6 @@ app.use('/api/fiscalite/*', authentifier, tenant);
 app.route('/api/fiscalite', fiscalite);
 
 export default app;
+
+// Durable Object : 1 base par entreprise (D13).
+export { EntrepriseDO } from './do/entreprise-do.js';

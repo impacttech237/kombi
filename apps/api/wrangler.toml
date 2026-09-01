@@ -17,5 +17,14 @@ migrations_dir = "migrations"
 binding = "DOCS"
 bucket_name = "kombi-documents"
 
+# 1 base par entreprise : Durable Object avec SQLite embarqué (D13).
+[[durable_objects.bindings]]
+name = "ENTREPRISE"
+class_name = "EntrepriseDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["EntrepriseDO"]
+
 [observability]
 enabled = true

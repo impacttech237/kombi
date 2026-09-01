@@ -65,8 +65,21 @@ voit « vente », pas « débit 571 ») ; caisse en 2-3 taps + reçu immédiat ;
 (indicateur réseau + file à synchroniser, jamais de blocage) ; terminologie adaptée au secteur ;
 payloads légers (coût data mobile CEMAC).
 
+## D13 — 1 base par entreprise = Durable Object SQLite par entreprise (2026-09-01)
+Réalisation de la bascule sharding (D11), demandée maintenant. Sur Cloudflare, « une base par
+entreprise » se fait nativement avec **un Durable Object par entreprise, chacun avec son propre
+SQLite embarqué** (`ctx.storage.sql`) — D1 est lui-même bâti sur ce mécanisme.
+- **Control plane (D1 global unique)** : auth (user/session/account/verification), `utilisateur`,
+  `entreprise` (registre), `membre_entreprise`. Données transverses par nature.
+- **Données de l'entreprise (DO `EntrepriseDO`, 1 par entreprise)** : exercice, plan comptable,
+  modules, tiers, ventes, écritures, factures, stock, commandes… `idFromName(entrepriseId)`.
+- **Bénéfices** : isolation **physique** (plus de `WHERE entreprise_id` oubliable) ; écritures
+  **sérialisées par entreprise** (numérotation facture gap-less native, sans verrou global) ;
+  scale horizontal automatique vers ~100k.
+- La colonne `entreprise_id` disparaît des tables tenant (redondante : le DO EST la frontière).
+- `TenantDb` (couture applicative) est retirée : remplacée par la frontière physique du DO.
+
 ## Décisions ouvertes (à trancher / valider ONECCA)
-- **Bascule sharding** : quand et comment passer à une D1 par entreprise + DO (seuil de volume).
 - Décompte exact des « 2 ans » de maintien de régime (exercices civils vs glissants).
 - Base précise du minimum de perception IS (2 % de quoi).
 - Mentions minimales d'un reçu de caisse (vs facture normalisée).

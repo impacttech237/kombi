@@ -17,14 +17,14 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 
 ## Contraintes non-fonctionnelles (permanentes — voir DECISIONS D11/D12)
 ### Scale — concevoir pour ~100k utilisateurs simultanés (shard = entreprise)
-- ⬜ **Couture de sharding** : tout accès D1 porte un `entreprise_id` explicite ; **zéro requête
-  cross-tenant, zéro compteur global** (règle vérifiée en revue + tests d'isolation)
-- ⬜ **Pas de compteur global** : numérotation facture isolée par entreprise (prépare Durable Object)
-- ⬜ **Cache lecture** : plan comptable / barème IGS / référentiels en KV ou Cache API
-- ⬜ **Payloads légers** + pagination systématique (coût data + charge)
-- ⬜ 🔒 *À l'échelle* : bascule **1 base D1 / entreprise** (création programmatique) + **DO / entreprise**
-  pour les compteurs chauds — NE PAS faire au MVP, garder la couture qui la rend mécanique
+- ✅ **1 base par entreprise** : Durable Object SQLite par entreprise (`EntrepriseDO`) — isolation
+  PHYSIQUE (test A≠B vérifié), écritures sérialisées par entreprise, scale horizontal (D13)
+- ✅ **Control plane** séparé (D1 : auth + registre entreprises + appartenances)
+- ✅ **Pas de compteur global** : numérotation facture dans le DO de l'entreprise (sérialisée nativement)
+- ⬜ **Cache lecture** : barème IGS / référentiels en KV ou Cache API (à l'échelle)
+- ⬜ **Payloads légers** + pagination systématique
 - ⬜ Test de charge avant montée en charge (pas au MVP)
+- ⬜ Déploiement : re-déployer le Worker (DO) + nettoyer les tables tenant obsolètes de la D1 distante
 
 ### UX — simple, fluide, mobile-first (user friendly)
 - ⬜ Mobile-first, **gros boutons** (usage terrain au doigt), nav à une main

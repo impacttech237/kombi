@@ -1,11 +1,10 @@
 import { Hono } from 'hono';
 import { SECTEURS, NATURE_ACTIVITE, type Secteur, type NatureActivite } from '@kombi/shared';
 import { planCreationEntreprise } from '../services/onboarding.js';
-import type { AppEnv } from '../types.js';
+import { stubEntreprise, type AppEnv } from '../types.js';
 
 /**
- * Routes entreprises — nécessitent l'authentification mais PAS de tenant sélectionné
- * (on crée / liste les entreprises de l'utilisateur avant d'en choisir une).
+ * Routes entreprises — authentifiées, sans tenant sélectionné (on crée/liste avant de choisir).
  */
 export const entreprises = new Hono<AppEnv>();
 
@@ -24,7 +23,7 @@ entreprises.get('/', async (c) => {
   return c.json({ entreprises: res.results ?? [] });
 });
 
-/** Crée une entreprise avec application du preset sectoriel (onboarding). */
+/** Crée une entreprise : control plane (D1) puis initialisation de sa base dédiée (DO). */
 entreprises.post('/', async (c) => {
   const utilisateurId = c.get('utilisateurId');
   const body = await c.req.json().catch(() => null);
@@ -41,19 +40,17 @@ entreprises.post('/', async (c) => {
 
   const annee = new Date().getUTCFullYear();
   const { entrepriseId, stmts } = planCreationEntreprise(c.env.DB, {
-    raisonSociale,
-    secteur,
-    natureActivite,
-    niu,
-    utilisateurId,
-    annee,
+    raisonSociale, secteur, natureActivite, niu, utilisateurId, annee,
   });
 
-  await c.env.DB.batch(stmts); // batch = atomique
+  await c.env.DB.batch(stmts); // control plane, atomique
+  // Initialise la base dédiée de l'entreprise (modules, plan comptable, exercice).
+  await stubEntreprise(c.env, entrepriseId).initialiser(entrepriseId, secteur, annee);
+
   return c.json({ entrepriseId }, 201);
 });
 
-/** Modules actifs de l'entreprise (nécessite x-entreprise-id + appartenance). */
+/** Modules actifs de l'entreprise (lus dans sa base dédiée). */
 entreprises.get('/:id/modules', async (c) => {
   const utilisateurId = c.get('utilisateurId');
   const id = c.req.param('id');
@@ -64,10 +61,6 @@ entreprises.get('/:id/modules', async (c) => {
     .first();
   if (!membre) return c.json({ erreur: 'Accès refusé' }, 403);
 
-  const res = await c.env.DB.prepare(
-    'SELECT code_module, actif FROM module_entreprise WHERE entreprise_id = ?',
-  )
-    .bind(id)
-    .all<{ code_module: string; actif: number }>();
-  return c.json({ modules: res.results ?? [] });
+  const modules = await stubEntreprise(c.env, id).modules();
+  return c.json({ modules });
 });
