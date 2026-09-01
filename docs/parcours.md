@@ -88,15 +88,17 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 - ⬜ Annulation de vente (contre-passation) · sélection produit (→ Étape 4)
 - ⬜ File offline branchée sur POST /api/ventes (→ Étape 7)
 
-## Étape 4 — Stock (module optionnel, gated)
-- ⬜ CRUD produit (nom, SKU, unité, prix vente, seuil alerte)
-- ⬜ Route `POST /api/achats` : achat fournisseur → entrée stock + **recalcul CMP** + écriture (601/311/6031/401)
-- ⬜ Mouvements de stock (entrée/sortie/ajustement) + historique
-- ⬜ **Alertes de rupture** (stock ≤ seuil) : liste + badge
-- ⬜ Ajustement d'inventaire (écart → écriture)
-- ⬜ Écran stock (liste produits, niveaux, alertes) — masqué si module off
-- ⬜ 🧪 Tests : achat met à jour CMP ; requireModule bloque un service pur ; écritures stock équilibrées
-- **Critère** : achat incrémente le stock au bon CMP ; vente le décrémente ; service pur n'a aucun écran stock.
+## Étape 4 — Stock (module optionnel, gated) ✅
+- ✅ CRUD produit (nom, prix vente, seuil alerte) — méthodes DO + route `/api/produits`
+- ✅ Approvisionnement `POST /api/produits/:id/entree` → entrée stock + **recalcul CMP** + écriture (601/trésorerie + 311/6031)
+- ✅ **Sortie de stock automatique à la vente** au CMP + **COGS 6031/311** dans l'écriture de vente
+- ✅ Mouvements de stock (entrée/sortie) enregistrés
+- ✅ **Alertes de rupture** (stock ≤ seuil) : badge rouge dans la liste
+- ✅ Écran stock (liste + création + approvisionnement) — **masqué pour les services purs**
+- ✅ Sélecteur de produits dans la caisse (chips) → vente sur stock
+- ✅ 🧪 Tests : CMP pondéré, vente décrémente + COGS équilibré, alerte rupture (12 tests API)
+- ✅ **Vérifié end-to-end** : produit → appro 20@3000 → vente 1 → stock 19, compta à jour
+- ⬜ Ajustement d'inventaire · historique des mouvements (écran) · achats multi-lignes / à crédit (401)
 
 ## Étape 5 — Facturation & devis (cœur)
 - ⬜ Attribution numéro **gap-less** en transaction (`sequence_numerotation`), format `NOM-FAC-2026-0001`

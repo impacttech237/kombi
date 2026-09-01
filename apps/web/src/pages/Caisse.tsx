@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formaterFCFA } from '@kombi/shared';
-import { enregistrerVente, type EntrepriseResume, type LigneCaisse } from '../lib/api.js';
+import {
+  enregistrerVente, listerProduits, type EntrepriseResume, type LigneCaisse, type Produit,
+} from '../lib/api.js';
 import { Bouton, Icon } from '../components/ui.js';
 
 const MODES = [
@@ -18,8 +20,18 @@ export function Caisse({ entreprise, onVendu }: { entreprise: EntrepriseResume; 
   const [charge, setCharge] = useState(false);
   const [succes, setSucces] = useState<number | null>(null);
   const [erreur, setErreur] = useState('');
+  const [produits, setProduits] = useState<Produit[]>([]);
+
+  useEffect(() => {
+    if (entreprise.secteur !== 'service')
+      listerProduits(entreprise.id).then(setProduits).catch(() => {});
+  }, [entreprise.id, entreprise.secteur]);
 
   const total = panier.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0);
+
+  function ajouterProduit(p: Produit) {
+    setPanier([...panier, { designation: p.nom, quantite: 1, prixUnitaire: p.prix_vente, produitId: p.id }]);
+  }
 
   function ajouter() {
     const p = Math.floor(Number(prix));
@@ -84,6 +96,18 @@ export function Caisse({ entreprise, onVendu }: { entreprise: EntrepriseResume; 
                 <button onClick={() => retirer(i)} style={{ border: 0, background: 'transparent',
                   color: 'var(--danger)' }} aria-label="retirer"><Icon name="baisse" size={18} /></button>
               </div>
+            ))}
+          </div>
+        )}
+
+        {produits.length > 0 && (
+          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, marginBottom: 10 }}>
+            {produits.map((p) => (
+              <button key={p.id} onClick={() => ajouterProduit(p)} className="btn btn-clair"
+                style={{ flexShrink: 0, flexDirection: 'column', gap: 2, padding: '8px 14px', alignItems: 'flex-start' }}>
+                <span style={{ fontSize: 13 }}>{p.nom}</span>
+                <span className="chiffre" style={{ fontSize: 13 }}>{formaterFCFA(p.prix_vente)}</span>
+              </button>
             ))}
           </div>
         )}

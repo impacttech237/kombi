@@ -22,6 +22,7 @@ ventes.post('/', requirePermission('vente:create'), async (c) => {
       quantite: Math.max(1, Math.floor(Number(l.quantite ?? 1))),
       prixUnitaire: Math.max(0, Math.floor(Number(l.prixUnitaire ?? 0))),
       tauxTva: Number(l.tauxTva ?? 0),
+      produitId: l.produitId ? String(l.produitId) : null,
     }))
     .filter((l: LigneVenteEntree) => l.prixUnitaire > 0);
 

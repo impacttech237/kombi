@@ -5,6 +5,7 @@ import { Login } from './pages/Login.js';
 import { Onboarding } from './pages/Onboarding.js';
 import { Dashboard } from './pages/Dashboard.js';
 import { Caisse } from './pages/Caisse.js';
+import { Stock } from './pages/Stock.js';
 import { Ecran, TopBar, BottomNav } from './components/Layout.js';
 import { Bouton, Logo } from './components/ui.js';
 
@@ -48,12 +49,13 @@ function Espace() {
   localStorage.setItem('kombi.entreprise', active.id);
 
   return (
-    <Ecran nav={<BottomNav actif={onglet} onNaviguer={setOnglet} />}>
+    <Ecran nav={<BottomNav actif={onglet} onNaviguer={setOnglet}
+      masquer={active.secteur === 'service' ? ['stock'] : []} />}>
       <TopBar nomEntreprise={active.raison_sociale} onChangeEntreprise={() => setOnglet('dashboard')} />
       <div style={{ marginTop: 14 }}>
         {onglet === 'dashboard' ? <Dashboard entreprise={active} onCaisse={() => setOnglet('caisse')} />
           : onglet === 'caisse' ? <Caisse entreprise={active} />
-          : onglet === 'stock' ? <Bientot titre="Stock" />
+          : onglet === 'stock' ? <Stock entreprise={active} />
           : onglet === 'tiers' ? <Bientot titre="Clients & fournisseurs" />
           : <Bientot titre="Comptabilité" />}
       </div>

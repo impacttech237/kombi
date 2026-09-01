@@ -8,6 +8,7 @@ import { requireModule } from './middleware/module.js';
 import { entreprises } from './routes/entreprises.js';
 import { fiscalite } from './routes/fiscalite.js';
 import { ventes } from './routes/ventes.js';
+import { produits } from './routes/produits.js';
 
 const app = new Hono<AppEnv>();
 
@@ -30,6 +31,9 @@ app.route('/api/fiscalite', fiscalite);
 
 app.use('/api/ventes/*', authentifier, tenant, requireModule('ventes'));
 app.route('/api/ventes', ventes);
+
+app.use('/api/produits/*', authentifier, tenant, requireModule('stock'));
+app.route('/api/produits', produits);
 
 export default app;
 

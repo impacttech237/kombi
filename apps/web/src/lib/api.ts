@@ -36,7 +36,7 @@ export const creerEntreprise = (data: {
   raisonSociale: string; secteur: string; natureActivite: string; niu?: string;
 }) => api<{ entrepriseId: string }>('/api/entreprises', { method: 'POST', body: data });
 
-export interface LigneCaisse { designation: string; quantite: number; prixUnitaire: number; }
+export interface LigneCaisse { designation: string; quantite: number; prixUnitaire: number; produitId?: string; }
 
 export const enregistrerVente = (
   entrepriseId: string,
@@ -45,3 +45,25 @@ export const enregistrerVente = (
 
 export const statsJour = (entrepriseId: string) =>
   api<{ nbVentes: number; totalJour: number }>('/api/ventes/jour', { entrepriseId });
+
+export interface Produit {
+  id: string; nom: string; sku: string | null; unite: string;
+  prix_vente: number; cout_moyen_pondere: number; stock_actuel: number;
+  seuil_alerte: number; en_alerte: number;
+}
+
+export const listerProduits = (entrepriseId: string) =>
+  api<{ produits: Produit[] }>('/api/produits', { entrepriseId }).then((r) => r.produits);
+
+export const creerProduit = (
+  entrepriseId: string,
+  data: { nom: string; prixVente: number; seuilAlerte?: number },
+) => api<{ produitId: string }>('/api/produits', { method: 'POST', body: data, entrepriseId });
+
+export const approvisionner = (
+  entrepriseId: string,
+  produitId: string,
+  data: { quantite: number; coutUnitaire: number; modePaiement: string },
+) => api<{ nouveauStock: number; nouveauCmp: number }>(
+  `/api/produits/${produitId}/entree`, { method: 'POST', body: data, entrepriseId },
+);

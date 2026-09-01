@@ -11,7 +11,7 @@ import {
   modulesActifsPourSecteur,
   type Secteur,
 } from '@kombi/shared';
-import { PLAN_COMPTABLE_DEFAUT, genererRecette } from '@kombi/comptable';
+import { PLAN_COMPTABLE_DEFAUT, genererRecette, cmpApresEntree } from '@kombi/comptable';
 import { statementsSchema } from './schema.js';
 
 const uid = () => crypto.randomUUID();
@@ -125,17 +125,30 @@ export class EntrepriseDO extends DurableObject {
 
     let totalHt = 0;
     let totalTva = 0;
-    for (const l of v.lignes) {
+    let totalCmv = 0; // coût des marchandises vendues (inventaire permanent)
+    // Calcule le CMP à sortir pour chaque ligne référençant un produit.
+    const calc = v.lignes.map((l) => {
       const ht = Math.round(l.quantite * l.prixUnitaire);
       totalHt += ht;
       totalTva += Math.round(ht * (l.tauxTva ?? 0));
-    }
+      let coutUnit = 0;
+      if (l.produitId) {
+        const p = this.sql
+          .exec('SELECT stock_actuel, cout_moyen_pondere FROM produit WHERE id = ?', l.produitId)
+          .toArray()[0] as { stock_actuel: number; cout_moyen_pondere: number } | undefined;
+        if (p) {
+          coutUnit = p.cout_moyen_pondere;
+          totalCmv += Math.min(l.quantite, p.stock_actuel) * p.cout_moyen_pondere; // non-bloquant
+        }
+      }
+      return { ...l, ht, coutUnit };
+    });
     const totalTtc = totalHt + totalTva;
     const exerciceId = this.exerciceOuvert();
     const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
     const compteProduit = secteur === 'service' ? '706' : '701';
 
-    // Écriture partie double (réutilise le moteur comptable).
+    // Écriture partie double : produit de la vente (réutilise le moteur comptable)…
     const ecr = genererRecette({
       montantHT: totalHt, tva: totalTva, modePaiement: v.modePaiement as never,
       compteProduit, libelle: 'Vente caisse',
@@ -146,11 +159,16 @@ export class EntrepriseDO extends DurableObject {
        VALUES (?, ?, date('now'), 'Vente caisse', ?, 'vente', 'brouillon')`,
       ecritureId, exerciceId, v.modePaiement,
     );
-    for (const ligne of ecr.lignes) {
+    const insLigne = (numero: string, sens: string, m: number) =>
       this.sql.exec(
         'INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?, ?, ?, ?, ?)',
-        uid(), ecritureId, this.compteId(ligne.compteNumero), ligne.sens, ligne.montant,
+        uid(), ecritureId, this.compteId(numero), sens, m,
       );
+    for (const ligne of ecr.lignes) insLigne(ligne.compteNumero, ligne.sens, ligne.montant);
+    // …et coût des marchandises vendues (6031 débit / 311 crédit) si vente sur stock.
+    if (totalCmv > 0) {
+      insLigne('6031', 'debit', totalCmv);
+      insLigne('311', 'credit', totalCmv);
     }
     // Validation : le trigger d'équilibre vérifie débit = crédit.
     this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
@@ -164,13 +182,25 @@ export class EntrepriseDO extends DurableObject {
       ecritureId, v.caissierId ?? null, v.clientUuid ?? null,
     );
     let ordre = 0;
-    for (const l of v.lignes) {
+    for (const l of calc) {
       this.sql.exec(
-        `INSERT INTO ligne_vente (id, vente_id, produit_id, designation, quantite, prix_unitaire, taux_tva, montant_ht, ordre)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO ligne_vente (id, vente_id, produit_id, designation, quantite, prix_unitaire, taux_tva, montant_ht, cout_unitaire, ordre)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         uid(), venteId, l.produitId ?? null, l.designation, l.quantite, l.prixUnitaire,
-        l.tauxTva ?? 0, Math.round(l.quantite * l.prixUnitaire), ordre++,
+        l.tauxTva ?? 0, l.ht, l.coutUnit, ordre++,
       );
+      // Sortie de stock (décrémente + mouvement) pour les lignes produit.
+      if (l.produitId) {
+        this.sql.exec(
+          'UPDATE produit SET stock_actuel = MAX(0, stock_actuel - ?) WHERE id = ?',
+          l.quantite, l.produitId,
+        );
+        this.sql.exec(
+          `INSERT INTO mouvement_stock (id, produit_id, type, quantite, cout_unitaire, motif, vente_id)
+           VALUES (?, ?, 'sortie', ?, ?, 'Vente', ?)`,
+          uid(), l.produitId, l.quantite, l.coutUnit, venteId,
+        );
+      }
     }
     return { venteId, totalTtc, deja: false };
   }
@@ -184,6 +214,83 @@ export class EntrepriseDO extends DurableObject {
       )
       .toArray()[0] as { n: number; total: number };
     return { nbVentes: row.n, totalJour: row.total };
+  }
+
+  // ══════════════ Stock (module optionnel) ══════════════
+  async creerProduit(p: {
+    nom: string; sku?: string | null; prixVente: number; seuilAlerte?: number; unite?: string;
+  }): Promise<string> {
+    const id = uid();
+    this.sql.exec(
+      `INSERT INTO produit (id, nom, sku, unite, prix_vente, seuil_alerte) VALUES (?, ?, ?, ?, ?, ?)`,
+      id, p.nom, p.sku ?? null, p.unite ?? 'unité', Math.max(0, Math.floor(p.prixVente)),
+      Math.max(0, Math.floor(p.seuilAlerte ?? 0)),
+    );
+    return id;
+  }
+
+  async listerProduits(): Promise<Record<string, unknown>[]> {
+    return this.sql
+      .exec(
+        `SELECT id, nom, sku, unite, prix_vente, cout_moyen_pondere, stock_actuel, seuil_alerte,
+                (stock_actuel <= seuil_alerte) AS en_alerte
+           FROM produit WHERE actif = 1 ORDER BY nom`,
+      )
+      .toArray() as never;
+  }
+
+  /**
+   * Approvisionnement (achat) : entrée en stock au coût d'achat, recalcul du CMP (inventaire
+   * permanent), mouvement de stock, et écriture comptable (601/trésorerie + 311/6031).
+   */
+  async entrerStock(a: {
+    produitId: string; quantite: number; coutUnitaire: number; modePaiement: string;
+    tiersId?: string | null;
+  }): Promise<{ nouveauStock: number; nouveauCmp: number }> {
+    const prod = this.sql
+      .exec('SELECT stock_actuel, cout_moyen_pondere FROM produit WHERE id = ?', a.produitId)
+      .toArray()[0] as { stock_actuel: number; cout_moyen_pondere: number } | undefined;
+    if (!prod) throw new Error('Produit introuvable');
+
+    const etat = cmpApresEntree(
+      { quantite: prod.stock_actuel, cmp: prod.cout_moyen_pondere },
+      a.quantite, Math.floor(a.coutUnitaire),
+    );
+    const montant = a.quantite * Math.floor(a.coutUnitaire);
+
+    this.sql.exec(
+      'UPDATE produit SET stock_actuel = ?, cout_moyen_pondere = ? WHERE id = ?',
+      etat.quantite, etat.cmp, a.produitId,
+    );
+    this.sql.exec(
+      `INSERT INTO mouvement_stock (id, produit_id, type, quantite, cout_unitaire, motif)
+       VALUES (?, ?, 'entree', ?, ?, 'Approvisionnement')`,
+      uid(), a.produitId, a.quantite, Math.floor(a.coutUnitaire),
+    );
+
+    // Écriture : achat (601) réglé par trésorerie + entrée en stock (311/6031).
+    const exerciceId = this.exerciceOuvert();
+    const ecritureId = uid();
+    const tresorerie = genererRecette({
+      montantHT: 0, modePaiement: a.modePaiement as never, compteProduit: '701', libelle: 'x',
+    }).lignes[0]!.compteNumero; // récupère le compte de trésorerie du mode
+    this.sql.exec(
+      `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, source, statut)
+       VALUES (?, ?, date('now'), 'Approvisionnement', ?, 'achat', 'brouillon')`,
+      ecritureId, exerciceId, a.modePaiement,
+    );
+    const l = (numero: string, sens: string, m: number) =>
+      this.sql.exec(
+        'INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?, ?, ?, ?, ?)',
+        uid(), ecritureId, this.compteId(numero), sens, m,
+      );
+    l('601', 'debit', montant);
+    l(tresorerie, 'credit', montant);
+    l('311', 'debit', montant);
+    l('6031', 'credit', montant);
+    this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
+
+    return { nouveauStock: etat.quantite, nouveauCmp: etat.cmp };
   }
 
   /** Chiffre d'affaires cumulé de l'exercice (crédits classe 7, écritures validées) — pour l'IGS. */

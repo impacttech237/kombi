@@ -38,8 +38,8 @@ export function TopBar({ nomEntreprise, onChangeEntreprise }: {
   );
 }
 
-export function BottomNav({ actif, onNaviguer }: {
-  actif: string; onNaviguer: (code: string) => void;
+export function BottomNav({ actif, onNaviguer, masquer = [] }: {
+  actif: string; onNaviguer: (code: string) => void; masquer?: string[];
 }) {
   return (
     <nav style={{
@@ -47,7 +47,7 @@ export function BottomNav({ actif, onNaviguer }: {
       background: 'var(--vert)', borderRadius: 'var(--pill)', padding: 6,
       display: 'flex', justifyContent: 'space-between', boxShadow: 'var(--ombre)',
     }}>
-      {ONGLETS.map((o) => {
+      {ONGLETS.filter((o) => !masquer.includes(o.code)).map((o) => {
         const on = o.code === actif;
         return (
           <button key={o.code} onClick={() => onNaviguer(o.code)} title={o.label}
