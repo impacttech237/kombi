@@ -57,9 +57,11 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 - ✅ Couture de sharding `TenantDb` (filtre entreprise_id auto, whitelist anti-injection, testée)
 - ✅ 🧪 **Test d'isolation multi-entreprises** : A ne lit jamais B (vérifié sur D1 réelle)
 - ✅ 🧪 Tests : onboarding crée modules + plan comptable + exercice selon secteur (commerce≠service)
-- ⬜ Écran **onboarding** (front) : choix secteur + infos entreprise (NIU, nature) — fluide, 2-3 écrans
-- ⬜ Sélecteur d'entreprise active (front) + envoi `x-entreprise-id`
-- ⬜ Écrans connexion/inscription (front) branchés sur better-auth
+- ✅ Écran **onboarding** (front) : choix secteur (grandes cartes) + infos entreprise (NIU, nature)
+- ✅ Sélecteur d'entreprise active (front, localStorage) + envoi `x-entreprise-id`
+- ✅ Écrans connexion/inscription (front) branchés sur better-auth (design vert/blanc validé visuellement)
+- ✅ Design system Kombi (thème vert/blanc, composants : Bouton, Champ, CarteStat, TopBar, BottomNav)
+- ✅ Dashboard shell (cartes stats + IGS temps réel + nav pill) — style des modèles fournis
 - ⬜ Gestion des membres : inviter un utilisateur, assigner rôle (route + écran)
 - ⬜ Appliquer `requirePermission` sur les routes métier au fil des étapes
 - **Critère d'acceptation** : ✅ backend — commerce a stock actif, service non, A≠B étanche, auth réelle.

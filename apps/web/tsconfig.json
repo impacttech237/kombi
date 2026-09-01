@@ -5,6 +5,7 @@
     "jsx": "react-jsx",
     "moduleResolution": "Bundler",
     "noEmit": true,
+    "declaration": false,
     "types": ["vite/client", "vite-plugin-pwa/client"]
   },
   "include": ["src/**/*"]

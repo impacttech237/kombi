@@ -1,68 +1,73 @@
-import { useState } from 'react';
-import { calculerIGS, determinerRegime } from '@kombi/fiscal';
-import { formaterFCFA, type NatureActivite } from '@kombi/shared';
+import { useEffect, useState } from 'react';
+import { useSession, signOut } from './lib/auth.js';
+import { listerEntreprises, type EntrepriseResume } from './lib/api.js';
+import { Login } from './pages/Login.js';
+import { Onboarding } from './pages/Onboarding.js';
+import { Dashboard } from './pages/Dashboard.js';
+import { Ecran, TopBar, BottomNav } from './components/Layout.js';
+import { Bouton, Logo } from './components/ui.js';
 
-/**
- * Écran de démonstration : calcul IGS 100% hors-ligne (le moteur fiscal tourne dans le navigateur).
- * Prouve que la contrainte offline est tenue pour le cœur réglementaire.
- * À remplacer par les vrais écrans (saisie recette/dépense, factures, etc.).
- */
-export function App() {
-  const [ca, setCa] = useState(3_000_000);
-  const [cga, setCga] = useState(false);
-  const [nature, setNature] = useState<NatureActivite>('negoce');
+function Splash() {
+  return (
+    <div className="center-ecran">
+      <div style={{ display: 'grid', placeItems: 'center', gap: 12 }}>
+        <Logo size={56} />
+        <span className="muet">Chargement…</span>
+      </div>
+    </div>
+  );
+}
 
-  const igs = calculerIGS(ca, { adherentCGA: cga });
-  const regime = determinerRegime({ caAnnuelHT: ca, natureActivite: nature });
+function Bientot({ titre }: { titre: string }) {
+  return (
+    <div style={{ display: 'grid', placeItems: 'center', minHeight: 360, textAlign: 'center' }}>
+      <div>
+        <h2>{titre}</h2>
+        <p className="muet">Ce module arrive très bientôt.</p>
+      </div>
+    </div>
+  );
+}
+
+function Espace() {
+  const [entreprises, setEntreprises] = useState<EntrepriseResume[] | null>(null);
+  const [activeId] = useState<string | null>(() => localStorage.getItem('kombi.entreprise'));
+  const [onglet, setOnglet] = useState('dashboard');
+
+  function recharger() {
+    return listerEntreprises().then(setEntreprises).catch(() => setEntreprises([]));
+  }
+  useEffect(() => { void recharger(); }, []);
+
+  if (entreprises === null) return <Splash />;
+  if (entreprises.length === 0)
+    return <Onboarding onCree={() => { setEntreprises(null); void recharger(); }} />;
+
+  const active = entreprises.find((e) => e.id === activeId) ?? entreprises[0]!;
+  localStorage.setItem('kombi.entreprise', active.id);
 
   return (
-    <main style={{ fontFamily: 'system-ui', maxWidth: 480, margin: '2rem auto', padding: '0 1rem' }}>
-      <h1 style={{ color: '#0b6e4f' }}>Kombi</h1>
-      <p>Calcul de l'IGS (fonctionne hors-ligne).</p>
-
-      <label style={{ display: 'block', margin: '1rem 0' }}>
-        Chiffre d'affaires annuel (FCFA)
-        <input
-          type="number"
-          value={ca}
-          onChange={(e) => setCa(Number(e.target.value))}
-          style={{ display: 'block', width: '100%', padding: 8, fontSize: 16 }}
-        />
-      </label>
-
-      <label style={{ display: 'block', margin: '1rem 0' }}>
-        Nature d'activité
-        <select
-          value={nature}
-          onChange={(e) => setNature(e.target.value as NatureActivite)}
-          style={{ display: 'block', width: '100%', padding: 8, fontSize: 16 }}
-        >
-          <option value="negoce">Commerce</option>
-          <option value="artisanal">Artisanat</option>
-          <option value="service">Services</option>
-          <option value="liberale">Profession libérale</option>
-        </select>
-      </label>
-
-      <label style={{ display: 'block', margin: '1rem 0' }}>
-        <input type="checkbox" checked={cga} onChange={(e) => setCga(e.target.checked)} /> Adhérent
-        d'un Centre de Gestion Agréé (CGA)
-      </label>
-
-      <div style={{ background: '#f0f7f4', padding: 16, borderRadius: 8 }}>
-        <p>
-          Régime : <strong>{regime === 'igs' ? 'IGS' : 'Réel'}</strong>
-        </p>
-        {igs ? (
-          <>
-            <p>Classe IGS : <strong>{igs.classe}</strong></p>
-            <p>IGS annuel : <strong>{formaterFCFA(igs.igsAnnuel)}</strong></p>
-            <p>IGS trimestriel : {formaterFCFA(igs.igsTrimestriel)}</p>
-          </>
-        ) : (
-          <p>CA ≥ 50 000 000 FCFA → hors IGS, relève du régime du Réel.</p>
-        )}
+    <Ecran nav={<BottomNav actif={onglet} onNaviguer={setOnglet} />}>
+      <TopBar nomEntreprise={active.raison_sociale} onChangeEntreprise={() => setOnglet('dashboard')} />
+      <div style={{ marginTop: 14 }}>
+        {onglet === 'dashboard' ? <Dashboard entreprise={active} />
+          : onglet === 'caisse' ? <Bientot titre="Caisse" />
+          : onglet === 'stock' ? <Bientot titre="Stock" />
+          : onglet === 'tiers' ? <Bientot titre="Clients & fournisseurs" />
+          : <Bientot titre="Comptabilité" />}
       </div>
-    </main>
+      <div style={{ textAlign: 'center', marginTop: 18 }}>
+        <Bouton variante="ghost" onClick={() => { localStorage.removeItem('kombi.entreprise'); void signOut(); }}>
+          Se déconnecter
+        </Bouton>
+      </div>
+    </Ecran>
   );
+}
+
+export function App() {
+  const { data: session, isPending } = useSession();
+  if (isPending) return <Splash />;
+  if (!session) return <Login />;
+  return <Espace />;
 }

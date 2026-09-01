@@ -29,5 +29,9 @@ export default defineConfig({
       },
     }),
   ],
-  server: { port: 5173 },
+  // En dev, le front (5173) proxifie /api vers le Worker (8787) → même origine, cookies OK.
+  server: {
+    port: 5173,
+    proxy: { '/api': { target: 'http://localhost:8787', changeOrigin: true } },
+  },
 });
