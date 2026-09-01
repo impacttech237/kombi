@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA } from '@kombi/shared';
-import { api, type EntrepriseResume } from '../lib/api.js';
+import { api, statsJour, type EntrepriseResume } from '../lib/api.js';
 import { Bouton, CarteStat, Icon } from '../components/ui.js';
 
 interface IgsResp {
@@ -9,14 +9,16 @@ interface IgsResp {
   igs: { igsAnnuel: number; classe: number } | null;
 }
 
-export function Dashboard({ entreprise }: { entreprise: EntrepriseResume }) {
+export function Dashboard({ entreprise, onCaisse }: { entreprise: EntrepriseResume; onCaisse?: () => void }) {
   const [igs, setIgs] = useState<IgsResp | null>(null);
+  const [jour, setJour] = useState<{ nbVentes: number; totalJour: number } | null>(null);
   const [erreur, setErreur] = useState('');
 
   useEffect(() => {
     api<IgsResp>('/api/fiscalite/igs', { entrepriseId: entreprise.id })
       .then(setIgs)
       .catch((e) => setErreur(e instanceof Error ? e.message : 'Erreur'));
+    statsJour(entreprise.id).then(setJour).catch(() => {});
   }, [entreprise.id]);
 
   return (
@@ -26,7 +28,7 @@ export function Dashboard({ entreprise }: { entreprise: EntrepriseResume }) {
           <p className="muet" style={{ margin: 0, fontSize: 13 }}>Bonjour 👋</p>
           <h1 className="titre-page">Tableau de bord</h1>
         </div>
-        <Bouton><Icon name="plus" size={18} /> Vente</Bouton>
+        <Bouton onClick={onCaisse}><Icon name="plus" size={18} /> Vente</Bouton>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -35,7 +37,9 @@ export function Dashboard({ entreprise }: { entreprise: EntrepriseResume }) {
         <CarteStat titre="IGS estimé" icone="graph"
           valeur={igs?.igs ? formaterFCFA(igs.igs.igsAnnuel) : (igs ? 'Régime réel' : '—')}
           delta={igs?.igs ? `Classe ${igs.igs.classe}` : undefined} positif />
-        <CarteStat titre="Ventes du jour" icone="caisse" valeur="0" delta="0 aujourd'hui" positif />
+        <CarteStat titre="Ventes du jour" icone="caisse"
+          valeur={jour ? formaterFCFA(jour.totalJour) : '—'}
+          delta={jour ? `${jour.nbVentes} vente${jour.nbVentes > 1 ? 's' : ''}` : undefined} positif />
         <CarteStat titre="Commandes" icone="boite" valeur="0" delta="en cours" positif />
       </div>
 

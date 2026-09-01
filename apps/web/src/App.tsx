@@ -4,6 +4,7 @@ import { listerEntreprises, type EntrepriseResume } from './lib/api.js';
 import { Login } from './pages/Login.js';
 import { Onboarding } from './pages/Onboarding.js';
 import { Dashboard } from './pages/Dashboard.js';
+import { Caisse } from './pages/Caisse.js';
 import { Ecran, TopBar, BottomNav } from './components/Layout.js';
 import { Bouton, Logo } from './components/ui.js';
 
@@ -50,8 +51,8 @@ function Espace() {
     <Ecran nav={<BottomNav actif={onglet} onNaviguer={setOnglet} />}>
       <TopBar nomEntreprise={active.raison_sociale} onChangeEntreprise={() => setOnglet('dashboard')} />
       <div style={{ marginTop: 14 }}>
-        {onglet === 'dashboard' ? <Dashboard entreprise={active} />
-          : onglet === 'caisse' ? <Bientot titre="Caisse" />
+        {onglet === 'dashboard' ? <Dashboard entreprise={active} onCaisse={() => setOnglet('caisse')} />
+          : onglet === 'caisse' ? <Caisse entreprise={active} />
           : onglet === 'stock' ? <Bientot titre="Stock" />
           : onglet === 'tiers' ? <Bientot titre="Clients & fournisseurs" />
           : <Bientot titre="Comptabilité" />}
@@ -67,7 +68,11 @@ function Espace() {
 
 export function App() {
   const { data: session, isPending } = useSession();
-  if (isPending) return <Splash />;
+  const [pretInitial, setPretInitial] = useState(false);
+  useEffect(() => { if (!isPending) setPretInitial(true); }, [isPending]);
+
+  // Splash uniquement au tout premier chargement (évite le scintillement sur refetch).
+  if (!pretInitial && isPending) return <Splash />;
   if (!session) return <Login />;
   return <Espace />;
 }

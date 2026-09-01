@@ -35,3 +35,13 @@ export const listerEntreprises = () =>
 export const creerEntreprise = (data: {
   raisonSociale: string; secteur: string; natureActivite: string; niu?: string;
 }) => api<{ entrepriseId: string }>('/api/entreprises', { method: 'POST', body: data });
+
+export interface LigneCaisse { designation: string; quantite: number; prixUnitaire: number; }
+
+export const enregistrerVente = (
+  entrepriseId: string,
+  data: { lignes: LigneCaisse[]; modePaiement: string; clientUuid: string },
+) => api<{ venteId: string; totalTtc: number }>('/api/ventes', { method: 'POST', body: data, entrepriseId });
+
+export const statsJour = (entrepriseId: string) =>
+  api<{ nbVentes: number; totalJour: number }>('/api/ventes/jour', { entrepriseId });

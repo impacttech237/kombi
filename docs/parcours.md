@@ -74,17 +74,19 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 - ⬜ Solde tiers (ce qu'il doit / ce qu'on lui doit)
 - ⬜ 🧪 Tests CRUD + isolation
 
-## Étape 3 — Ventes & caisse (cœur, point d'entrée terrain)
-- ⬜ Générateur d'écriture de vente dans `@kombi/comptable` (produit + trésorerie + TVA si Réel)
-- ⬜ Générateur écriture + **sortie de stock au CMP** si module stock actif (6031/311)
-- ⬜ Route `POST /api/ventes` : crée vente + lignes + écriture (batch atomique) + mouvement stock
-- ⬜ Écran caisse : ajout d'articles (produit ou ligne libre), quantité, total en direct
-- ⬜ Choix mode de paiement (espèces / MTN MoMo / Orange Money / …)
-- ⬜ Génération **reçu** (simple) — PDF léger ou vue imprimable
-- ⬜ Bouton « émettre une facture » depuis une vente (→ Étape 5)
-- ⬜ Annulation de vente (contre-passation d'écriture, jamais suppression)
-- ⬜ 🧪 Tests : vente espèces → écriture équilibrée 571/701 ; vente stock → CMV correct + stock décrémenté
-- **Critère** : une vente en caisse produit CA + écriture + (si stock) mouvement, hors-ligne compris.
+## Étape 3 — Ventes & caisse (cœur, point d'entrée terrain) ✅ (base terrain)
+- ✅ Générateur d'écriture de vente (débit trésorerie / crédit produit 701|706 + TVA) dans le DO
+- ✅ Méthode DO `enregistrerVente` : vente + lignes + écriture auto validée (trigger d'équilibre)
+- ✅ Route `POST /api/ventes` (gated module ventes + permission) + `GET /api/ventes/jour`
+- ✅ Écran caisse : ajout d'articles (ligne libre), total en direct, gros boutons
+- ✅ Choix mode de paiement (espèces / MTN MoMo / Orange Money / virement)
+- ✅ Écran de confirmation « Encaissé ! » (reçu) + dashboard qui reflète CA/ventes du jour
+- ✅ Idempotence via clientUuid (prépare l'offline)
+- ✅ 🧪 Tests : vente espèces/momo → écriture équilibrée + CA reflété + idempotence + compte 706 (services)
+- ✅ **Vérifié end-to-end dans le navigateur** : signup → onboarding → vente 2500 → CA/stats à jour
+- ⬜ Sortie de stock au CMP si module stock actif (→ Étape 4) · reçu PDF · émettre facture (→ Étape 5)
+- ⬜ Annulation de vente (contre-passation) · sélection produit (→ Étape 4)
+- ⬜ File offline branchée sur POST /api/ventes (→ Étape 7)
 
 ## Étape 4 — Stock (module optionnel, gated)
 - ⬜ CRUD produit (nom, SKU, unité, prix vente, seuil alerte)

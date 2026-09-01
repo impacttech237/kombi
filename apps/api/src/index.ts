@@ -4,8 +4,10 @@ import type { AppEnv } from './types.js';
 import { creerAuth } from './auth/auth.js';
 import { authentifier } from './middleware/auth.js';
 import { tenant } from './middleware/tenant.js';
+import { requireModule } from './middleware/module.js';
 import { entreprises } from './routes/entreprises.js';
 import { fiscalite } from './routes/fiscalite.js';
+import { ventes } from './routes/ventes.js';
 
 const app = new Hono<AppEnv>();
 
@@ -25,6 +27,9 @@ app.route('/api/entreprises', entreprises);
 // ── Routes métier : authentifié + tenant (isolation multi-entreprises) ──
 app.use('/api/fiscalite/*', authentifier, tenant);
 app.route('/api/fiscalite', fiscalite);
+
+app.use('/api/ventes/*', authentifier, tenant, requireModule('ventes'));
+app.route('/api/ventes', ventes);
 
 export default app;
 
