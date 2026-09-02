@@ -5,6 +5,7 @@
  */
 
 import { DurableObject } from 'cloudflare:workers';
+import { createHash } from 'node:crypto';
 import {
   CODES_MODULE,
   MODULES,
@@ -15,6 +16,12 @@ import { PLAN_COMPTABLE_DEFAUT, genererRecette, genererDepense, cmpApresEntree }
 import { MIGRATIONS_DO } from './schema.js';
 
 const uid = () => crypto.randomUUID();
+
+/** Auteur d'une opération auditée (posé par les middlewares auth/tenant côté Worker). */
+export interface Acteur {
+  utilisateurId: string;
+  role: string;
+}
 
 export interface LigneVenteEntree {
   designation: string;
@@ -54,6 +61,92 @@ export class EntrepriseDO extends DurableObject {
         await this.ctx.storage.put('schema_version', m.v);
       }
     }
+  }
+
+  // ── Journal d'audit immuable (append-only, chaîné par hash — voir schema.ts v4) ──
+  private dernierHashAudit(): string {
+    const row = this.sql.exec('SELECT hash FROM audit_log ORDER BY rowid DESC LIMIT 1').toArray()[0] as
+      | { hash: string }
+      | undefined;
+    return row?.hash ?? '0'.repeat(64); // hash « genèse » quand la chaîne est vide
+  }
+
+  /**
+   * Journalise une action métier. À appeler DANS la même transaction (transactionSync) que
+   * l'opération qu'elle trace, pour que la ligne d'audit et l'opération réussissent ou échouent
+   * ensemble. `hash = sha256(hash_precedent + payload)` : toute altération rétroactive d'une
+   * ligne casserait la chaîne pour toutes les lignes suivantes (voir verifierChaineAudit).
+   */
+  private journaliser(e: {
+    acteur: Acteur; action: string; entite?: string; entiteId?: string;
+    avant?: unknown; apres?: unknown;
+  }): void {
+    const hashPrecedent = this.dernierHashAudit();
+    const avantJson = e.avant !== undefined ? JSON.stringify(e.avant) : null;
+    const apresJson = e.apres !== undefined ? JSON.stringify(e.apres) : null;
+    const payload = [
+      e.acteur.utilisateurId, e.acteur.role, e.action, e.entite ?? '', e.entiteId ?? '',
+      avantJson ?? '', apresJson ?? '',
+    ].join('|');
+    const hash = createHash('sha256').update(hashPrecedent + payload).digest('hex');
+
+    this.sql.exec(
+      `INSERT INTO audit_log (id, utilisateur_id, role, action, entite, entite_id, avant_json, apres_json, hash_precedent, hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      uid(), e.acteur.utilisateurId, e.acteur.role, e.action, e.entite ?? null, e.entiteId ?? null,
+      avantJson, apresJson, hashPrecedent, hash,
+    );
+  }
+
+  /** Liste le journal d'audit, le plus récent en premier (consultation). */
+  async listerAuditLog(): Promise<Record<string, unknown>[]> {
+    return this.sql.exec(
+      `SELECT id, ts, utilisateur_id, role, action, entite, entite_id, avant_json, apres_json
+         FROM audit_log ORDER BY rowid DESC`,
+    ).toArray() as never;
+  }
+
+  /** Recalcule la chaîne de hash et signale la première rupture (preuve d'intégrité). */
+  async verifierChaineAudit(): Promise<{ valide: boolean; casseeA: string | null; nbLignes: number }> {
+    const lignes = this.sql.exec(
+      `SELECT id, utilisateur_id, role, action, entite, entite_id, avant_json, apres_json, hash_precedent, hash
+         FROM audit_log ORDER BY rowid ASC`,
+    ).toArray() as {
+      id: string; utilisateur_id: string; role: string; action: string; entite: string | null;
+      entite_id: string | null; avant_json: string | null; apres_json: string | null;
+      hash_precedent: string; hash: string;
+    }[];
+
+    let attendu = '0'.repeat(64);
+    for (const l of lignes) {
+      const payload = [
+        l.utilisateur_id, l.role, l.action, l.entite ?? '', l.entite_id ?? '',
+        l.avant_json ?? '', l.apres_json ?? '',
+      ].join('|');
+      const hash = createHash('sha256').update(attendu + payload).digest('hex');
+      if (l.hash_precedent !== attendu || l.hash !== hash) {
+        return { valide: false, casseeA: l.id, nbLignes: lignes.length };
+      }
+      attendu = hash;
+    }
+    return { valide: true, casseeA: null, nbLignes: lignes.length };
+  }
+
+  /** Vérifie que le journal d'audit est bien immuable (triggers SQL). Utilisé par les tests. */
+  async _verifierImmuabiliteAudit(auditId: string): Promise<{ updateBloque: boolean; deleteBloque: boolean }> {
+    let updateBloque = false;
+    try {
+      this.sql.exec("UPDATE audit_log SET action = 'falsifie' WHERE id = ?", auditId);
+    } catch {
+      updateBloque = true;
+    }
+    let deleteBloque = false;
+    try {
+      this.sql.exec('DELETE FROM audit_log WHERE id = ?', auditId);
+    } catch {
+      deleteBloque = true;
+    }
+    return { updateBloque, deleteBloque };
   }
 
   // ── Exercices : année/date locale (Africa/Douala = UTC+1) + création automatique ──
@@ -148,7 +241,9 @@ export class EntrepriseDO extends DurableObject {
    * Enregistre une vente : crée la vente + ses lignes ET génère automatiquement l'écriture
    * comptable en partie double (débit trésorerie / crédit produit [+ TVA]). Idempotent (clientUuid).
    */
-  async enregistrerVente(v: VenteEntree): Promise<{ venteId: string; totalTtc: number; deja: boolean }> {
+  async enregistrerVente(
+    v: VenteEntree, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
+  ): Promise<{ venteId: string; totalTtc: number; deja: boolean }> {
     if (v.clientUuid) {
       const ex = this.sql
         .exec('SELECT id, total_ttc FROM vente WHERE client_uuid = ?', v.clientUuid)
@@ -242,6 +337,10 @@ export class EntrepriseDO extends DurableObject {
           );
         }
       }
+      this.journaliser({
+        acteur, action: 'vente.enregistrer', entite: 'vente', entiteId: venteId,
+        apres: { totalTtc, modePaiement: v.modePaiement, nbLignes: calc.length },
+      });
       return { venteId, totalTtc, deja: false };
     });
   }
@@ -288,7 +387,7 @@ export class EntrepriseDO extends DurableObject {
   async entrerStock(a: {
     produitId: string; quantite: number; coutUnitaire: number; modePaiement: string;
     tiersId?: string | null;
-  }): Promise<{ nouveauStock: number; nouveauCmp: number }> {
+  }, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }): Promise<{ nouveauStock: number; nouveauCmp: number }> {
     const prod = this.sql
       .exec('SELECT stock_actuel, cout_moyen_pondere FROM produit WHERE id = ?', a.produitId)
       .toArray()[0] as { stock_actuel: number; cout_moyen_pondere: number } | undefined;
@@ -333,6 +432,11 @@ export class EntrepriseDO extends DurableObject {
       l('6031', 'credit', montant);
       this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
 
+      this.journaliser({
+        acteur, action: 'stock.entree', entite: 'produit', entiteId: a.produitId,
+        avant: { stock: prod.stock_actuel, cmp: prod.cout_moyen_pondere },
+        apres: { stock: etat.quantite, cmp: etat.cmp, quantiteEntree: a.quantite },
+      });
       return { nouveauStock: etat.quantite, nouveauCmp: etat.cmp };
     });
   }
@@ -369,7 +473,9 @@ export class EntrepriseDO extends DurableObject {
   }
 
   /** Émet la facture : numéro séquentiel gap-less + (si facture) créance client 411/701. */
-  async emettreFacture(factureId: string, prefixe: string): Promise<{ numero: string }> {
+  async emettreFacture(
+    factureId: string, prefixe: string, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
+  ): Promise<{ numero: string }> {
     const f = this.sql
       .exec('SELECT type, exercice_id, statut, numero, total_ht, total_tva, total_ttc FROM facture WHERE id = ?', factureId)
       .toArray()[0] as
@@ -415,12 +521,19 @@ export class EntrepriseDO extends DurableObject {
         if (f.total_tva > 0) l('4431', 'credit', f.total_tva);
         this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
       }
+      this.journaliser({
+        acteur, action: 'facture.emettre', entite: 'facture', entiteId: factureId,
+        apres: { numero, type: f.type, totalTtc: f.total_ttc },
+      });
       return { numero };
     });
   }
 
   /** Encaisse (total ou partiel) une facture : trésorerie / créance client 411, met à jour le statut. */
-  async payerFacture(factureId: string, montant: number, modePaiement: string): Promise<{ statut: string; regle: number }> {
+  async payerFacture(
+    factureId: string, montant: number, modePaiement: string,
+    acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
+  ): Promise<{ statut: string; regle: number }> {
     const f = this.sql.exec('SELECT total_ttc, exercice_id FROM facture WHERE id = ?', factureId)
       .toArray()[0] as { total_ttc: number; exercice_id: string } | undefined;
     if (!f) throw new Error('Facture introuvable');
@@ -447,6 +560,10 @@ export class EntrepriseDO extends DurableObject {
       );
       const statut = regle >= f.total_ttc ? 'payee' : 'payee_partiellement';
       this.sql.exec('UPDATE facture SET statut = ? WHERE id = ?', statut, factureId);
+      this.journaliser({
+        acteur, action: 'facture.payer', entite: 'facture', entiteId: factureId,
+        apres: { montant, modePaiement, statut, regle },
+      });
       return { statut, regle };
     });
   }
@@ -514,7 +631,7 @@ export class EntrepriseDO extends DurableObject {
   async creerDepense(d: {
     categorie: string; compteNumero: string; libelle: string; montant: number;
     modePaiement: string; tiersId?: string | null; recurrente?: boolean; clientUuid?: string | null;
-  }): Promise<{ depenseId: string; deja: boolean }> {
+  }, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }): Promise<{ depenseId: string; deja: boolean }> {
     if (d.clientUuid) {
       const ex = this.sql
         .exec('SELECT id FROM depense WHERE client_uuid = ?', d.clientUuid)
@@ -552,6 +669,10 @@ export class EntrepriseDO extends DurableObject {
         depenseId, exerciceId, d.categorie, d.compteNumero, d.libelle, montant, d.modePaiement,
         d.tiersId ?? null, d.recurrente ? 1 : 0, ecritureId, d.clientUuid ?? null,
       );
+      this.journaliser({
+        acteur, action: 'depense.creer', entite: 'depense', entiteId: depenseId,
+        apres: { categorie: d.categorie, montant, modePaiement: d.modePaiement },
+      });
       return { depenseId, deja: false };
     });
   }

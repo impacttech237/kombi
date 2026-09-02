@@ -42,7 +42,7 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 - ⬜ **Terminologie** : hook front `useTerminologie(secteur)` (commande/mission, produit/prestation)
 - ⬜ **Design system léger** : composants UI (bouton, champ, liste, modale) pensés mobile-first / gros doigts
 - ⬜ **i18n** : français par défaut ; prévoir la structure (pas de traduction au MVP)
-- ⬜ **Journal d'audit** : table `audit_log` (qui a fait quoi) — utile compta/fiscal
+- ✅ **Journal d'audit** : table `audit_log` (qui a fait quoi) — utile compta/fiscal
 - ⬜ **Seed de démo** : entreprise fictive par secteur pour tests manuels
 
 ---
@@ -245,7 +245,10 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   (commandes/tiers, hors caisse/finance).
 - ✅ Navigation filtrée par permissions (onglets Compta/Caisse/Factures masqués si non autorisés)
   + route fiscalité protégée (`requirePermission('compta:read')`).
-- ⬜ 🟡 Journal d'audit consultable (exigence NFR)
+- ✅ Journal d'audit consultable (exigence NFR) : `audit_log` append-only, chaîné par hash SHA-256
+  (`hash = sha256(hash_precedent + payload)`), écrit dans la même transaction que l'opération
+  qu'il trace (vente, dépense, entrée stock, émission/paiement facture). Consultable dans
+  Comptabilité → Journal (`audit:read`, admin + comptable), avec badge d'intégrité de la chaîne.
 
 ## Comptabilité — écritures
 - ✅ Écritures immuables (triggers UPDATE/DELETE) + atomicité (transactions)

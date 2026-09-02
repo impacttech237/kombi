@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
-import { formaterFCFA } from '@kombi/shared';
+import { formaterFCFA, peut, type RoleMembre } from '@kombi/shared';
 import { etatsFinanciers, type EntrepriseResume, type EtatsFinanciers, type LigneEtat } from '../lib/api.js';
 import { Icon } from '../components/ui.js';
+import { Journal } from './Journal.js';
 
 export function Comptabilite({ entreprise }: { entreprise: EntrepriseResume }) {
   const [etats, setEtats] = useState<EtatsFinanciers | null>(null);
-  const [vue, setVue] = useState<'resultat' | 'bilan'>('resultat');
+  const [vue, setVue] = useState<'resultat' | 'bilan' | 'journal'>('resultat');
   const [erreur, setErreur] = useState('');
+  const voitJournal = peut(entreprise.role as RoleMembre, 'audit:read');
 
   useEffect(() => {
     etatsFinanciers(entreprise.id).then(setEtats).catch((e) => setErreur(e instanceof Error ? e.message : 'Erreur'));
@@ -18,15 +20,16 @@ export function Comptabilite({ entreprise }: { entreprise: EntrepriseResume }) {
       <p className="muet" style={{ marginTop: 0, fontSize: 14 }}>Générée automatiquement depuis vos opérations.</p>
 
       <div style={{ display: 'flex', gap: 8, margin: '12px 0' }}>
-        {(['resultat', 'bilan'] as const).map((v) => (
+        {(['resultat', 'bilan', ...(voitJournal ? ['journal'] as const : [])] as const).map((v) => (
           <button key={v} onClick={() => setVue(v)} className={`btn ${vue === v ? 'btn-primaire' : 'btn-clair'}`} style={{ flex: 1 }}>
-            {v === 'resultat' ? 'Résultat' : 'Bilan'}
+            {v === 'resultat' ? 'Résultat' : v === 'bilan' ? 'Bilan' : 'Journal'}
           </button>
         ))}
       </div>
 
       {erreur && <p style={{ color: 'var(--danger)' }}>{erreur}</p>}
-      {!etats ? <p className="muet">Chargement…</p>
+      {vue === 'journal' ? <Journal entreprise={entreprise} />
+        : !etats ? <p className="muet">Chargement…</p>
         : vue === 'resultat' ? <Resultat e={etats} /> : <Bilan e={etats} />}
     </div>
   );

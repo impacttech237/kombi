@@ -28,7 +28,7 @@ ventes.post('/', requirePermission('vente:create'), async (c) => {
   const res = await stubEntreprise(c.env, entrepriseId).enregistrerVente({
     lignes, modePaiement: v.modePaiement, tiersId: v.tiersId ?? null, caissierId,
     clientUuid: v.clientUuid ?? null, dateOperation: v.dateOperation ?? null,
-  });
+  }, { utilisateurId: caissierId, role: c.get('role') });
   return c.json(res, res.deja ? 200 : 201);
 });
 

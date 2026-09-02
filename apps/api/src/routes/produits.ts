@@ -48,6 +48,6 @@ produits.post('/:id/entree', requirePermission('stock:manage'), async (c) => {
   const res = await stubEntreprise(c.env, c.get('entrepriseId')).entrerStock({
     produitId: c.req.param('id'), quantite: e.quantite, coutUnitaire: e.coutUnitaire,
     modePaiement: e.modePaiement,
-  });
+  }, { utilisateurId: c.get('utilisateurId'), role: c.get('role') });
   return c.json(res);
 });

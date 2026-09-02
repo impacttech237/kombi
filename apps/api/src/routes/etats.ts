@@ -9,3 +9,10 @@ etats.get('/', requirePermission('compta:read'), async (c) => {
   const e = await stubEntreprise(c.env, c.get('entrepriseId')).etatsFinanciers();
   return c.json(e);
 });
+
+/** Journal d'audit immuable : entrées + preuve d'intégrité de la chaîne de hash. */
+etats.get('/audit', requirePermission('audit:read'), async (c) => {
+  const e = stubEntreprise(c.env, c.get('entrepriseId'));
+  const [entrees, integrite] = await Promise.all([e.listerAuditLog(), e.verifierChaineAudit()]);
+  return c.json({ entrees, integrite });
+});

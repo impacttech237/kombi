@@ -24,6 +24,7 @@ export const PERMISSIONS = [
   'compta:read', // consulter la couche invisible (bilan, CR, IGS)
   'depense:manage',
   'depense:read',
+  'audit:read', // consulter le journal d'audit immuable
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -65,6 +66,7 @@ const PERMS_COMPTABLE: readonly Permission[] = [
   'commande:read',
   'depense:read',
   'compta:read',
+  'audit:read',
 ];
 
 /** Opérationnel hors caisse/finance : suivi des commandes et des tiers, pas d'argent. */

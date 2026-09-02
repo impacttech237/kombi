@@ -113,6 +113,18 @@ export interface EtatsFinanciers {
 export const etatsFinanciers = (entrepriseId: string) =>
   api<EtatsFinanciers>('/api/etats', { entrepriseId });
 
+// ── Journal d'audit ──
+export interface EntreeAudit {
+  id: string; ts: string; utilisateur_id: string; role: string; action: string;
+  entite: string | null; entite_id: string | null; avant_json: string | null; apres_json: string | null;
+}
+export interface JournalAudit {
+  entrees: EntreeAudit[];
+  integrite: { valide: boolean; casseeA: string | null; nbLignes: number };
+}
+export const journalAudit = (entrepriseId: string) =>
+  api<JournalAudit>('/api/etats/audit', { entrepriseId });
+
 // ── Commandes / missions ──
 export interface Commande {
   id: string; type: string; libelle: string; statut: string;

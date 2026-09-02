@@ -236,6 +236,32 @@ CREATE TABLE IF NOT EXISTS depense (
 )
 `;
 
+/**
+ * v4 — Journal d'audit immuable (append-only, chaîné par hash) : trace qui a fait quoi, quand,
+ * sur quelle entité. `hash = sha256(hash_precedent + payload)` — toute altération d'une ligne
+ * passée casse la chaîne pour toutes les lignes suivantes (détectable par `verifierChaineAudit`).
+ * Écrit dans la MÊME transaction que l'opération métier qu'elle journalise.
+ */
+const MIGRATION_V4_AUDIT_LOG = `
+CREATE TABLE IF NOT EXISTS audit_log (
+  id TEXT PRIMARY KEY, ts TEXT NOT NULL DEFAULT (datetime('now')),
+  utilisateur_id TEXT NOT NULL, role TEXT NOT NULL,
+  action TEXT NOT NULL, entite TEXT, entite_id TEXT,
+  avant_json TEXT, apres_json TEXT,
+  hash_precedent TEXT, hash TEXT NOT NULL
+)
+--##
+CREATE TRIGGER IF NOT EXISTS trg_audit_immuable_update BEFORE UPDATE ON audit_log
+BEGIN
+  SELECT RAISE(ABORT, 'audit_log immuable : modification interdite');
+END
+--##
+CREATE TRIGGER IF NOT EXISTS trg_audit_immuable_delete BEFORE DELETE ON audit_log
+BEGIN
+  SELECT RAISE(ABORT, 'audit_log immuable : suppression interdite');
+END
+`;
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -266,7 +292,9 @@ export const MIGRATIONS_DO: readonly MigrationDO[] = [
   { v: 2, statements: statementsDe(MIGRATION_V2_IMMUABILITE) },
   // v3 — écran Dépenses (module + table depense).
   { v: 3, statements: statementsDe(MIGRATION_V3_DEPENSES) },
-  // v4… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v4 — journal d'audit immuable (append-only, chaîné par hash).
+  { v: 4, statements: statementsDe(MIGRATION_V4_AUDIT_LOG) },
+  // v5… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */

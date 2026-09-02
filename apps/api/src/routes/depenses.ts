@@ -35,6 +35,6 @@ depenses.post('/', requirePermission('depense:manage'), async (c) => {
     categorie: d.categorie, compteNumero: compteDeCategorie(d.categorie), libelle: d.libelle,
     montant: d.montant, modePaiement: d.modePaiement,
     tiersId: d.tiersId ?? null, recurrente: d.recurrente, clientUuid: d.clientUuid ?? null,
-  });
+  }, { utilisateurId: c.get('utilisateurId'), role: c.get('role') });
   return c.json(res, res.deja ? 200 : 201);
 });
