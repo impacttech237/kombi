@@ -751,14 +751,20 @@ export class EntrepriseDO extends DurableObject {
   /** Émet la facture : numéro séquentiel gap-less + (si facture) créance client 411/701. */
   async emettreFacture(
     factureId: string, prefixe: string, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
+    assujettiTva = false,
   ): Promise<{ numero: string }> {
     const f = this.sql
-      .exec('SELECT type, exercice_id, statut, numero, total_ht, total_tva, total_ttc FROM facture WHERE id = ?', factureId)
+      .exec('SELECT type, exercice_id, statut, numero, total_ht, total_tva, total_ttc, tiers_id FROM facture WHERE id = ?', factureId)
       .toArray()[0] as
-      | { type: string; exercice_id: string; statut: string; numero: string | null; total_ht: number; total_tva: number; total_ttc: number }
+      | { type: string; exercice_id: string; statut: string; numero: string | null; total_ht: number; total_tva: number; total_ttc: number; tiers_id: string }
       | undefined;
     if (!f) throw new Error('Facture introuvable');
     if (f.statut !== 'brouillon' && f.numero) return { numero: f.numero };
+    // CGI Art. 150 : une facture normalisée exige le NIU du client, pour les assujettis TVA (Réel).
+    if (f.type === 'facture' && assujettiTva) {
+      const tiers = this.sql.exec('SELECT niu FROM tiers WHERE id = ?', f.tiers_id).toArray()[0] as { niu: string | null } | undefined;
+      if (!tiers?.niu?.trim()) throw new Error('Le NIU du client est requis pour émettre une facture (Art. 150 CGI)');
+    }
     // Lecture async AVANT la transaction (transactionSync exige un callback 100% synchrone).
     const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
 

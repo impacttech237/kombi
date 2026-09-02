@@ -273,7 +273,11 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ⬜ 🟠 Conversion devis → facture
 - ⬜ 🟠 WhatsApp envoie réellement le PDF (destinataire + lien)
 - ⬜ 🟡 Acompte (facture / commande)
-- ⬜ 🟡 Contrôle des mentions Art. 150 (NIU client) avant émission
+- ✅ Contrôle des mentions Art. 150 (NIU client) avant émission : `emettreFacture()` refuse
+  d'émettre une **facture** (pas un devis) sans NIU client, mais seulement pour les entreprises
+  **assujetties TVA au régime réel** (`regime_fiscal !== 'igs' && assujetti_tva === 1`) —
+  conforme à `docs/reference/07-ventes-facturation.md` : l'obligation de facture normalisée pèse
+  sur les assujettis TVA, pas sur les TPE à l'IGS (qui peuvent facturer un client anonyme).
 - ⬜ ⚪ Vrai brouillon modifiable (émission non forcée)
 
 ## Tiers (clients / fournisseurs)

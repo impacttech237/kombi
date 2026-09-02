@@ -27,9 +27,9 @@ function prefixe(raisonSociale: string): string {
 
 async function emetteur(c: { env: AppEnv['Bindings'] }, entrepriseId: string) {
   return (c.env as AppEnv['Bindings']).DB
-    .prepare('SELECT raison_sociale, niu FROM entreprise WHERE id = ?')
+    .prepare('SELECT raison_sociale, niu, assujetti_tva FROM entreprise WHERE id = ?')
     .bind(entrepriseId)
-    .first<{ raison_sociale: string; niu: string | null }>();
+    .first<{ raison_sociale: string; niu: string | null; assujetti_tva: number }>();
 }
 
 factures.get('/', requirePermission('facture:read'), async (c) => {
@@ -72,8 +72,12 @@ factures.post('/:id/emettre', requirePermission('facture:manage'), async (c) => 
     }
   }
 
-  const res = await stubEntreprise(c.env, entrepriseId)
-    .emettreFacture(c.req.param('id'), prefixe(ent.raison_sociale), { utilisateurId: c.get('utilisateurId'), role: c.get('role') });
+  const regimeFiscal = await regimeFiscalDe(c.env, entrepriseId);
+  const assujettiTva = regimeFiscal !== 'igs' && ent.assujetti_tva === 1;
+  const res = await stubEntreprise(c.env, entrepriseId).emettreFacture(
+    c.req.param('id'), prefixe(ent.raison_sociale),
+    { utilisateurId: c.get('utilisateurId'), role: c.get('role') }, assujettiTva,
+  );
   return c.json(res);
 });
 
