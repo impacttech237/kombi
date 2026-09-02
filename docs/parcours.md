@@ -190,8 +190,12 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 9. ⬜ 🟠 **États & livres légaux** : livre-journal, grand-livre, balance + bilan/CR au format SYSCOHADA à rubriques + SIG ; date d'opération réelle (locale, pas UTC).
 10. 🚧 🔴 **Décisions structurantes** : ✅ versioning du schéma DO ; ✅ mécanisme d'avoir (`creerAvoir`,
     contre-passation intégrale, `caCumule` désormais net crédits−débits) ; ✅ vrai tableau de bord
-    (`tendance7Jours`, le faux graphe SVG statique a disparu) ; ⬜ collecte d'agrégats back-office +
-    plans d'abonnement (décisions produit hors du périmètre technique, voir note ci-dessous).
+    (`tendance7Jours`, le faux graphe SVG statique a disparu) ; ✅ plans d'abonnement (Gratuit/
+    Essentiel/Pro — table `plan`/`abonnement`, essai gratuit 30j à la création, quota 50 factures/
+    mois sur Gratuit avec rejet 402, changement de plan par l'admin) ; ⬜ back-office « Impact Tech »
+    + collecte d'agrégats cross-entreprises — **explicitement phase P2 dans la spec elle-même**
+    (§6 : pipeline Cloudflare Queue → D1, hors scope d'un MVP à un seul niveau de risque raisonnable
+    à ce stade ; les plans/quotas ci-dessus couvrent la partie immédiatement actionnable).
 
 ## Caisse & ventes
 - ✅ Vente à crédit (411) : `enregistrerVente({ aCredit: true, tiersId })` débite la créance client

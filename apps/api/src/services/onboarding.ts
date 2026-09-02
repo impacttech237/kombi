@@ -21,6 +21,9 @@ const uid = () => crypto.randomUUID();
 /** Statements D1 (control plane) pour enregistrer l'entreprise et son membre admin. */
 export function planCreationEntreprise(db: D1Database, e: CreationEntreprise) {
   const entrepriseId = uid();
+  // Essai gratuit de 30 jours à la création (spec §7) — pas de paiement automatisé au MVP,
+  // une mise à niveau se fait manuellement (staff) tant que le paiement en ligne n'existe pas.
+  const finEssai = new Date(Date.now() + 30 * 24 * 3_600_000).toISOString().slice(0, 10);
   const stmts: D1PreparedStatement[] = [
     db
       .prepare(
@@ -34,6 +37,12 @@ export function planCreationEntreprise(db: D1Database, e: CreationEntreprise) {
          VALUES (?, ?, ?, 'admin')`,
       )
       .bind(uid(), e.utilisateurId, entrepriseId),
+    db
+      .prepare(
+        `INSERT INTO abonnement (id, entreprise_id, plan_code, statut, essai_fin)
+         VALUES (?, ?, 'gratuit', 'essai', ?)`,
+      )
+      .bind(uid(), entrepriseId, finEssai),
   ];
   return { entrepriseId, stmts };
 }

@@ -876,6 +876,16 @@ export class EntrepriseDO extends DurableObject {
     });
   }
 
+  /** Nombre de factures émises depuis le début du mois civil courant — pour le quota du plan Gratuit. */
+  async compterFacturesMoisCourant(): Promise<number> {
+    const debutMois = `${this.dateCourante().slice(0, 7)}-01`;
+    const row = this.sql.exec(
+      "SELECT COUNT(*) AS n FROM facture WHERE type = 'facture' AND date_emission >= ?",
+      debutMois,
+    ).toArray()[0] as { n: number };
+    return row.n;
+  }
+
   async listerFactures(): Promise<Record<string, unknown>[]> {
     return this.sql.exec(
       `SELECT f.id, f.type, f.numero, f.statut, f.total_ttc, f.date_emission, f.date_echeance, f.avoir_de_id,

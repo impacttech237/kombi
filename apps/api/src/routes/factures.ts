@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zModePaiement, zMontantPositif, zLigneMontant, zDateISO, messageErreurZod } from '@kombi/shared';
 import { requirePermission } from '../middleware/permission.js';
-import { stubEntreprise, regimeFiscalDe, type AppEnv } from '../types.js';
+import { stubEntreprise, regimeFiscalDe, abonnementDe, type AppEnv } from '../types.js';
 import { genererFacturePDF, type DonneesFacture } from '../pdf/facture-pdf.js';
 
 const zCreationFacture = z.object({
@@ -59,9 +59,20 @@ factures.post('/', requirePermission('facture:manage'), async (c) => {
 });
 
 factures.post('/:id/emettre', requirePermission('facture:manage'), async (c) => {
-  const ent = await emetteur(c, c.get('entrepriseId'));
+  const entrepriseId = c.get('entrepriseId');
+  const ent = await emetteur(c, entrepriseId);
   if (!ent) return c.json({ erreur: 'Entreprise introuvable' }, 404);
-  const res = await stubEntreprise(c.env, c.get('entrepriseId'))
+
+  // Quota du plan Gratuit (spec §7 : 50 factures/mois) — Essentiel/Pro sont illimités.
+  const a = await abonnementDe(c.env, entrepriseId);
+  if (a?.features.quotaFacturesMois != null) {
+    const emises = await stubEntreprise(c.env, entrepriseId).compterFacturesMoisCourant();
+    if (emises >= a.features.quotaFacturesMois) {
+      return c.json({ erreur: `Quota du plan ${a.planCode} atteint (${a.features.quotaFacturesMois} factures/mois)` }, 402);
+    }
+  }
+
+  const res = await stubEntreprise(c.env, entrepriseId)
     .emettreFacture(c.req.param('id'), prefixe(ent.raison_sociale), { utilisateurId: c.get('utilisateurId'), role: c.get('role') });
   return c.json(res);
 });
