@@ -32,7 +32,10 @@ export interface LigneVenteEntree {
 }
 export interface VenteEntree {
   lignes: LigneVenteEntree[];
-  modePaiement: string;
+  /** Requis sauf si `aCredit` (rien n'est encaissé tout de suite). */
+  modePaiement?: string | null;
+  /** Vente à crédit : débit 411 (créance client) au lieu de la trésorerie. Requiert `tiersId`. */
+  aCredit?: boolean;
   tiersId?: string | null;
   caissierId?: string | null;
   clientUuid?: string | null;
@@ -251,6 +254,8 @@ export class EntrepriseDO extends DurableObject {
       if (ex) return { venteId: ex.id, totalTtc: ex.total_ttc, deja: true };
     }
     if (!v.lignes.length) throw new Error('Vente sans ligne');
+    if (v.aCredit && !v.tiersId) throw new Error('Un client est requis pour une vente à crédit');
+    if (!v.aCredit && !v.modePaiement) throw new Error('Mode de paiement requis');
     // Lecture async AVANT la transaction (transactionSync exige un callback 100% synchrone).
     const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
 
@@ -283,16 +288,26 @@ export class EntrepriseDO extends DurableObject {
       const exerciceId = this.exercicePourAnnee(Number(dateOp.slice(0, 4)));
       const compteProduit = secteur === 'service' ? '706' : '701';
 
-      // Écriture partie double : produit de la vente (réutilise le moteur comptable)…
-      const ecr = genererRecette({
-        montantHT: totalHt, tva: totalTva, modePaiement: v.modePaiement as never,
-        compteProduit, libelle: 'Vente caisse',
-      });
+      // Écriture partie double : produit de la vente. Au comptant (réutilise le moteur comptable) —
+      // débit trésorerie / crédit produit. À crédit — débit créance client (411) / crédit produit,
+      // exactement comme une facture émise (voir emettreFacture).
+      const ecr = v.aCredit
+        ? {
+            lignes: [
+              { compteNumero: '411', sens: 'debit' as const, montant: totalTtc },
+              { compteNumero: compteProduit, sens: 'credit' as const, montant: totalHt },
+              ...(totalTva > 0 ? [{ compteNumero: '4431', sens: 'credit' as const, montant: totalTva }] : []),
+            ],
+          }
+        : genererRecette({
+            montantHT: totalHt, tva: totalTva, modePaiement: v.modePaiement as never,
+            compteProduit, libelle: 'Vente caisse',
+          });
       const ecritureId = uid();
       this.sql.exec(
         `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, source, statut)
          VALUES (?, ?, ?, 'Vente caisse', ?, 'vente', 'brouillon')`,
-        ecritureId, exerciceId, dateOp, v.modePaiement,
+        ecritureId, exerciceId, dateOp, v.aCredit ? null : v.modePaiement,
       );
       const insLigne = (numero: string, sens: string, m: number) =>
         this.sql.exec(
@@ -312,9 +327,9 @@ export class EntrepriseDO extends DurableObject {
       this.sql.exec(
         `INSERT INTO vente (id, exercice_id, date, tiers_id, mode_paiement, total_ht, total_tva, total_ttc,
                             statut, ecriture_id, caissier_id, client_uuid)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'payee', ?, ?, ?)`,
-        venteId, exerciceId, dateOp, v.tiersId ?? null, v.modePaiement, totalHt, totalTva, totalTtc,
-        ecritureId, v.caissierId ?? null, v.clientUuid ?? null,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        venteId, exerciceId, dateOp, v.tiersId ?? null, v.aCredit ? null : v.modePaiement, totalHt, totalTva, totalTtc,
+        v.aCredit ? 'a_credit' : 'payee', ecritureId, v.caissierId ?? null, v.clientUuid ?? null,
       );
       let ordre = 0;
       for (const l of calc) {
@@ -338,11 +353,64 @@ export class EntrepriseDO extends DurableObject {
         }
       }
       this.journaliser({
-        acteur, action: 'vente.enregistrer', entite: 'vente', entiteId: venteId,
-        apres: { totalTtc, modePaiement: v.modePaiement, nbLignes: calc.length },
+        acteur, action: v.aCredit ? 'vente.credit' : 'vente.enregistrer', entite: 'vente', entiteId: venteId,
+        apres: { totalTtc, modePaiement: v.aCredit ? null : v.modePaiement, aCredit: !!v.aCredit, nbLignes: calc.length },
       });
       return { venteId, totalTtc, deja: false };
     });
+  }
+
+  /** Encaisse (total ou partiel) une vente à crédit : trésorerie / créance client 411. */
+  async payerVente(
+    venteId: string, montant: number, modePaiement: string,
+    acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
+  ): Promise<{ statut: string; regle: number }> {
+    const vente = this.sql.exec('SELECT total_ttc, exercice_id, statut FROM vente WHERE id = ?', venteId)
+      .toArray()[0] as { total_ttc: number; exercice_id: string; statut: string } | undefined;
+    if (!vente) throw new Error('Vente introuvable');
+    if (vente.statut !== 'a_credit' && vente.statut !== 'payee_partiellement') {
+      throw new Error('Cette vente n\'attend pas de règlement');
+    }
+
+    return this.ctx.storage.transactionSync(() => {
+      const dejaRow = this.sql.exec('SELECT COALESCE(SUM(montant),0) AS p FROM paiement_vente WHERE vente_id = ?', venteId)
+        .toArray()[0] as { p: number };
+      const regle = dejaRow.p + montant;
+
+      const ecritureId = uid();
+      this.sql.exec(
+        `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, source, statut, vente_id)
+         VALUES (?, ?, date('now'), 'Encaissement vente à crédit', ?, 'vente', 'brouillon', ?)`,
+        ecritureId, vente.exercice_id, modePaiement, venteId,
+      );
+      const tresorerie = genererRecette({ montantHT: 0, modePaiement: modePaiement as never, compteProduit: '701', libelle: 'x' }).lignes[0]!.compteNumero;
+      this.sql.exec('INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?,?,?,?,?)', uid(), ecritureId, this.compteId(tresorerie), 'debit', montant);
+      this.sql.exec('INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?,?,?,?,?)', uid(), ecritureId, this.compteId('411'), 'credit', montant);
+      this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
+
+      this.sql.exec(
+        "INSERT INTO paiement_vente (id, vente_id, date, montant, mode_paiement, ecriture_id) VALUES (?, ?, date('now'), ?, ?, ?)",
+        uid(), venteId, montant, modePaiement, ecritureId,
+      );
+      const statut = regle >= vente.total_ttc ? 'payee' : 'payee_partiellement';
+      this.sql.exec('UPDATE vente SET statut = ? WHERE id = ?', statut, venteId);
+      this.journaliser({
+        acteur, action: 'vente.payer', entite: 'vente', entiteId: venteId,
+        apres: { montant, modePaiement, statut, regle },
+      });
+      return { statut, regle };
+    });
+  }
+
+  /** Ventes à crédit non soldées (« on me doit ») — pour l'écran créances. */
+  async listerVentesACredit(): Promise<Record<string, unknown>[]> {
+    return this.sql.exec(
+      `SELECT v.id, v.date, v.total_ttc, v.statut, t.nom AS tiers_nom,
+              COALESCE((SELECT SUM(montant) FROM paiement_vente WHERE vente_id = v.id), 0) AS regle
+         FROM vente v LEFT JOIN tiers t ON t.id = v.tiers_id
+        WHERE v.statut IN ('a_credit', 'payee_partiellement')
+        ORDER BY v.date ASC`,
+    ).toArray() as never;
   }
 
   /** Statistiques d'accueil : ventes du jour + nombre. */

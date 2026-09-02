@@ -1,16 +1,20 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { zModePaiement, zLigneMontant, zDateISO, messageErreurZod } from '@kombi/shared';
+import { zModePaiement, zMontantPositif, zLigneMontant, zDateISO, messageErreurZod } from '@kombi/shared';
 import { requirePermission } from '../middleware/permission.js';
 import { stubEntreprise, type AppEnv } from '../types.js';
 
 const zVente = z.object({
-  modePaiement: zModePaiement,
+  modePaiement: zModePaiement.nullish(),
+  aCredit: z.boolean().optional().default(false),
   lignes: z.array(zLigneMontant).min(1, 'Ajoutez au moins un article avec un montant'),
   tiersId: z.string().nullish(),
   clientUuid: z.string().nullish(),
   dateOperation: zDateISO.nullish(),
-});
+}).refine((v) => v.aCredit || v.modePaiement, { message: 'Mode de paiement requis (ou vente à crédit)' })
+  .refine((v) => !v.aCredit || v.tiersId, { message: 'Un client est requis pour une vente à crédit' });
+
+const zPaiementVente = z.object({ montant: zMontantPositif, modePaiement: zModePaiement });
 
 export const ventes = new Hono<AppEnv>();
 
@@ -26,10 +30,27 @@ ventes.post('/', requirePermission('vente:create'), async (c) => {
   if (!lignes.length) return c.json({ erreur: 'Ajoutez au moins un article avec un montant' }, 400);
 
   const res = await stubEntreprise(c.env, entrepriseId).enregistrerVente({
-    lignes, modePaiement: v.modePaiement, tiersId: v.tiersId ?? null, caissierId,
+    lignes, modePaiement: v.modePaiement ?? null, aCredit: v.aCredit, tiersId: v.tiersId ?? null, caissierId,
     clientUuid: v.clientUuid ?? null, dateOperation: v.dateOperation ?? null,
   }, { utilisateurId: caissierId, role: c.get('role') });
   return c.json(res, res.deja ? 200 : 201);
+});
+
+/** Encaisse (total ou partiel) une vente à crédit. */
+ventes.post('/:id/payer', requirePermission('vente:create'), async (c) => {
+  const corps = zPaiementVente.safeParse(await c.req.json().catch(() => null));
+  if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);
+  const res = await stubEntreprise(c.env, c.get('entrepriseId')).payerVente(
+    c.req.param('id'), corps.data.montant, corps.data.modePaiement,
+    { utilisateurId: c.get('utilisateurId'), role: c.get('role') },
+  );
+  return c.json(res);
+});
+
+/** Ventes à crédit non soldées (« on me doit »). */
+ventes.get('/credit', requirePermission('vente:read'), async (c) => {
+  const liste = await stubEntreprise(c.env, c.get('entrepriseId')).listerVentesACredit();
+  return c.json({ ventes: liste });
 });
 
 /** Statistiques du jour (pour le tableau de bord). */

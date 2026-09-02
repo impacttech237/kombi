@@ -262,6 +262,39 @@ BEGIN
 END
 `;
 
+/**
+ * v5 — Corrections caisse (§I-9.1) : vente à crédit (411, comme une facture), remboursement
+ * échelonné. La table `vente` a un CHECK de statut trop étroit et `mode_paiement` NOT NULL
+ * (impossible pour une vente à crédit, pas encore réglée) → recréation (pattern habituel).
+ */
+const MIGRATION_V5_CAISSE = `
+CREATE TABLE vente_v5 (
+  id TEXT PRIMARY KEY, exercice_id TEXT NOT NULL REFERENCES exercice(id),
+  date TEXT NOT NULL DEFAULT (datetime('now')), tiers_id TEXT REFERENCES tiers(id),
+  mode_paiement TEXT CHECK (mode_paiement IN ('especes','mtn_momo','orange_money','virement','cheque','autre')),
+  total_ht INTEGER NOT NULL DEFAULT 0, total_tva INTEGER NOT NULL DEFAULT 0, total_ttc INTEGER NOT NULL DEFAULT 0,
+  statut TEXT NOT NULL DEFAULT 'payee' CHECK (statut IN ('payee','a_credit','payee_partiellement','annulee')),
+  facture_id TEXT REFERENCES facture(id), ecriture_id TEXT REFERENCES ecriture(id),
+  caissier_id TEXT, client_uuid TEXT UNIQUE, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+--##
+INSERT INTO vente_v5 (id, exercice_id, date, tiers_id, mode_paiement, total_ht, total_tva, total_ttc,
+                      statut, facture_id, ecriture_id, caissier_id, client_uuid, created_at)
+  SELECT id, exercice_id, date, tiers_id, mode_paiement, total_ht, total_tva, total_ttc,
+         statut, facture_id, ecriture_id, caissier_id, client_uuid, created_at FROM vente
+--##
+DROP TABLE vente
+--##
+ALTER TABLE vente_v5 RENAME TO vente
+--##
+CREATE TABLE IF NOT EXISTS paiement_vente (
+  id TEXT PRIMARY KEY, vente_id TEXT NOT NULL REFERENCES vente(id) ON DELETE CASCADE,
+  date TEXT NOT NULL DEFAULT (datetime('now')), montant INTEGER NOT NULL CHECK (montant > 0),
+  mode_paiement TEXT NOT NULL CHECK (mode_paiement IN ('especes','mtn_momo','orange_money','virement','cheque','autre')),
+  ecriture_id TEXT REFERENCES ecriture(id)
+)
+`;
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -279,6 +312,15 @@ export function statementsSchema(): string[] {
  * - Toujours AJOUTER une nouvelle entrée `{ v: N+1, statements: [...] }` en fin de tableau.
  * - Les statements doivent être idempotents quand c'est possible (IF NOT EXISTS, INSERT OR IGNORE).
  * - SQLite ne supporte pas DROP COLUMN simplement : pour retirer/renommer, recréer + copier.
+ * - Recréer une table RÉFÉRENCÉE par une FK d'une autre table (ex. `vente` ← `ligne_vente.vente_id`) :
+ *   ne JAMAIS renommer la table existante vers un nom temporaire (`ALTER TABLE x RENAME TO x_vN`) —
+ *   SQLite réécrit alors silencieusement les FK des AUTRES tables vers ce nom temporaire, qui
+ *   n'existe plus une fois DROP → "no such table" au premier INSERT dans la table dépendante.
+ *   (`PRAGMA legacy_alter_table` n'a pas d'effet observable dans le SQLite embarqué des DO.)
+ *   Faire l'inverse : créer la nouvelle table sous un nom temporaire (`x_vN`), copier les
+ *   données, DROP l'ancienne `x`, puis RENAME `x_vN` → `x`. Aucune autre table n'a jamais
+ *   référencé `x_vN`, donc rien n'est réécrit ; les FK existantes (qui disent toujours `x`)
+ *   se remettent à pointer correctement dès que `x` réapparaît avec le nouveau schéma.
  */
 export interface MigrationDO {
   readonly v: number;
@@ -294,7 +336,9 @@ export const MIGRATIONS_DO: readonly MigrationDO[] = [
   { v: 3, statements: statementsDe(MIGRATION_V3_DEPENSES) },
   // v4 — journal d'audit immuable (append-only, chaîné par hash).
   { v: 4, statements: statementsDe(MIGRATION_V4_AUDIT_LOG) },
-  // v5… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v5 — corrections caisse : vente à crédit (411) + remboursement échelonné.
+  { v: 5, statements: statementsDe(MIGRATION_V5_CAISSE) },
+  // v6… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */

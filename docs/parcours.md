@@ -179,18 +179,23 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 3. ✅ **Écran Dépenses** (charges 60-67) : loyer, transport, salaires, élec, frais bancaires → résultat sincère + charges pour les prestataires.
 4. ⬜ 🔴 **Crédit clients & dettes fournisseurs** : vente/achat à crédit (411/401) + écrans « on me doit » / « ce que je dois ».
 5. ⬜ 🔴 **Chaîne TVA** : enregistrer 4452 (déductible), imputer services en 4432, contraindre le taux 0/19,25 %, interdire TVA aux IGS, supprimer le double comptage vente↔facture.
-6. ⬜ 🟠 **Caisse comptoir** : quantités (bug figé à 1), remises, client rattaché, paiement partiel + rendu-monnaie, reçu client.
+6. ✅ **Caisse comptoir** : quantités éditables, vente à crédit (411), client rattaché, montant
+   reçu + rendu-monnaie, reçu imprimable. (Remises restent à faire, 🟡.)
 7. ✅ **Sécurité** : CORS restreint aux origines de confiance + rate-limiting auth (D1, 10 req/min/IP) + validation Zod (montants/taux/dates) sur ventes/dépenses/produits/factures.
 8. ✅ **Employés & rôles** : rôles comptable/employé, écran Équipe (ajout par email + changement de rôle + retrait), nav filtrée par rôle, route fiscalité protégée (`requirePermission('compta:read')`).
 9. ⬜ 🟠 **États & livres légaux** : livre-journal, grand-livre, balance + bilan/CR au format SYSCOHADA à rubriques + SIG ; date d'opération réelle (locale, pas UTC).
 10. ⬜ 🔴 **Décisions structurantes** : versioning du schéma DO, collecte d'agrégats (back-office + plans d'abonnement), mécanisme d'avoir, vrai tableau de bord (retirer le faux graphe).
 
 ## Caisse & ventes
-- ⬜ 🔴 Vente à crédit impossible (`statut='payee'` forcé) → passer par 411
-- ⬜ 🔴 Quantité figée à 1 dans `Caisse.tsx`
-- ⬜ 🟠 Client jamais rattaché à la vente (`tiersId` non envoyé)
-- ⬜ 🟠 Paiement partiel / montant reçu / rendu-monnaie absents
-- ⬜ 🟠 Aucun reçu remis au client (impression / partage WhatsApp)
+- ✅ Vente à crédit (411) : `enregistrerVente({ aCredit: true, tiersId })` débite la créance client
+  au lieu de la trésorerie (comme une facture émise) ; `payerVente()` encaisse ensuite (total ou
+  partiel), statut `a_credit` → `payee_partiellement` → `payee` ; écran « on me doit »
+  (`listerVentesACredit`) exposé via `GET /api/ventes/credit`.
+- ✅ Quantité éditable dans `Caisse.tsx` (steppers +/− par ligne du panier, plus figée à 1)
+- ✅ Client rattaché à la vente : sélecteur de client dans la caisse, bug corrigé côté rejeu
+  offline (`sync.ts` ne transmettait ni `tiersId` ni `aCredit` lors de la resynchronisation)
+- ✅ Montant reçu + rendu-monnaie (calculé côté caisse, bloque l'encaissement si insuffisant)
+- ✅ Reçu imprimable (bouton « Imprimer le reçu », CSS `@media print` dédiée)
 - ⬜ 🟡 Remise (ligne/globale) absente
 - ⬜ 🟡 Retour / annulation de vente (`vente:annuler` sans route ni UI)
 - ⬜ 🟡 TVA jamais appliquée en caisse (`tauxTva=0`, `assujetti_tva` non lu)

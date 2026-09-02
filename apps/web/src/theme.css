@@ -72,3 +72,10 @@ a { color: inherit; text-decoration: none; }
 .titre-page { font-size: 26px; font-weight: 700; margin: 0; }
 .muet { color: var(--muet); }
 .center-ecran { min-height: 100%; display: grid; place-items: center; padding: 20px; }
+
+/* Reçu de caisse : à l'impression, n'affiche que le reçu (voir Caisse.tsx #recu-impression). */
+@media print {
+  body * { visibility: hidden; }
+  #recu-impression, #recu-impression * { visibility: visible; }
+  #recu-impression { position: absolute; top: 0; left: 0; width: 100%; }
+}

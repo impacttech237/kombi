@@ -19,7 +19,9 @@ export async function synchroniser(): Promise<{ envoyees: number; echecs: number
         if (m.type === 'vente') {
           await enregistrerVente(m.entrepriseId, {
             lignes: m.payload.lignes as never,
-            modePaiement: m.payload.modePaiement as string,
+            modePaiement: (m.payload.modePaiement as string | undefined) ?? null,
+            aCredit: m.payload.aCredit as boolean | undefined,
+            tiersId: (m.payload.tiersId as string | undefined) ?? null,
             clientUuid: m.clientUuid,
           });
         }
