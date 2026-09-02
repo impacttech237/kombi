@@ -265,7 +265,14 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ✅ « Rupture » vs « Stock bas » (distinguer ≤ seuil de = 0) : `listerProduits()` expose
   désormais `en_rupture` (stock = 0) en plus de `en_alerte` (stock ≤ seuil) ; `Stock.tsx` affiche
   la puce « Rupture » seulement à 0, « Stock bas » entre 1 et le seuil.
-- ⬜ 🟡 Inventaire / ajustement (casse, vol) + valorisation du stock
+- ✅ Inventaire / ajustement (casse, vol, écart) : `ajusterStock()` corrige le stock physique
+  (`mouvement_stock` type `ajustement`, déjà prévu au schéma mais jamais exposé) et génère
+  l'écriture symétrique de l'inventaire permanent — perte = débit 6031 / crédit 311, surplus =
+  débit 311 / crédit 6031, au CMP courant (le CMP n'est pas recalculé, un écart n'est pas une
+  nouvelle entrée à un coût différent). Le compte précis (6031 vs 658) reste **« à valider
+  ONECCA »** selon `docs/reference/08-stock-inventaire-permanent.md` — 6031 retenu par cohérence
+  avec le mécanisme déjà en place, à corriger si le comptable tranche autrement. Écran dans
+  `Stock.tsx` (bouton « Ajuster » par produit, perte/surplus + motif).
 - ⬜ 🟡 Unités réelles (sac/carton/kg) + variantes
 - ⬜ ⚪ Code-barres · multi-entrepôts
 

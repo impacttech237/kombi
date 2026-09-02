@@ -662,6 +662,59 @@ export class EntrepriseDO extends DurableObject {
     });
   }
 
+  /**
+   * Ajustement d'inventaire (casse, vol, écart constaté) : corrige le stock physique sans passer
+   * par une vente ou un achat. Valorisé au CMP courant (le CMP lui-même n'est pas recalculé — un
+   * écart n'est pas une nouvelle entrée à un coût différent). Écriture symétrique de l'inventaire
+   * permanent (`docs/reference/08-stock-inventaire-permanent.md`) : perte (delta < 0) = débit 6031
+   * / crédit 311, comme une sortie sans vente ; surplus (delta > 0) = débit 311 / crédit 6031,
+   * comme une entrée sans achat. Le compte précis pour ce cas (6031 vs 658) reste « à valider
+   * ONECCA » selon la doc de référence — 6031 retenu par cohérence avec le mécanisme déjà en place.
+   */
+  async ajusterStock(
+    a: { produitId: string; delta: number; motif: string },
+    acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
+  ): Promise<{ nouveauStock: number }> {
+    if (!Number.isInteger(a.delta) || a.delta === 0) throw new Error('Écart d\'ajustement invalide');
+    const prod = this.sql
+      .exec('SELECT stock_actuel, cout_moyen_pondere FROM produit WHERE id = ?', a.produitId)
+      .toArray()[0] as { stock_actuel: number; cout_moyen_pondere: number } | undefined;
+    if (!prod) throw new Error('Produit introuvable');
+    const nouveauStock = Math.max(0, prod.stock_actuel + a.delta);
+    const quantiteReelle = nouveauStock - prod.stock_actuel; // clampée à 0, peut différer du delta demandé
+    if (quantiteReelle === 0) throw new Error('Le stock est déjà à 0 : rien à retirer');
+    const montant = Math.abs(quantiteReelle) * prod.cout_moyen_pondere;
+
+    return this.ctx.storage.transactionSync(() => {
+      this.sql.exec('UPDATE produit SET stock_actuel = ? WHERE id = ?', nouveauStock, a.produitId);
+      this.sql.exec(
+        `INSERT INTO mouvement_stock (id, produit_id, type, quantite, cout_unitaire, motif)
+         VALUES (?, ?, 'ajustement', ?, ?, ?)`,
+        uid(), a.produitId, Math.abs(quantiteReelle), prod.cout_moyen_pondere, a.motif,
+      );
+      if (montant > 0) {
+        const exerciceId = this.exerciceOuvert();
+        const ecritureId = uid();
+        this.sql.exec(
+          `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, source, statut)
+           VALUES (?, ?, date('now'), ?, 'manuelle', 'brouillon')`,
+          ecritureId, exerciceId, `Ajustement stock : ${a.motif}`,
+        );
+        const l = (numero: string, sens: string, m: number) =>
+          this.sql.exec('INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?, ?, ?, ?, ?)',
+            uid(), ecritureId, this.compteId(numero), sens, m);
+        if (quantiteReelle < 0) { l('6031', 'debit', montant); l('311', 'credit', montant); }
+        else { l('311', 'debit', montant); l('6031', 'credit', montant); }
+        this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
+      }
+      this.journaliser({
+        acteur, action: 'stock.ajuster', entite: 'produit', entiteId: a.produitId,
+        avant: { stock: prod.stock_actuel }, apres: { stock: nouveauStock, delta: quantiteReelle, motif: a.motif },
+      });
+      return { nouveauStock };
+    });
+  }
+
   /** Encaisse (total ou partiel) une dette fournisseur : dette 401 débitée / trésorerie créditée. */
   async payerAchat(
     achatId: string, montant: number, modePaiement: string,

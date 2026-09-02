@@ -23,6 +23,11 @@ const zEntreeStock = z.object({
 }).refine((v) => v.aCredit || v.modePaiement, { message: 'Mode de paiement requis (ou achat à crédit)' })
   .refine((v) => !v.aCredit || v.tiersId, { message: 'Un fournisseur est requis pour un achat à crédit' });
 
+const zAjustement = z.object({
+  delta: z.coerce.number().int().refine((v) => v !== 0, { message: 'Écart requis (positif ou négatif)' }),
+  motif: z.string().trim().min(1, 'Motif requis (casse, vol, écart d\'inventaire…)').max(160),
+});
+
 export const produits = new Hono<AppEnv>();
 
 /** Liste des produits (avec niveau de stock et alerte de rupture). */
@@ -56,5 +61,18 @@ produits.post('/:id/entree', requirePermission('stock:manage'), async (c) => {
     modePaiement: e.modePaiement ?? null, aCredit: e.aCredit, tiersId: e.tiersId ?? null,
     tauxTva: e.tauxTva, regimeFiscal, dateOperation: e.dateOperation ?? null,
   }, { utilisateurId: c.get('utilisateurId'), role: c.get('role') });
+  return c.json(res);
+});
+
+/** Ajustement d'inventaire (casse, vol, écart constaté) — corrige le stock physique. */
+produits.post('/:id/ajustement', requirePermission('stock:manage'), async (c) => {
+  const corps = zAjustement.safeParse(await c.req.json().catch(() => null));
+  if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);
+  const a = corps.data;
+
+  const res = await stubEntreprise(c.env, c.get('entrepriseId')).ajusterStock(
+    { produitId: c.req.param('id'), delta: a.delta, motif: a.motif },
+    { utilisateurId: c.get('utilisateurId'), role: c.get('role') },
+  );
   return c.json(res);
 });

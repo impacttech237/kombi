@@ -104,6 +104,9 @@ export interface Produit {
 export const listerProduits = (entrepriseId: string) =>
   api<{ produits: Produit[] }>('/api/produits', { entrepriseId }).then((r) => r.produits);
 
+export const ajusterStock = (entrepriseId: string, produitId: string, data: { delta: number; motif: string }) =>
+  api<{ nouveauStock: number }>(`/api/produits/${produitId}/ajustement`, { method: 'POST', body: data, entrepriseId });
+
 export const creerProduit = (
   entrepriseId: string,
   data: { nom: string; prixVente: number; seuilAlerte?: number },

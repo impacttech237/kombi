@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { formaterFCFA } from '@kombi/shared';
 import { TAUX_TVA_EFFECTIF } from '@kombi/fiscal';
 import {
-  listerProduits, creerProduit, approvisionner, listerTiers, creerTiers,
+  listerProduits, creerProduit, approvisionner, listerTiers, creerTiers, ajusterStock,
   type EntrepriseResume, type Produit, type Tiers,
 } from '../lib/api.js';
 import { Bouton, Champ, Icon } from '../components/ui.js';
@@ -11,6 +11,7 @@ export function Stock({ entreprise }: { entreprise: EntrepriseResume }) {
   const [produits, setProduits] = useState<Produit[] | null>(null);
   const [vue, setVue] = useState<'liste' | 'nouveau'>('liste');
   const [appro, setAppro] = useState<Produit | null>(null);
+  const [ajust, setAjust] = useState<Produit | null>(null);
 
   function recharger() { listerProduits(entreprise.id).then(setProduits).catch(() => setProduits([])); }
   useEffect(recharger, [entreprise.id]);
@@ -20,6 +21,9 @@ export function Stock({ entreprise }: { entreprise: EntrepriseResume }) {
   if (appro)
     return <Approvisionner entreprise={entreprise} produit={appro}
       onFait={() => { setAppro(null); recharger(); }} />;
+  if (ajust)
+    return <AjusterStockEcran entreprise={entreprise} produit={ajust}
+      onFait={() => { setAjust(null); recharger(); }} onAnnuler={() => setAjust(null)} />;
 
   return (
     <div>
@@ -55,6 +59,9 @@ export function Stock({ entreprise }: { entreprise: EntrepriseResume }) {
                     ? <span className="chip chip-bas">Stock bas</span>
                     : <span className="muet" style={{ fontSize: 12 }}>en stock</span>}
                 </div>
+                <button onClick={() => setAjust(p)} className="btn btn-clair" style={{ padding: '8px 12px', fontSize: 12 }}>
+                  Ajuster
+                </button>
                 <button onClick={() => setAppro(p)} className="btn btn-clair" style={{ padding: '8px 12px' }}>
                   <Icon name="plus" size={16} />
                 </button>
@@ -181,6 +188,62 @@ function Approvisionner({ entreprise, produit, onFait }: {
           <Bouton variante="clair" onClick={onFait}>Annuler</Bouton>
           <Bouton bloc onClick={valider} disabled={charge || !qte || !cout}>
             {charge ? '…' : 'Enregistrer l\'entrée'}
+          </Bouton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const MOTIFS_AJUSTEMENT = ['Casse', 'Vol', 'Périmé', 'Écart d\'inventaire', 'Autre'];
+
+/** Ajustement d'inventaire (casse, vol, écart constaté) — corrige le stock physique. */
+function AjusterStockEcran({ entreprise, produit, onFait, onAnnuler }: {
+  entreprise: EntrepriseResume; produit: Produit; onFait: () => void; onAnnuler: () => void;
+}) {
+  const [sens, setSens] = useState<'perte' | 'surplus'>('perte');
+  const [quantite, setQuantite] = useState('');
+  const [motif, setMotif] = useState(MOTIFS_AJUSTEMENT[0]!);
+  const [charge, setCharge] = useState(false);
+  const [erreur, setErreur] = useState('');
+
+  async function valider() {
+    const q = Number(quantite);
+    if (!q || q <= 0) { setErreur('Quantité invalide'); return; }
+    setCharge(true); setErreur('');
+    try {
+      await ajusterStock(entreprise.id, produit.id, { delta: sens === 'perte' ? -q : q, motif });
+      onFait();
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Erreur');
+    } finally { setCharge(false); }
+  }
+
+  return (
+    <div>
+      <h1 className="titre-page" style={{ marginBottom: 4 }}>Ajuster le stock</h1>
+      <p className="muet" style={{ marginTop: 0 }}>{produit.nom} — stock actuel {produit.stock_actuel}</p>
+      <div className="carte">
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+          <button onClick={() => setSens('perte')}
+            className={`btn ${sens === 'perte' ? 'btn-primaire' : 'btn-clair'}`} style={{ flex: 1 }}>
+            Perte (casse, vol…)
+          </button>
+          <button onClick={() => setSens('surplus')}
+            className={`btn ${sens === 'surplus' ? 'btn-primaire' : 'btn-clair'}`} style={{ flex: 1 }}>
+            Surplus trouvé
+          </button>
+        </div>
+        <Champ label="Quantité" type="text" value={quantite}
+          onChange={(v) => setQuantite(v.replace(/\D/g, ''))} placeholder="2" />
+        <Champ label="Motif" value={motif} onChange={setMotif}
+          options={MOTIFS_AJUSTEMENT.map((m) => ({ value: m, label: m }))} />
+
+        {erreur && <p style={{ color: 'var(--danger)', fontSize: 14 }}>{erreur}</p>}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <Bouton variante="clair" onClick={onAnnuler}>Annuler</Bouton>
+          <Bouton bloc onClick={valider} disabled={charge || !quantite}>
+            {charge ? '…' : 'Valider l\'ajustement'}
           </Bouton>
         </div>
       </div>
