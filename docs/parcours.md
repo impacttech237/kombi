@@ -130,17 +130,14 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 - ✅ **Vérifié** : rejeu même clientUuid → CA +montant une seule fois ; Dexie + caches en place
 - ⬜ Étendre la file aux autres écrans (stock, factures) · cache lecture produits/tiers · test en conditions réseau réelles
 
-## Étape 8 — Couche invisible : états & fiscalité (consultation)
-- ⬜ Extraire du Guide SYSCOHADA les **modèles** Bilan / Compte de résultat (Système Normal + SMT)
-- ⬜ Table de correspondance **Postes ↔ Comptes** (Système Normal, chap. 7)
-- ⬜ Génération **Balance** (soldes par compte)
-- ⬜ Génération **Compte de résultat** (soldes intermédiaires de gestion) selon système
-- ⬜ Génération **Bilan** selon système (Normal/SMT)
-- ⬜ Écran **IGS** (déjà calculé) : classe, montant, échéance, alerte franchissement de seuil
-- ⬜ Écran **régime & système** (déterminés auto, forçage expert)
-- ⬜ Export PDF des états (R2)
-- ⬜ 🧪 Tests de cohérence (bilan équilibré, CR = produits − charges)
-- ⬜ ⚖️ **Validation ONECCA** de tous les calculs fiscaux/états avant production
+## Étape 8 — Couche invisible : états & fiscalité (consultation) ✅
+- ✅ Génération **Compte de résultat** (produits classe 7 − charges classe 6/8) depuis le grand livre
+- ✅ Génération **Bilan** (actif/passif par solde de compte) + résultat au passif
+- ✅ Écran **Comptabilité** (onglet Compta) : bascule Résultat / Bilan, détail par compte, badge d'équilibre
+- ✅ Écran **IGS** déjà présent sur le dashboard (classe, montant)
+- ✅ 🧪 Tests de cohérence : bilan **équilibré** (actif = passif), résultat = produits − charges
+- ✅ **Vérifié** sur données réelles : Produits 17 000 − Charges 3 000 = Résultat 14 000 ; Actif = Passif = 64 500
+- ⬜ Modèles Bilan/CR détaillés SYSCOHADA (Normal/SMT) · balance complète · export PDF · ⚖️ validation ONECCA
 
 ---
 

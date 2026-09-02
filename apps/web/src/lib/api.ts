@@ -93,6 +93,15 @@ export const emettreFacture = (entrepriseId: string, id: string) =>
 export const payerFacture = (entrepriseId: string, id: string, data: { montant: number; modePaiement: string }) =>
   api<{ statut: string; regle: number }>(`/api/factures/${id}/payer`, { method: 'POST', body: data, entrepriseId });
 
+// ── États financiers ──
+export interface LigneEtat { numero: string; libelle: string; montant: number; }
+export interface EtatsFinanciers {
+  resultat: { produits: number; charges: number; resultat: number; detailProduits: LigneEtat[]; detailCharges: LigneEtat[] };
+  bilan: { actif: LigneEtat[]; passif: LigneEtat[]; totalActif: number; totalPassif: number; equilibre: boolean };
+}
+export const etatsFinanciers = (entrepriseId: string) =>
+  api<EtatsFinanciers>('/api/etats', { entrepriseId });
+
 // ── Commandes / missions ──
 export interface Commande {
   id: string; type: string; libelle: string; statut: string;

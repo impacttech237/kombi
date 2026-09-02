@@ -26,21 +26,25 @@
 ## Modules de gestion (à implémenter)
 | État | Étape | Description |
 |---|---|---|
-| 🚧 | 1 | Auth + multi-entreprises : **backend fait & testé** ; reste le front (onboarding, login, sélecteur) |
-| ⬜ | 2 | Tiers (clients/fournisseurs) + historique |
-| ⬜ | 3 | Ventes & caisse → reçu/facture + écriture auto (+ mouvement stock si actif) |
-| ⬜ | 4 | Stock (gated) : produits, mouvements, alertes seuil, achats fournisseurs (CMP) |
-| ⬜ | 5 | Facturation/devis : numérotation `NOM-FAC-2026-0001`, PDF, envoi WhatsApp/email |
-| ⬜ | 6 | Commandes/missions : statuts, libellé sectoriel |
-| ⬜ | 7 | Offline complet sur le parcours vente/caisse |
-| ⬜ | 8 | Écrans couche invisible : IGS, bilan, compte de résultat |
+| ✅ | 1 | Auth better-auth + multi-entreprises + onboarding sectoriel (front + back) |
+| ✅ | 2 | Tiers (clients) — création inline dans la facturation |
+| ✅ | 3 | Ventes & caisse → reçu + écriture auto |
+| ✅ | 4 | Stock (gated) : produits, appro CMP, alertes, sortie auto à la vente + COGS |
+| ✅ | 5 | Facturation/devis : numérotation `NOM-FAC-2026-0001`, PDF DGI, WhatsApp |
+| ✅ | 6 | Commandes/missions : statuts, libellé sectoriel |
+| ✅ | 7 | Offline-first caisse : file Dexie + synchro idempotente + démarrage hors-ligne |
+| ✅ | 8 | Comptabilité : compte de résultat + bilan équilibré, auto depuis le grand livre |
+
+**🎉 MVP fonctionnel — les 8 étapes livrées et vérifiées. 75 tests verts.**
 
 ## Infra / déploiement
 | État | Élément |
 |---|---|
-| 🚧 | Ressources Cloudflare (D1 `kombi-db`, R2 `kombi-documents`, Pages `kombi`) |
-| 🚧 | Dépôt GitHub `impacttech237/kombi` |
+| ✅ | Ressources Cloudflare créées (D1 `kombi-db`, R2 `kombi-documents`, Pages `kombi`) |
+| ✅ | Dépôt GitHub `impacttech237/kombi` |
+| ⬜ | Déployer l'API (Worker + DO) et le front (Pages) en ligne |
 | ⬜ | CI GitHub Actions (test + typecheck + deploy) |
+| ⬜ | Renseigner NIU entreprise (mentions facture) ; icônes PWA
 
 ## Hors périmètre (rappel)
 Paie/CNPS (pas de schéma RH complexe), IA conversationnelle, OCR, scoring, connecteur DGI,

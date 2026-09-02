@@ -9,6 +9,7 @@ import { Caisse } from './pages/Caisse.js';
 import { Stock } from './pages/Stock.js';
 import { Factures } from './pages/Factures.js';
 import { Commandes } from './pages/Commandes.js';
+import { Comptabilite } from './pages/Comptabilite.js';
 import { Ecran, TopBar, BottomNav } from './components/Layout.js';
 import { OfflineBanner } from './components/OfflineBanner.js';
 import { Bouton, Logo } from './components/ui.js';
@@ -19,17 +20,6 @@ function Splash() {
       <div style={{ display: 'grid', placeItems: 'center', gap: 12 }}>
         <Logo size={56} />
         <span className="muet">Chargement…</span>
-      </div>
-    </div>
-  );
-}
-
-function Bientot({ titre }: { titre: string }) {
-  return (
-    <div style={{ display: 'grid', placeItems: 'center', minHeight: 360, textAlign: 'center' }}>
-      <div>
-        <h2>{titre}</h2>
-        <p className="muet">Ce module arrive très bientôt.</p>
       </div>
     </div>
   );
@@ -77,7 +67,7 @@ function Espace() {
           : onglet === 'stock' ? <Stock entreprise={active} />
           : onglet === 'factures' ? <Factures entreprise={active} />
           : onglet === 'commandes' ? <Commandes entreprise={active} onRetour={() => setOnglet('dashboard')} />
-          : <Bientot titre="Comptabilité" />}
+          : <Comptabilite entreprise={active} />}
       </div>
       <div style={{ textAlign: 'center', marginTop: 18 }}>
         <Bouton variante="ghost" onClick={deconnexion}>Se déconnecter</Bouton>

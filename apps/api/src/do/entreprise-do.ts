@@ -456,6 +456,59 @@ export class EntrepriseDO extends DurableObject {
     return r.n;
   }
 
+  // ══════════════ États financiers (bilan + compte de résultat) ══════════════
+  /**
+   * Calcule le compte de résultat et le bilan à partir du grand livre (écritures validées).
+   * Convention : solde = débit − crédit (positif = débiteur).
+   */
+  async etatsFinanciers(): Promise<{
+    resultat: { produits: number; charges: number; resultat: number; detailProduits: unknown[]; detailCharges: unknown[] };
+    bilan: { actif: unknown[]; passif: unknown[]; totalActif: number; totalPassif: number; equilibre: boolean };
+  }> {
+    const rows = this.sql.exec(
+      `SELECT c.numero, c.libelle, c.classe,
+              COALESCE(SUM(CASE WHEN e.statut='validee' AND l.sens='debit'  THEN l.montant END),0) AS debit,
+              COALESCE(SUM(CASE WHEN e.statut='validee' AND l.sens='credit' THEN l.montant END),0) AS credit
+         FROM compte_comptable c
+         LEFT JOIN ligne_ecriture l ON l.compte_id = c.id
+         LEFT JOIN ecriture e ON e.id = l.ecriture_id
+        GROUP BY c.id
+       HAVING debit <> 0 OR credit <> 0
+        ORDER BY c.numero`,
+    ).toArray() as { numero: string; libelle: string; classe: number; debit: number; credit: number }[];
+
+    let produits = 0, charges = 0;
+    const detailProduits: unknown[] = [], detailCharges: unknown[] = [];
+    const actif: { numero: string; libelle: string; montant: number }[] = [];
+    const passif: { numero: string; libelle: string; montant: number }[] = [];
+
+    for (const r of rows) {
+      const solde = r.debit - r.credit; // + = débiteur
+      const ligne = (montant: number) => ({ numero: r.numero, libelle: r.libelle, montant });
+      if (r.classe === 6) { if (solde !== 0) { charges += solde; detailCharges.push(ligne(solde)); } }
+      else if (r.classe === 7) { const m = -solde; if (m !== 0) { produits += m; detailProduits.push(ligne(m)); } }
+      else if (r.classe === 8) {
+        if (solde > 0) { charges += solde; detailCharges.push(ligne(solde)); }
+        else if (solde < 0) { produits += -solde; detailProduits.push(ligne(-solde)); }
+      } else if (r.classe === 1) { if (solde !== 0) passif.push(ligne(-solde)); }
+      else if (r.classe === 2 || r.classe === 3) { if (solde !== 0) actif.push(ligne(solde)); }
+      else { // classes 4 et 5 : selon le sens du solde
+        if (solde > 0) actif.push(ligne(solde));
+        else if (solde < 0) passif.push(ligne(-solde));
+      }
+    }
+
+    const resultat = produits - charges;
+    passif.push({ numero: '13', libelle: "Résultat de l'exercice", montant: resultat });
+    const totalActif = actif.reduce((s, l) => s + l.montant, 0);
+    const totalPassif = passif.reduce((s, l) => s + l.montant, 0);
+
+    return {
+      resultat: { produits, charges, resultat, detailProduits, detailCharges },
+      bilan: { actif, passif, totalActif, totalPassif, equilibre: totalActif === totalPassif },
+    };
+  }
+
   /** Chiffre d'affaires cumulé de l'exercice (crédits classe 7, écritures validées) — pour l'IGS. */
   async caCumule(): Promise<number> {
     const row = this.sql
