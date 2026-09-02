@@ -203,7 +203,6 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   appliqué automatiquement en caisse seulement si l'entreprise y est éligible, sinon 0 %
 - ✅ Partage du reçu par WhatsApp (`wa.me`, comme les factures) en plus de l'impression
 - ⬜ 🟡 Retour / annulation de vente (`vente:annuler` sans route ni UI)
-- ⬜ 🟡 TVA jamais appliquée en caisse (`tauxTva=0`, `assujetti_tva` non lu)
 - ⬜ 🟡 Fond de caisse + clôture journalière (Z de caisse)
 - ⬜ ⚪ Sélecteur d'article : recherche + code-barres
 
