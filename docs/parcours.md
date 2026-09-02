@@ -174,7 +174,7 @@ Consolidé à partir de 3 audits (chef de dev, dirigeant PME, expert-comptable).
 artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé · 🟡 Moyen · ⚪ Détail.
 
 ## ⭐ Ordre d'attaque recommandé (Top 10)
-1. ⬜ 🔴 **Cycle de vie des exercices** : création auto de l'exercice N+1 + clôture / report à nouveau (sinon l'app casse au 1er janvier).
+1. 🚧 🔴 **Cycle de vie des exercices** : ✅ création auto de l’exercice N+1 + sélection par date (fait) ; ⬜ clôture / report à nouveau (P1).
 2. ⬜ 🔴 **Écritures immuables + atomiques** : triggers interdisant UPDATE/DELETE d'une écriture validée + transactions (`ctx.storage.transactionSync`) autour de chaque opération.
 3. ⬜ 🔴 **Écran Dépenses** (charges 60-67) : loyer, transport, salaires, élec, frais bancaires → résultat sincère + charges pour les prestataires.
 4. ⬜ 🔴 **Crédit clients & dettes fournisseurs** : vente/achat à crédit (411/401) + écrans « on me doit » / « ce que je dois ».
@@ -250,7 +250,7 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ⬜ 🟡 Étendre le plan comptable par défaut + mapping catégorie → compte
 
 ## Fiscalité
-- ⬜ 🔴 Cycle des exercices (voir Top 10 #1) ; `caCumule` filtré par exercice
+- ✅ 🔴 Cycle des exercices : création auto N+1 (`exercicePourAnnee`) + sélection par date ; `caCumule` et états **filtrés par exercice**
 - ⬜ 🟠 Liquidation TVA déclarative (collectée − déductible, mensuelle, crédit reportable)
 - ⬜ 🟠 Alerte de seuil à **85 %** du plafond 50M (règle CDC) — aujourd'hui 100 %
 - ⬜ 🟡 Assiette IGS précise (produits accessoires ? dé-doublonnage)
@@ -267,7 +267,7 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 
 ## Technique · archi · sécurité
 - ⬜ 🔴 CORS restreint aux origines de confiance
-- ⬜ 🔴 Versioning du schéma des Durable Objects (`schema_version` + runner)
+- ✅ 🔴 Versioning du schéma des Durable Objects (`MIGRATIONS_DO` + `schema_version`, appliqué au boot)
 - ⬜ 🟠 Validation Zod sur tous les bodies
 - ⬜ 🟠 Rate limiting (auth au minimum)
 - ⬜ 🟠 Offline étendu (factures/tiers/produits/encaissements) + cache lecture

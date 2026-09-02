@@ -12,7 +12,7 @@ import {
   type Secteur,
 } from '@kombi/shared';
 import { PLAN_COMPTABLE_DEFAUT, genererRecette, cmpApresEntree } from '@kombi/comptable';
-import { statementsSchema } from './schema.js';
+import { MIGRATIONS_DO } from './schema.js';
 
 const uid = () => crypto.randomUUID();
 
@@ -29,6 +29,8 @@ export interface VenteEntree {
   tiersId?: string | null;
   caissierId?: string | null;
   clientUuid?: string | null;
+  /** Date de l'opération (ISO 'YYYY-MM-DD'). Défaut : aujourd'hui (heure locale Douala). */
+  dateOperation?: string | null;
 }
 
 export class EntrepriseDO extends DurableObject {
@@ -37,10 +39,45 @@ export class EntrepriseDO extends DurableObject {
   constructor(ctx: DurableObjectState, env: unknown) {
     super(ctx, env as never);
     this.sql = ctx.storage.sql;
-    // Crée le schéma dès l'instanciation (idempotent : IF NOT EXISTS).
+    // Applique les migrations de schéma versionnées avant toute requête (idempotent).
     ctx.blockConcurrencyWhile(async () => {
-      for (const stmt of statementsSchema()) this.sql.exec(stmt);
+      await this.migrer();
     });
+  }
+
+  /** Applique les migrations de schéma manquantes selon la version stockée dans ce DO. */
+  private async migrer(): Promise<void> {
+    const courant = (await this.ctx.storage.get<number>('schema_version')) ?? 0;
+    for (const m of MIGRATIONS_DO) {
+      if (m.v > courant) {
+        for (const stmt of m.statements) this.sql.exec(stmt);
+        await this.ctx.storage.put('schema_version', m.v);
+      }
+    }
+  }
+
+  // ── Exercices : année/date locale (Africa/Douala = UTC+1) + création automatique ──
+  private anneeCourante(): number {
+    return new Date(Date.now() + 3_600_000).getUTCFullYear();
+  }
+  private dateCourante(): string {
+    return new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
+  }
+  /** Retourne l'exercice de l'année donnée, le créant s'il n'existe pas encore (auto N+1). */
+  private exercicePourAnnee(annee: number): string {
+    const lire = () =>
+      this.sql.exec('SELECT id FROM exercice WHERE annee = ?', annee).toArray()[0] as
+        | { id: string }
+        | undefined;
+    let row = lire();
+    if (!row) {
+      this.sql.exec(
+        'INSERT OR IGNORE INTO exercice (id, annee, date_debut, date_fin) VALUES (?, ?, ?, ?)',
+        uid(), annee, `${annee}-01-01`, `${annee}-12-31`,
+      );
+      row = lire();
+    }
+    return row!.id;
   }
 
   /** Initialise l'entreprise : modules du secteur, plan comptable OHADA, exercice. Idempotent. */
@@ -102,12 +139,9 @@ export class EntrepriseDO extends DurableObject {
     return row.id;
   }
 
+  /** Exercice de l'année courante (créé automatiquement si absent) — corrige la casse au 1er janvier. */
   private exerciceOuvert(): string {
-    const row = this.sql
-      .exec("SELECT id FROM exercice WHERE statut = 'ouvert' ORDER BY annee DESC LIMIT 1")
-      .toArray()[0] as { id: string } | undefined;
-    if (!row) throw new Error('Aucun exercice ouvert');
-    return row.id;
+    return this.exercicePourAnnee(this.anneeCourante());
   }
 
   /**
@@ -144,7 +178,9 @@ export class EntrepriseDO extends DurableObject {
       return { ...l, ht, coutUnit };
     });
     const totalTtc = totalHt + totalTva;
-    const exerciceId = this.exerciceOuvert();
+    // Date d'opération réelle (défaut : aujourd'hui, heure locale) → sélectionne le bon exercice.
+    const dateOp = v.dateOperation ?? this.dateCourante();
+    const exerciceId = this.exercicePourAnnee(Number(dateOp.slice(0, 4)));
     const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
     const compteProduit = secteur === 'service' ? '706' : '701';
 
@@ -156,8 +192,8 @@ export class EntrepriseDO extends DurableObject {
     const ecritureId = uid();
     this.sql.exec(
       `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, source, statut)
-       VALUES (?, ?, date('now'), 'Vente caisse', ?, 'vente', 'brouillon')`,
-      ecritureId, exerciceId, v.modePaiement,
+       VALUES (?, ?, ?, 'Vente caisse', ?, 'vente', 'brouillon')`,
+      ecritureId, exerciceId, dateOp, v.modePaiement,
     );
     const insLigne = (numero: string, sens: string, m: number) =>
       this.sql.exec(
@@ -175,10 +211,10 @@ export class EntrepriseDO extends DurableObject {
 
     const venteId = uid();
     this.sql.exec(
-      `INSERT INTO vente (id, exercice_id, tiers_id, mode_paiement, total_ht, total_tva, total_ttc,
+      `INSERT INTO vente (id, exercice_id, date, tiers_id, mode_paiement, total_ht, total_tva, total_ttc,
                           statut, ecriture_id, caissier_id, client_uuid)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'payee', ?, ?, ?)`,
-      venteId, exerciceId, v.tiersId ?? null, v.modePaiement, totalHt, totalTva, totalTtc,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'payee', ?, ?, ?)`,
+      venteId, exerciceId, dateOp, v.tiersId ?? null, v.modePaiement, totalHt, totalTva, totalTtc,
       ecritureId, v.caissierId ?? null, v.clientUuid ?? null,
     );
     let ordre = 0;
@@ -210,7 +246,8 @@ export class EntrepriseDO extends DurableObject {
     const row = this.sql
       .exec(
         `SELECT COUNT(*) AS n, COALESCE(SUM(total_ttc), 0) AS total
-           FROM vente WHERE statut = 'payee' AND date(date) = date('now')`,
+           FROM vente WHERE statut = 'payee' AND date(date) = ?`,
+        this.dateCourante(),
       )
       .toArray()[0] as { n: number; total: number };
     return { nbVentes: row.n, totalJour: row.total };
@@ -465,16 +502,18 @@ export class EntrepriseDO extends DurableObject {
     resultat: { produits: number; charges: number; resultat: number; detailProduits: unknown[]; detailCharges: unknown[] };
     bilan: { actif: unknown[]; passif: unknown[]; totalActif: number; totalPassif: number; equilibre: boolean };
   }> {
+    const exerciceId = this.exerciceOuvert();
     const rows = this.sql.exec(
       `SELECT c.numero, c.libelle, c.classe,
-              COALESCE(SUM(CASE WHEN e.statut='validee' AND l.sens='debit'  THEN l.montant END),0) AS debit,
-              COALESCE(SUM(CASE WHEN e.statut='validee' AND l.sens='credit' THEN l.montant END),0) AS credit
+              COALESCE(SUM(CASE WHEN e.statut='validee' AND e.exercice_id=? AND l.sens='debit'  THEN l.montant END),0) AS debit,
+              COALESCE(SUM(CASE WHEN e.statut='validee' AND e.exercice_id=? AND l.sens='credit' THEN l.montant END),0) AS credit
          FROM compte_comptable c
          LEFT JOIN ligne_ecriture l ON l.compte_id = c.id
          LEFT JOIN ecriture e ON e.id = l.ecriture_id
         GROUP BY c.id
        HAVING debit <> 0 OR credit <> 0
         ORDER BY c.numero`,
+      exerciceId, exerciceId,
     ).toArray() as { numero: string; libelle: string; classe: number; debit: number; credit: number }[];
 
     let produits = 0, charges = 0;
@@ -517,7 +556,8 @@ export class EntrepriseDO extends DurableObject {
            FROM ligne_ecriture l
            JOIN compte_comptable c ON c.id = l.compte_id
            JOIN ecriture e ON e.id = l.ecriture_id
-          WHERE c.classe = 7 AND l.sens = 'credit' AND e.statut = 'validee'`,
+          WHERE c.classe = 7 AND l.sens = 'credit' AND e.statut = 'validee' AND e.exercice_id = ?`,
+        this.exerciceOuvert(),
       )
       .toArray()[0] as { ca: number };
     return row.ca;

@@ -176,3 +176,28 @@ export function statementsSchema(): string[] {
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 }
+
+/**
+ * Migrations versionnées du schéma d'un Durable Object d'entreprise.
+ * Chaque base SQLite embarquée porte sa propre `schema_version` (dans ctx.storage).
+ * Au démarrage, le DO applique dans l'ordre toutes les migrations de version supérieure.
+ *
+ * RÈGLES :
+ * - Ne JAMAIS modifier ni réordonner une migration déjà publiée (les bases existantes l'ont appliquée).
+ * - Toujours AJOUTER une nouvelle entrée `{ v: N+1, statements: [...] }` en fin de tableau.
+ * - Les statements doivent être idempotents quand c'est possible (IF NOT EXISTS, INSERT OR IGNORE).
+ * - SQLite ne supporte pas DROP COLUMN simplement : pour retirer/renommer, recréer + copier.
+ */
+export interface MigrationDO {
+  readonly v: number;
+  readonly statements: readonly string[];
+}
+
+export const MIGRATIONS_DO: readonly MigrationDO[] = [
+  // v1 — schéma initial (idempotent : IF NOT EXISTS). Rétro-compatible avec les DO déjà créés.
+  { v: 1, statements: statementsSchema() },
+  // v2, v3… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+];
+
+/** Version cible du schéma (la plus haute des migrations). */
+export const VERSION_SCHEMA = MIGRATIONS_DO[MIGRATIONS_DO.length - 1]!.v;
