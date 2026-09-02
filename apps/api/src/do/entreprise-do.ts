@@ -156,89 +156,94 @@ export class EntrepriseDO extends DurableObject {
       if (ex) return { venteId: ex.id, totalTtc: ex.total_ttc, deja: true };
     }
     if (!v.lignes.length) throw new Error('Vente sans ligne');
+    // Lecture async AVANT la transaction (transactionSync exige un callback 100% synchrone).
+    const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
 
-    let totalHt = 0;
-    let totalTva = 0;
-    let totalCmv = 0; // coût des marchandises vendues (inventaire permanent)
-    // Calcule le CMP à sortir pour chaque ligne référençant un produit.
-    const calc = v.lignes.map((l) => {
-      const ht = Math.round(l.quantite * l.prixUnitaire);
-      totalHt += ht;
-      totalTva += Math.round(ht * (l.tauxTva ?? 0));
-      let coutUnit = 0;
-      if (l.produitId) {
-        const p = this.sql
-          .exec('SELECT stock_actuel, cout_moyen_pondere FROM produit WHERE id = ?', l.produitId)
-          .toArray()[0] as { stock_actuel: number; cout_moyen_pondere: number } | undefined;
-        if (p) {
-          coutUnit = p.cout_moyen_pondere;
-          totalCmv += Math.min(l.quantite, p.stock_actuel) * p.cout_moyen_pondere; // non-bloquant
+    // Toutes les écritures multi-tables (écriture + vente + lignes + mouvements de stock)
+    // sont atomiques : en cas d'erreur, tout est annulé (aucune écriture partielle).
+    return this.ctx.storage.transactionSync(() => {
+      let totalHt = 0;
+      let totalTva = 0;
+      let totalCmv = 0; // coût des marchandises vendues (inventaire permanent)
+      // Calcule le CMP à sortir pour chaque ligne référençant un produit.
+      const calc = v.lignes.map((l) => {
+        const ht = Math.round(l.quantite * l.prixUnitaire);
+        totalHt += ht;
+        totalTva += Math.round(ht * (l.tauxTva ?? 0));
+        let coutUnit = 0;
+        if (l.produitId) {
+          const p = this.sql
+            .exec('SELECT stock_actuel, cout_moyen_pondere FROM produit WHERE id = ?', l.produitId)
+            .toArray()[0] as { stock_actuel: number; cout_moyen_pondere: number } | undefined;
+          if (p) {
+            coutUnit = p.cout_moyen_pondere;
+            totalCmv += Math.min(l.quantite, p.stock_actuel) * p.cout_moyen_pondere; // non-bloquant
+          }
+        }
+        return { ...l, ht, coutUnit };
+      });
+      const totalTtc = totalHt + totalTva;
+      // Date d'opération réelle (défaut : aujourd'hui, heure locale) → sélectionne le bon exercice.
+      const dateOp = v.dateOperation ?? this.dateCourante();
+      const exerciceId = this.exercicePourAnnee(Number(dateOp.slice(0, 4)));
+      const compteProduit = secteur === 'service' ? '706' : '701';
+
+      // Écriture partie double : produit de la vente (réutilise le moteur comptable)…
+      const ecr = genererRecette({
+        montantHT: totalHt, tva: totalTva, modePaiement: v.modePaiement as never,
+        compteProduit, libelle: 'Vente caisse',
+      });
+      const ecritureId = uid();
+      this.sql.exec(
+        `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, source, statut)
+         VALUES (?, ?, ?, 'Vente caisse', ?, 'vente', 'brouillon')`,
+        ecritureId, exerciceId, dateOp, v.modePaiement,
+      );
+      const insLigne = (numero: string, sens: string, m: number) =>
+        this.sql.exec(
+          'INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?, ?, ?, ?, ?)',
+          uid(), ecritureId, this.compteId(numero), sens, m,
+        );
+      for (const ligne of ecr.lignes) insLigne(ligne.compteNumero, ligne.sens, ligne.montant);
+      // …et coût des marchandises vendues (6031 débit / 311 crédit) si vente sur stock.
+      if (totalCmv > 0) {
+        insLigne('6031', 'debit', totalCmv);
+        insLigne('311', 'credit', totalCmv);
+      }
+      // Validation : le trigger d'équilibre vérifie débit = crédit.
+      this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
+
+      const venteId = uid();
+      this.sql.exec(
+        `INSERT INTO vente (id, exercice_id, date, tiers_id, mode_paiement, total_ht, total_tva, total_ttc,
+                            statut, ecriture_id, caissier_id, client_uuid)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'payee', ?, ?, ?)`,
+        venteId, exerciceId, dateOp, v.tiersId ?? null, v.modePaiement, totalHt, totalTva, totalTtc,
+        ecritureId, v.caissierId ?? null, v.clientUuid ?? null,
+      );
+      let ordre = 0;
+      for (const l of calc) {
+        this.sql.exec(
+          `INSERT INTO ligne_vente (id, vente_id, produit_id, designation, quantite, prix_unitaire, taux_tva, montant_ht, cout_unitaire, ordre)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          uid(), venteId, l.produitId ?? null, l.designation, l.quantite, l.prixUnitaire,
+          l.tauxTva ?? 0, l.ht, l.coutUnit, ordre++,
+        );
+        // Sortie de stock (décrémente + mouvement) pour les lignes produit.
+        if (l.produitId) {
+          this.sql.exec(
+            'UPDATE produit SET stock_actuel = MAX(0, stock_actuel - ?) WHERE id = ?',
+            l.quantite, l.produitId,
+          );
+          this.sql.exec(
+            `INSERT INTO mouvement_stock (id, produit_id, type, quantite, cout_unitaire, motif, vente_id)
+             VALUES (?, ?, 'sortie', ?, ?, 'Vente', ?)`,
+            uid(), l.produitId, l.quantite, l.coutUnit, venteId,
+          );
         }
       }
-      return { ...l, ht, coutUnit };
+      return { venteId, totalTtc, deja: false };
     });
-    const totalTtc = totalHt + totalTva;
-    // Date d'opération réelle (défaut : aujourd'hui, heure locale) → sélectionne le bon exercice.
-    const dateOp = v.dateOperation ?? this.dateCourante();
-    const exerciceId = this.exercicePourAnnee(Number(dateOp.slice(0, 4)));
-    const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
-    const compteProduit = secteur === 'service' ? '706' : '701';
-
-    // Écriture partie double : produit de la vente (réutilise le moteur comptable)…
-    const ecr = genererRecette({
-      montantHT: totalHt, tva: totalTva, modePaiement: v.modePaiement as never,
-      compteProduit, libelle: 'Vente caisse',
-    });
-    const ecritureId = uid();
-    this.sql.exec(
-      `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, source, statut)
-       VALUES (?, ?, ?, 'Vente caisse', ?, 'vente', 'brouillon')`,
-      ecritureId, exerciceId, dateOp, v.modePaiement,
-    );
-    const insLigne = (numero: string, sens: string, m: number) =>
-      this.sql.exec(
-        'INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?, ?, ?, ?, ?)',
-        uid(), ecritureId, this.compteId(numero), sens, m,
-      );
-    for (const ligne of ecr.lignes) insLigne(ligne.compteNumero, ligne.sens, ligne.montant);
-    // …et coût des marchandises vendues (6031 débit / 311 crédit) si vente sur stock.
-    if (totalCmv > 0) {
-      insLigne('6031', 'debit', totalCmv);
-      insLigne('311', 'credit', totalCmv);
-    }
-    // Validation : le trigger d'équilibre vérifie débit = crédit.
-    this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
-
-    const venteId = uid();
-    this.sql.exec(
-      `INSERT INTO vente (id, exercice_id, date, tiers_id, mode_paiement, total_ht, total_tva, total_ttc,
-                          statut, ecriture_id, caissier_id, client_uuid)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'payee', ?, ?, ?)`,
-      venteId, exerciceId, dateOp, v.tiersId ?? null, v.modePaiement, totalHt, totalTva, totalTtc,
-      ecritureId, v.caissierId ?? null, v.clientUuid ?? null,
-    );
-    let ordre = 0;
-    for (const l of calc) {
-      this.sql.exec(
-        `INSERT INTO ligne_vente (id, vente_id, produit_id, designation, quantite, prix_unitaire, taux_tva, montant_ht, cout_unitaire, ordre)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        uid(), venteId, l.produitId ?? null, l.designation, l.quantite, l.prixUnitaire,
-        l.tauxTva ?? 0, l.ht, l.coutUnit, ordre++,
-      );
-      // Sortie de stock (décrémente + mouvement) pour les lignes produit.
-      if (l.produitId) {
-        this.sql.exec(
-          'UPDATE produit SET stock_actuel = MAX(0, stock_actuel - ?) WHERE id = ?',
-          l.quantite, l.produitId,
-        );
-        this.sql.exec(
-          `INSERT INTO mouvement_stock (id, produit_id, type, quantite, cout_unitaire, motif, vente_id)
-           VALUES (?, ?, 'sortie', ?, ?, 'Vente', ?)`,
-          uid(), l.produitId, l.quantite, l.coutUnit, venteId,
-        );
-      }
-    }
-    return { venteId, totalTtc, deja: false };
   }
 
   /** Statistiques d'accueil : ventes du jour + nombre. */
@@ -289,45 +294,47 @@ export class EntrepriseDO extends DurableObject {
       .toArray()[0] as { stock_actuel: number; cout_moyen_pondere: number } | undefined;
     if (!prod) throw new Error('Produit introuvable');
 
-    const etat = cmpApresEntree(
-      { quantite: prod.stock_actuel, cmp: prod.cout_moyen_pondere },
-      a.quantite, Math.floor(a.coutUnitaire),
-    );
-    const montant = a.quantite * Math.floor(a.coutUnitaire);
-
-    this.sql.exec(
-      'UPDATE produit SET stock_actuel = ?, cout_moyen_pondere = ? WHERE id = ?',
-      etat.quantite, etat.cmp, a.produitId,
-    );
-    this.sql.exec(
-      `INSERT INTO mouvement_stock (id, produit_id, type, quantite, cout_unitaire, motif)
-       VALUES (?, ?, 'entree', ?, ?, 'Approvisionnement')`,
-      uid(), a.produitId, a.quantite, Math.floor(a.coutUnitaire),
-    );
-
-    // Écriture : achat (601) réglé par trésorerie + entrée en stock (311/6031).
-    const exerciceId = this.exerciceOuvert();
-    const ecritureId = uid();
-    const tresorerie = genererRecette({
-      montantHT: 0, modePaiement: a.modePaiement as never, compteProduit: '701', libelle: 'x',
-    }).lignes[0]!.compteNumero; // récupère le compte de trésorerie du mode
-    this.sql.exec(
-      `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, source, statut)
-       VALUES (?, ?, date('now'), 'Approvisionnement', ?, 'achat', 'brouillon')`,
-      ecritureId, exerciceId, a.modePaiement,
-    );
-    const l = (numero: string, sens: string, m: number) =>
-      this.sql.exec(
-        'INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?, ?, ?, ?, ?)',
-        uid(), ecritureId, this.compteId(numero), sens, m,
+    return this.ctx.storage.transactionSync(() => {
+      const etat = cmpApresEntree(
+        { quantite: prod.stock_actuel, cmp: prod.cout_moyen_pondere },
+        a.quantite, Math.floor(a.coutUnitaire),
       );
-    l('601', 'debit', montant);
-    l(tresorerie, 'credit', montant);
-    l('311', 'debit', montant);
-    l('6031', 'credit', montant);
-    this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
+      const montant = a.quantite * Math.floor(a.coutUnitaire);
 
-    return { nouveauStock: etat.quantite, nouveauCmp: etat.cmp };
+      this.sql.exec(
+        'UPDATE produit SET stock_actuel = ?, cout_moyen_pondere = ? WHERE id = ?',
+        etat.quantite, etat.cmp, a.produitId,
+      );
+      this.sql.exec(
+        `INSERT INTO mouvement_stock (id, produit_id, type, quantite, cout_unitaire, motif)
+         VALUES (?, ?, 'entree', ?, ?, 'Approvisionnement')`,
+        uid(), a.produitId, a.quantite, Math.floor(a.coutUnitaire),
+      );
+
+      // Écriture : achat (601) réglé par trésorerie + entrée en stock (311/6031).
+      const exerciceId = this.exerciceOuvert();
+      const ecritureId = uid();
+      const tresorerie = genererRecette({
+        montantHT: 0, modePaiement: a.modePaiement as never, compteProduit: '701', libelle: 'x',
+      }).lignes[0]!.compteNumero; // récupère le compte de trésorerie du mode
+      this.sql.exec(
+        `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, source, statut)
+         VALUES (?, ?, date('now'), 'Approvisionnement', ?, 'achat', 'brouillon')`,
+        ecritureId, exerciceId, a.modePaiement,
+      );
+      const l = (numero: string, sens: string, m: number) =>
+        this.sql.exec(
+          'INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?, ?, ?, ?, ?)',
+          uid(), ecritureId, this.compteId(numero), sens, m,
+        );
+      l('601', 'debit', montant);
+      l(tresorerie, 'credit', montant);
+      l('311', 'debit', montant);
+      l('6031', 'credit', montant);
+      this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
+
+      return { nouveauStock: etat.quantite, nouveauCmp: etat.cmp };
+    });
   }
 
   // ══════════════ Facturation & devis ══════════════
@@ -370,43 +377,46 @@ export class EntrepriseDO extends DurableObject {
       | undefined;
     if (!f) throw new Error('Facture introuvable');
     if (f.statut !== 'brouillon' && f.numero) return { numero: f.numero };
+    // Lecture async AVANT la transaction (transactionSync exige un callback 100% synchrone).
+    const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
 
-    // Séquence gap-less (sérialisée par le DO — pas de verrou global).
-    const seq = this.sql
-      .exec('SELECT dernier_numero FROM sequence_numerotation WHERE exercice_id = ? AND type = ?', f.exercice_id, f.type)
-      .toArray()[0] as { dernier_numero: number } | undefined;
-    const n = (seq?.dernier_numero ?? 0) + 1;
-    this.sql.exec(
-      `INSERT INTO sequence_numerotation (exercice_id, type, dernier_numero) VALUES (?, ?, ?)
-       ON CONFLICT(exercice_id, type) DO UPDATE SET dernier_numero = ?`,
-      f.exercice_id, f.type, n, n,
-    );
-    const annee = (this.sql.exec('SELECT annee FROM exercice WHERE id = ?', f.exercice_id).toArray()[0] as { annee: number }).annee;
-    const numero = `${prefixe}-${f.type === 'facture' ? 'FAC' : 'DEV'}-${annee}-${String(n).padStart(4, '0')}`;
-    this.sql.exec(
-      "UPDATE facture SET numero = ?, numero_seq = ?, statut = 'envoyee', date_emission = date('now') WHERE id = ?",
-      numero, n, factureId,
-    );
-
-    // Comptabilisation d'une facture (créance client) — pas pour un devis.
-    if (f.type === 'facture' && f.total_ttc > 0) {
-      const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
-      const compteProduit = secteur === 'service' ? '706' : '701';
-      const ecritureId = uid();
+    return this.ctx.storage.transactionSync(() => {
+      // Séquence gap-less (sérialisée par le DO — pas de verrou global).
+      const seq = this.sql
+        .exec('SELECT dernier_numero FROM sequence_numerotation WHERE exercice_id = ? AND type = ?', f.exercice_id, f.type)
+        .toArray()[0] as { dernier_numero: number } | undefined;
+      const n = (seq?.dernier_numero ?? 0) + 1;
       this.sql.exec(
-        `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, source, statut, facture_id)
-         VALUES (?, ?, date('now'), ?, 'facture', 'brouillon', ?)`,
-        ecritureId, f.exercice_id, `Facture ${numero}`, factureId,
+        `INSERT INTO sequence_numerotation (exercice_id, type, dernier_numero) VALUES (?, ?, ?)
+         ON CONFLICT(exercice_id, type) DO UPDATE SET dernier_numero = ?`,
+        f.exercice_id, f.type, n, n,
       );
-      const l = (numero: string, sens: string, m: number) =>
-        this.sql.exec('INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?, ?, ?, ?, ?)',
-          uid(), ecritureId, this.compteId(numero), sens, m);
-      l('411', 'debit', f.total_ttc);
-      l(compteProduit, 'credit', f.total_ht);
-      if (f.total_tva > 0) l('4431', 'credit', f.total_tva);
-      this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
-    }
-    return { numero };
+      const annee = (this.sql.exec('SELECT annee FROM exercice WHERE id = ?', f.exercice_id).toArray()[0] as { annee: number }).annee;
+      const numero = `${prefixe}-${f.type === 'facture' ? 'FAC' : 'DEV'}-${annee}-${String(n).padStart(4, '0')}`;
+      this.sql.exec(
+        "UPDATE facture SET numero = ?, numero_seq = ?, statut = 'envoyee', date_emission = date('now') WHERE id = ?",
+        numero, n, factureId,
+      );
+
+      // Comptabilisation d'une facture (créance client) — pas pour un devis.
+      if (f.type === 'facture' && f.total_ttc > 0) {
+        const compteProduit = secteur === 'service' ? '706' : '701';
+        const ecritureId = uid();
+        this.sql.exec(
+          `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, source, statut, facture_id)
+           VALUES (?, ?, date('now'), ?, 'facture', 'brouillon', ?)`,
+          ecritureId, f.exercice_id, `Facture ${numero}`, factureId,
+        );
+        const l = (numero2: string, sens: string, m: number) =>
+          this.sql.exec('INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?, ?, ?, ?, ?)',
+            uid(), ecritureId, this.compteId(numero2), sens, m);
+        l('411', 'debit', f.total_ttc);
+        l(compteProduit, 'credit', f.total_ht);
+        if (f.total_tva > 0) l('4431', 'credit', f.total_tva);
+        this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
+      }
+      return { numero };
+    });
   }
 
   /** Encaisse (total ou partiel) une facture : trésorerie / créance client 411, met à jour le statut. */
@@ -414,28 +424,31 @@ export class EntrepriseDO extends DurableObject {
     const f = this.sql.exec('SELECT total_ttc, exercice_id FROM facture WHERE id = ?', factureId)
       .toArray()[0] as { total_ttc: number; exercice_id: string } | undefined;
     if (!f) throw new Error('Facture introuvable');
-    const dejaRow = this.sql.exec('SELECT COALESCE(SUM(montant),0) AS p FROM paiement_facture WHERE facture_id = ?', factureId)
-      .toArray()[0] as { p: number };
-    const regle = dejaRow.p + montant;
 
-    const ecritureId = uid();
-    this.sql.exec(
-      `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, source, statut, facture_id)
-       VALUES (?, ?, date('now'), 'Encaissement facture', ?, 'facture', 'brouillon', ?)`,
-      ecritureId, f.exercice_id, modePaiement, factureId,
-    );
-    const tresorerie = genererRecette({ montantHT: 0, modePaiement: modePaiement as never, compteProduit: '701', libelle: 'x' }).lignes[0]!.compteNumero;
-    this.sql.exec('INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?,?,?,?,?)', uid(), ecritureId, this.compteId(tresorerie), 'debit', montant);
-    this.sql.exec('INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?,?,?,?,?)', uid(), ecritureId, this.compteId('411'), 'credit', montant);
-    this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
+    return this.ctx.storage.transactionSync(() => {
+      const dejaRow = this.sql.exec('SELECT COALESCE(SUM(montant),0) AS p FROM paiement_facture WHERE facture_id = ?', factureId)
+        .toArray()[0] as { p: number };
+      const regle = dejaRow.p + montant;
 
-    this.sql.exec(
-      "INSERT INTO paiement_facture (id, facture_id, date, montant, mode_paiement, ecriture_id) VALUES (?, ?, date('now'), ?, ?, ?)",
-      uid(), factureId, montant, modePaiement, ecritureId,
-    );
-    const statut = regle >= f.total_ttc ? 'payee' : 'payee_partiellement';
-    this.sql.exec('UPDATE facture SET statut = ? WHERE id = ?', statut, factureId);
-    return { statut, regle };
+      const ecritureId = uid();
+      this.sql.exec(
+        `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, source, statut, facture_id)
+         VALUES (?, ?, date('now'), 'Encaissement facture', ?, 'facture', 'brouillon', ?)`,
+        ecritureId, f.exercice_id, modePaiement, factureId,
+      );
+      const tresorerie = genererRecette({ montantHT: 0, modePaiement: modePaiement as never, compteProduit: '701', libelle: 'x' }).lignes[0]!.compteNumero;
+      this.sql.exec('INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?,?,?,?,?)', uid(), ecritureId, this.compteId(tresorerie), 'debit', montant);
+      this.sql.exec('INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?,?,?,?,?)', uid(), ecritureId, this.compteId('411'), 'credit', montant);
+      this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
+
+      this.sql.exec(
+        "INSERT INTO paiement_facture (id, facture_id, date, montant, mode_paiement, ecriture_id) VALUES (?, ?, date('now'), ?, ?, ?)",
+        uid(), factureId, montant, modePaiement, ecritureId,
+      );
+      const statut = regle >= f.total_ttc ? 'payee' : 'payee_partiellement';
+      this.sql.exec('UPDATE facture SET statut = ? WHERE id = ?', statut, factureId);
+      return { statut, regle };
+    });
   }
 
   async listerFactures(): Promise<Record<string, unknown>[]> {
@@ -561,5 +574,33 @@ export class EntrepriseDO extends DurableObject {
       )
       .toArray()[0] as { ca: number };
     return row.ca;
+  }
+
+  /** Journal général : liste des écritures validées, la plus récente en premier. */
+  async listerEcritures(): Promise<Record<string, unknown>[]> {
+    return this.sql.exec(
+      `SELECT id, exercice_id, date_operation, libelle, source, statut, total_debit, total_credit
+         FROM ecriture WHERE statut = 'validee' ORDER BY created_at DESC`,
+    ).toArray() as never;
+  }
+
+  /**
+   * Vérifie qu'une écriture validée est bien immuable (triggers SQL) : toute tentative de
+   * modification ou suppression directe doit être rejetée par SQLite. Utilisé par les tests.
+   */
+  async _verifierImmuabiliteEcriture(ecritureId: string): Promise<{ updateBloque: boolean; deleteBloque: boolean }> {
+    let updateBloque = false;
+    try {
+      this.sql.exec("UPDATE ecriture SET libelle = 'Falsification' WHERE id = ?", ecritureId);
+    } catch {
+      updateBloque = true;
+    }
+    let deleteBloque = false;
+    try {
+      this.sql.exec('DELETE FROM ecriture WHERE id = ?', ecritureId);
+    } catch {
+      deleteBloque = true;
+    }
+    return { updateBloque, deleteBloque };
   }
 }

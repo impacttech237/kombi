@@ -175,7 +175,7 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 
 ## ⭐ Ordre d'attaque recommandé (Top 10)
 1. 🚧 🔴 **Cycle de vie des exercices** : ✅ création auto de l’exercice N+1 + sélection par date (fait) ; ⬜ clôture / report à nouveau (P1).
-2. ⬜ 🔴 **Écritures immuables + atomiques** : triggers interdisant UPDATE/DELETE d'une écriture validée + transactions (`ctx.storage.transactionSync`) autour de chaque opération.
+2. ✅ **Écritures immuables + atomiques** : triggers interdisant UPDATE/DELETE d'une écriture validée + transactions (`ctx.storage.transactionSync`) autour de chaque opération.
 3. ⬜ 🔴 **Écran Dépenses** (charges 60-67) : loyer, transport, salaires, élec, frais bancaires → résultat sincère + charges pour les prestataires.
 4. ⬜ 🔴 **Crédit clients & dettes fournisseurs** : vente/achat à crédit (411/401) + écrans « on me doit » / « ce que je dois ».
 5. ⬜ 🔴 **Chaîne TVA** : enregistrer 4452 (déductible), imputer services en 4432, contraindre le taux 0/19,25 %, interdire TVA aux IGS, supprimer le double comptage vente↔facture.
@@ -241,7 +241,7 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ⬜ 🟡 Journal d'audit consultable (exigence NFR)
 
 ## Comptabilité — écritures
-- ⬜ 🔴 Écritures immuables (triggers UPDATE/DELETE) + atomicité (transactions)
+- ✅ Écritures immuables (triggers UPDATE/DELETE) + atomicité (transactions)
 - ⬜ 🔴 Supprimer le double comptage CA vente ↔ facture
 - ⬜ 🔴 Date d'opération réelle (paramètre + heure locale Africa/Douala)
 - ⬜ 🟠 TVA déductible 4452 à l'achat · TVA services en 4432 · taux contraint

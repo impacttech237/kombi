@@ -170,6 +170,40 @@ BEGIN
 END
 `;
 
+/**
+ * v2 — Immuabilité comptable : une écriture validée (et ses lignes) ne peut plus jamais
+ * être modifiée ni supprimée (principe comptable de non-altération, SYSCOHADA/DGI).
+ */
+const MIGRATION_V2_IMMUABILITE = `
+CREATE TRIGGER IF NOT EXISTS trg_ecriture_immuable_update BEFORE UPDATE ON ecriture
+WHEN OLD.statut = 'validee'
+BEGIN
+  SELECT RAISE(ABORT, 'Ecriture validee : modification interdite (immuabilite)');
+END
+--##
+CREATE TRIGGER IF NOT EXISTS trg_ecriture_immuable_delete BEFORE DELETE ON ecriture
+WHEN OLD.statut = 'validee'
+BEGIN
+  SELECT RAISE(ABORT, 'Ecriture validee : suppression interdite (immuabilite)');
+END
+--##
+CREATE TRIGGER IF NOT EXISTS trg_ligne_immuable_update BEFORE UPDATE ON ligne_ecriture
+WHEN (SELECT statut FROM ecriture WHERE id = OLD.ecriture_id) = 'validee'
+BEGIN
+  SELECT RAISE(ABORT, 'Ecriture validee : modification de ligne interdite (immuabilite)');
+END
+--##
+CREATE TRIGGER IF NOT EXISTS trg_ligne_immuable_delete BEFORE DELETE ON ligne_ecriture
+WHEN (SELECT statut FROM ecriture WHERE id = OLD.ecriture_id) = 'validee'
+BEGIN
+  SELECT RAISE(ABORT, 'Ecriture validee : suppression de ligne interdite (immuabilite)');
+END
+`;
+
+function statementsDe(sql: string): string[] {
+  return sql.split('--##').map((s) => s.trim()).filter((s) => s.length > 0);
+}
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -196,7 +230,9 @@ export interface MigrationDO {
 export const MIGRATIONS_DO: readonly MigrationDO[] = [
   // v1 — schéma initial (idempotent : IF NOT EXISTS). Rétro-compatible avec les DO déjà créés.
   { v: 1, statements: statementsSchema() },
-  // v2, v3… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v2 — immuabilité des écritures validées (triggers UPDATE/DELETE bloquants).
+  { v: 2, statements: statementsDe(MIGRATION_V2_IMMUABILITE) },
+  // v3… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */
