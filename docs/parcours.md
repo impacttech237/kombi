@@ -357,16 +357,21 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 
 ## Fiscalité
 - ✅ 🔴 Cycle des exercices : création auto N+1 (`exercicePourAnnee`) + sélection par date ; `caCumule` et états **filtrés par exercice**
-- ⬜ 🟠 Liquidation TVA déclarative (collectée − déductible, mensuelle, crédit reportable)
-- ⬜ 🟠 Alerte de seuil à **85 %** du plafond 50M (règle CDC) — aujourd'hui 100 %
+- ⬜ 🟠 Liquidation TVA déclarative (collectée − déductible, mensuelle, crédit reportable) —
+  **Phase P2 explicite dans la spec** (§6.2), et périodicité/forme ⚖️ à valider ONECCA ; reporté.
+- ⬜ 🟠 Alerte de seuil à **85 %** du plafond 50M (règle CDC) — **Phase P2 explicite dans la spec**
+  (§6.1 : « alerte 85 % + liquidation TVA + par-établissement P2 »), reporté avec le point ci-dessus.
 - ⬜ 🟡 Assiette IGS précise (produits accessoires ? dé-doublonnage)
 - ⬜ 🟡 IS / DSF : passage résultat comptable → fiscal, acomptes/AIR
 - ⬜ 🟡 Bascule IGS↔Réel câblée (persister `ansSousSeuil`, exécuter à la clôture)
 - ⬜ 🟡 Séparer `regimeFiscal {igs,reel}` et `systemeOhada {smt,normal}`
 
 ## États financiers
-- ⬜ 🟠 Bilan/CR au format SYSCOHADA à rubriques (table postes ↔ comptes)
-- ⬜ 🟠 Livre-journal, grand-livre, balance (obligatoires Art. 19)
+- ⬜ 🟠 Bilan/CR au format SYSCOHADA à rubriques (table postes ↔ comptes) — regroupement 8xx et
+  comptes d'affectation ⚖️ à valider ONECCA ; `etatsFinanciers()` produit déjà un CR/bilan
+  fonctionnel (par compte), la mise en forme à rubriques normalisées reste à faire.
+- ⬜ 🟠 Livre-journal, grand-livre, balance (obligatoires Art. 19) — **Phase P2 explicite dans la
+  spec** (§0/§10 : « balance/grand-livre P2 »), reporté.
 - ⬜ 🟡 Soldes intermédiaires de gestion (marge, VA, EBE…)
 - ⬜ 🟡 Système Minimal de Trésorerie (bilan/CR simplifié TPE)
 - ⬜ 🟡 Clôture d'exercice + à-nouveaux
@@ -401,7 +406,11 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ✅ 🔴 Gestion d'abonnements / plans (Gratuit/Essentiel/Pro) + feature-gating par offre : tables
   D1 `plan`/`abonnement`, essai gratuit 30j à la création, quota 50 factures/mois sur Gratuit
   (402 à l'émission au-delà), changement de plan par l'admin (`POST /api/abonnement/plan`)
-- ⬜ 🟠 Notifications d'échéances (SMS + WhatsApp, J-10/J-5/J-1)
+- ✅ Notifications d'échéances — **in-app** (spec §13, Phase MVP+ ; WhatsApp/SMS reste V1) :
+  cloche dans `TopBar` avec badge (rouge si au moins une critique), calculée à la volée
+  (`notificationsActives()`, pas de table persistée — rien ne justifie encore un état à
+  synchroniser) : factures en retard/à échéance ≤5j, produits en rupture/stock bas, échéance de
+  déclaration IGS ≤30j (15 avril, régime IGS uniquement).
 - ⬜ 🟡 Couche IA (OCR reçus, catégorisation, chatbot) — replanifier
 - ⬜ 🟡 Import bancaire / mobile money — réintégrer
 - ⬜ ⚪ Version anglaise (Cameroun anglophone)

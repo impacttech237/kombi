@@ -73,7 +73,7 @@ function Espace() {
 
   return (
     <Ecran nav={<BottomNav actif={onglet} onNaviguer={setOnglet} masquer={masquer} />}>
-      <TopBar nomEntreprise={active.raison_sociale} onChangeEntreprise={() => setOnglet('dashboard')} />
+      <TopBar nomEntreprise={active.raison_sociale} entrepriseId={active.id} onChangeEntreprise={() => setOnglet('dashboard')} />
       <div style={{ marginTop: 14 }}>
         <OfflineBanner />
         {onglet === 'dashboard' ? <Dashboard entreprise={active} onCaisse={() => setOnglet('caisse')} onCommandes={() => setOnglet('commandes')} onDepenses={() => setOnglet('depenses')} onCreances={() => setOnglet('creances')} onDettes={() => setOnglet('dettes')} />

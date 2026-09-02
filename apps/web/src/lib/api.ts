@@ -99,6 +99,10 @@ export interface TresorerieJour { especes: number; mtnMomo: number; orangeMoney:
 export const tresorerieDuJour = (entrepriseId: string) =>
   api<TresorerieJour>('/api/etats/tresorerie-jour', { entrepriseId });
 
+export interface NotificationActive { type: string; gravite: 'attention' | 'critique'; libelle: string; }
+export const listerNotifications = (entrepriseId: string) =>
+  api<{ notifications: NotificationActive[] }>('/api/notifications', { entrepriseId }).then((r) => r.notifications);
+
 export interface Produit {
   id: string; nom: string; sku: string | null; unite: string;
   prix_vente: number; cout_moyen_pondere: number; stock_actuel: number;

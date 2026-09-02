@@ -18,6 +18,7 @@ import { factures } from './routes/factures.js';
 import { commandes } from './routes/commandes.js';
 import { depenses } from './routes/depenses.js';
 import { abonnement } from './routes/abonnement.js';
+import { notifications } from './routes/notifications.js';
 import { etats } from './routes/etats.js';
 
 const app = new Hono<AppEnv>();
@@ -94,6 +95,10 @@ app.route('/api/etats', etats);
 app.use('/api/abonnement/*', authentifier, tenant);
 app.use('/api/abonnement', authentifier, tenant);
 app.route('/api/abonnement', abonnement);
+
+app.use('/api/notifications/*', authentifier, tenant);
+app.use('/api/notifications', authentifier, tenant);
+app.route('/api/notifications', notifications);
 
 // Tout le reste (hors /api) = la PWA servie depuis le même Worker (même origine → cookies OK).
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));

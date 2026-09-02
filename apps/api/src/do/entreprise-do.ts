@@ -1160,6 +1160,55 @@ export class EntrepriseDO extends DurableObject {
     }));
   }
 
+  /**
+   * Notifications actives (cloche in-app — spec §13, Phase MVP+ ; WhatsApp/SMS reste V1) :
+   * factures en retard/à échéance proche, stock en rupture/bas, échéance de déclaration IGS.
+   * Calculées à la volée à chaque appel (pas de table `notification` persistée pour l'instant —
+   * rien ne justifie encore le coût d'un état à synchroniser pour de la simple lecture dérivée).
+   */
+  async notificationsActives(
+    regimeFiscal?: string | null,
+  ): Promise<{ type: string; gravite: 'attention' | 'critique'; libelle: string }[]> {
+    const notifications: { type: string; gravite: 'attention' | 'critique'; libelle: string }[] = [];
+    const aujourdhui = this.dateCourante();
+
+    const impayees = await this.listerFacturesImpayees() as
+      { numero: string | null; montantDu: number; enRetard: boolean; date_echeance: string | null }[];
+    for (const f of impayees) {
+      const numero = f.numero ?? 'facture';
+      if (f.enRetard) {
+        notifications.push({ type: 'facture', gravite: 'critique', libelle: `${numero} en retard — ${f.montantDu} FCFA dus` });
+      } else if (f.date_echeance) {
+        const jours = Math.ceil((Date.parse(f.date_echeance) - Date.parse(aujourdhui)) / 86_400_000);
+        if (jours >= 0 && jours <= 5) {
+          notifications.push({ type: 'facture', gravite: 'attention', libelle: `${numero} échue dans ${jours} j — ${f.montantDu} FCFA` });
+        }
+      }
+    }
+
+    const produits = await this.listerProduits() as { nom: string; en_rupture: number; en_alerte: number }[];
+    for (const p of produits) {
+      if (p.en_rupture) notifications.push({ type: 'stock', gravite: 'critique', libelle: `${p.nom} en rupture de stock` });
+      else if (p.en_alerte) notifications.push({ type: 'stock', gravite: 'attention', libelle: `${p.nom} en stock bas` });
+    }
+
+    // Déclaration IGS : 15 avril (docs/reference/02-igs.md), régime IGS uniquement.
+    if (regimeFiscal === 'igs') {
+      const annee = Number(aujourdhui.slice(0, 4));
+      let echeance = `${annee}-04-15`;
+      if (aujourdhui > echeance) echeance = `${annee + 1}-04-15`;
+      const jours = Math.ceil((Date.parse(echeance) - Date.parse(aujourdhui)) / 86_400_000);
+      if (jours <= 30) {
+        notifications.push({
+          type: 'fiscal', gravite: jours <= 10 ? 'critique' : 'attention',
+          libelle: `Déclaration IGS due le 15 avril — dans ${jours} j`,
+        });
+      }
+    }
+
+    return notifications;
+  }
+
   async getFacture(factureId: string): Promise<Record<string, unknown> | null> {
     const f = this.sql.exec(
       `SELECT f.*, t.nom AS tiers_nom, t.niu AS tiers_niu, t.adresse AS tiers_adresse, t.telephone AS tiers_telephone
