@@ -26,6 +26,7 @@ export interface EntrepriseResume {
   raison_sociale: string;
   secteur: string;
   regime_fiscal: string;
+  assujetti_tva: number;
   role: string;
 }
 
@@ -47,7 +48,9 @@ export const changerRoleMembre = (entrepriseId: string, membreId: string, role: 
 export const retirerMembre = (entrepriseId: string, membreId: string) =>
   api<{ ok: boolean }>(`/api/entreprises/${entrepriseId}/membres/${membreId}`, { method: 'DELETE' });
 
-export interface LigneCaisse { designation: string; quantite: number; prixUnitaire: number; produitId?: string; }
+export interface LigneCaisse {
+  designation: string; quantite: number; prixUnitaire: number; produitId?: string; tauxTva?: number;
+}
 
 export const enregistrerVente = (
   entrepriseId: string,

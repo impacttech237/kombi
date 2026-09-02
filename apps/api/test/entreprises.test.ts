@@ -75,8 +75,10 @@ describe('Auth + création via HTTP (bout en bout)', () => {
     expect(entrepriseId).toBeTruthy();
 
     const liste = await SELF.fetch('http://localhost/api/entreprises', { headers: { cookie } });
-    const { entreprises } = await liste.json<{ entreprises: { id: string }[] }>();
+    const { entreprises } = await liste.json<{ entreprises: { id: string; assujetti_tva: number }[] }>();
     expect(entreprises.some((e) => e.id === entrepriseId)).toBe(true);
+    // assujetti_tva exposé (nécessaire côté caisse pour conditionner l'application de la TVA).
+    expect(entreprises.find((e) => e.id === entrepriseId)?.assujetti_tva).toBe(0);
 
     // Modules de l'entreprise créée : stock actif (commerce)
     const mods = await SELF.fetch(`http://localhost/api/entreprises/${entrepriseId}/modules`, {

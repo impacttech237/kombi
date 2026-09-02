@@ -180,7 +180,8 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 4. ⬜ 🔴 **Crédit clients & dettes fournisseurs** : vente/achat à crédit (411/401) + écrans « on me doit » / « ce que je dois ».
 5. ⬜ 🔴 **Chaîne TVA** : enregistrer 4452 (déductible), imputer services en 4432, contraindre le taux 0/19,25 %, interdire TVA aux IGS, supprimer le double comptage vente↔facture.
 6. ✅ **Caisse comptoir** : quantités éditables, vente à crédit (411), client rattaché, montant
-   reçu + rendu-monnaie, reçu imprimable. (Remises restent à faire, 🟡.)
+   reçu + rendu-monnaie, reçu imprimable + partage WhatsApp, remise ligne/globale, TVA conditionnée
+   par `assujetti_tva` et interdite à l'IGS. §9.1 de la spec technique intégralement livré.
 7. ✅ **Sécurité** : CORS restreint aux origines de confiance + rate-limiting auth (D1, 10 req/min/IP) + validation Zod (montants/taux/dates) sur ventes/dépenses/produits/factures.
 8. ✅ **Employés & rôles** : rôles comptable/employé, écran Équipe (ajout par email + changement de rôle + retrait), nav filtrée par rôle, route fiscalité protégée (`requirePermission('compta:read')`).
 9. ⬜ 🟠 **États & livres légaux** : livre-journal, grand-livre, balance + bilan/CR au format SYSCOHADA à rubriques + SIG ; date d'opération réelle (locale, pas UTC).
@@ -196,7 +197,11 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   offline (`sync.ts` ne transmettait ni `tiersId` ni `aCredit` lors de la resynchronisation)
 - ✅ Montant reçu + rendu-monnaie (calculé côté caisse, bloque l'encaissement si insuffisant)
 - ✅ Reçu imprimable (bouton « Imprimer le reçu », CSS `@media print` dédiée)
-- ⬜ 🟡 Remise (ligne/globale) absente
+- ✅ Remise ligne (%) + remise globale (%), appliquées côté caisse avant envoi (prix unitaire net
+  envoyé au serveur — aucune notion de remise à porter côté comptable, l'écriture reflète le net facturé)
+- ✅ TVA conditionnée par `assujetti_tva` **et** interdite au régime IGS (Art. 142) — taux 19,25 %
+  appliqué automatiquement en caisse seulement si l'entreprise y est éligible, sinon 0 %
+- ✅ Partage du reçu par WhatsApp (`wa.me`, comme les factures) en plus de l'impression
 - ⬜ 🟡 Retour / annulation de vente (`vente:annuler` sans route ni UI)
 - ⬜ 🟡 TVA jamais appliquée en caisse (`tauxTva=0`, `assujetti_tva` non lu)
 - ⬜ 🟡 Fond de caisse + clôture journalière (Z de caisse)

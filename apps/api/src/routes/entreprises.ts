@@ -16,7 +16,7 @@ export const entreprises = new Hono<AppEnv>();
 entreprises.get('/', async (c) => {
   const utilisateurId = c.get('utilisateurId');
   const res = await c.env.DB.prepare(
-    `SELECT e.id, e.raison_sociale, e.secteur, e.regime_fiscal, m.role
+    `SELECT e.id, e.raison_sociale, e.secteur, e.regime_fiscal, e.assujetti_tva, m.role
        FROM entreprise e
        JOIN membre_entreprise m ON m.entreprise_id = e.id
       WHERE m.utilisateur_id = ?

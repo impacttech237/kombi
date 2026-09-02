@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA } from '@kombi/shared';
+import { TAUX_TVA_EFFECTIF } from '@kombi/fiscal';
 import {
   listerProduits, listerTiers, type EntrepriseResume, type LigneCaisse, type Produit, type Tiers,
 } from '../lib/api.js';
@@ -14,12 +15,25 @@ const MODES = [
   { code: 'virement', label: 'Virement', icone: 'boite' },
 ];
 
-interface Recu { total: number; lignes: LigneCaisse[]; recu: number; rendu: number; aCredit: boolean; client: string | null; }
+interface LignePanier extends LigneCaisse { remisePct?: number; }
+
+interface Recu {
+  totalHt: number; totalTva: number; total: number; remise: number; tvaApplicable: boolean;
+  lignes: LignePanier[]; recu: number; rendu: number; aCredit: boolean; client: string | null;
+}
+
+/** Prix unitaire effectif après remise de ligne puis remise globale (arrondi FCFA, jamais négatif). */
+function prixApresRemises(l: LignePanier, remiseGlobalePct: number): number {
+  const facteurLigne = 1 - (l.remisePct ?? 0) / 100;
+  const facteurGlobal = 1 - remiseGlobalePct / 100;
+  return Math.max(0, Math.round(l.prixUnitaire * facteurLigne * facteurGlobal));
+}
 
 export function Caisse({ entreprise, onVendu }: { entreprise: EntrepriseResume; onVendu?: () => void }) {
-  const [panier, setPanier] = useState<LigneCaisse[]>([]);
+  const [panier, setPanier] = useState<LignePanier[]>([]);
   const [design, setDesign] = useState('');
   const [prix, setPrix] = useState('');
+  const [remiseGlobale, setRemiseGlobale] = useState('');
   const [mode, setMode] = useState('especes');
   const [tiersId, setTiersId] = useState('');
   const [montantRecu, setMontantRecu] = useState('');
@@ -35,7 +49,20 @@ export function Caisse({ entreprise, onVendu }: { entreprise: EntrepriseResume; 
     listerTiers(entreprise.id).then(setTiers).catch(() => {});
   }, [entreprise.id, entreprise.secteur]);
 
-  const total = panier.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0);
+  // TVA jamais applicable au régime IGS (Art. 142) ; sinon seulement si l'entreprise y est assujettie.
+  const tvaApplicable = entreprise.regime_fiscal !== 'igs' && entreprise.assujetti_tva === 1;
+  const tauxTva = tvaApplicable ? TAUX_TVA_EFFECTIF : 0;
+  const remiseGlobalePct = Math.min(100, Math.max(0, Number(remiseGlobale) || 0));
+
+  const sousTotal = panier.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0);
+  const lignesFinales: LignePanier[] = panier.map((l) => ({
+    ...l, prixUnitaire: prixApresRemises(l, remiseGlobalePct), tauxTva,
+  }));
+  const totalHt = lignesFinales.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0);
+  const totalTva = lignesFinales.reduce((s, l) => s + Math.round(l.quantite * l.prixUnitaire * tauxTva), 0);
+  const total = totalHt + totalTva;
+  const remiseMontant = sousTotal - totalHt;
+
   const aCredit = mode === 'credit';
   const recu = montantRecu ? Number(montantRecu) : total;
   const rendu = aCredit ? 0 : Math.max(0, recu - total);
@@ -66,6 +93,12 @@ export function Caisse({ entreprise, onVendu }: { entreprise: EntrepriseResume; 
     copie[i] = { ...copie[i]!, quantite: q };
     setPanier(copie);
   }
+  function changerRemiseLigne(i: number, pct: string) {
+    const copie = [...panier];
+    const v = Math.min(100, Math.max(0, Number(pct) || 0));
+    copie[i] = { ...copie[i]!, remisePct: v || undefined };
+    setPanier(copie);
+  }
 
   async function encaisser() {
     if (!panier.length) return;
@@ -74,20 +107,22 @@ export function Caisse({ entreprise, onVendu }: { entreprise: EntrepriseResume; 
     setCharge(true); setErreur('');
     try {
       // Offline-first : on enregistre localement (marche sans réseau), puis on tente la synchro.
+      // Les remises sont déjà appliquées dans lignesFinales (prix unitaire net envoyé au serveur).
       const clientUuid = nouvelUuid();
       await enfilerMutation({
         clientUuid, entrepriseId: entreprise.id, type: 'vente',
         payload: {
-          lignes: panier, modePaiement: aCredit ? null : mode, aCredit,
-          tiersId: tiersId || null,
+          lignes: lignesFinales.map(({ remisePct: _remisePct, ...l }) => l),
+          modePaiement: aCredit ? null : mode, aCredit, tiersId: tiersId || null,
         },
       });
       void synchroniser(); // rejeu immédiat si en ligne ; sinon au retour du réseau
       setSucces({
-        total, lignes: panier, recu: aCredit ? 0 : recu, rendu, aCredit,
+        totalHt, totalTva, total, remise: remiseMontant, tvaApplicable, lignes: lignesFinales,
+        recu: aCredit ? 0 : recu, rendu, aCredit,
         client: tiersId ? (tiers.find((t) => t.id === tiersId)?.nom ?? null) : null,
       });
-      setPanier([]); setMontantRecu(''); setTiersId('');
+      setPanier([]); setMontantRecu(''); setTiersId(''); setRemiseGlobale('');
       onVendu?.();
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur');
@@ -95,6 +130,14 @@ export function Caisse({ entreprise, onVendu }: { entreprise: EntrepriseResume; 
   }
 
   if (succes !== null) {
+    const texteRecu = [
+      entreprise.raison_sociale, '',
+      ...succes.lignes.map((l) => `${l.quantite} × ${l.designation} — ${formaterFCFA(l.quantite * l.prixUnitaire)}`),
+      '', succes.tvaApplicable ? `Total HT : ${formaterFCFA(succes.totalHt)}` : null,
+      succes.tvaApplicable ? `TVA 19,25% : ${formaterFCFA(succes.totalTva)}` : null,
+      `Total : ${formaterFCFA(succes.total)}`,
+    ].filter(Boolean).join('\n');
+
     return (
       <div style={{ display: 'grid', placeItems: 'center', minHeight: 420, textAlign: 'center' }}>
         <div style={{ width: '100%', maxWidth: 340 }}>
@@ -128,14 +171,33 @@ export function Caisse({ entreprise, onVendu }: { entreprise: EntrepriseResume; 
                 <span className="chiffre">{formaterFCFA(l.quantite * l.prixUnitaire)}</span>
               </div>
             ))}
+            {succes.remise > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', color: 'var(--danger)' }}>
+                <span>Remise</span><span className="chiffre">−{formaterFCFA(succes.remise)}</span>
+              </div>
+            )}
+            {succes.tvaApplicable && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                  <span className="muet">Total HT</span><span className="chiffre">{formaterFCFA(succes.totalHt)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                  <span className="muet">TVA 19,25%</span><span className="chiffre">{formaterFCFA(succes.totalTva)}</span>
+                </div>
+              </>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--bord)',
               marginTop: 6, paddingTop: 6, fontWeight: 700 }}>
               <span>Total</span><span className="chiffre">{formaterFCFA(succes.total)}</span>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Bouton variante="clair" onClick={() => window.print()}><Icon name="facture" size={16} /> Imprimer le reçu</Bouton>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-clair" onClick={() => window.print()}><Icon name="facture" size={16} /> Imprimer</button>
+            <button className="btn btn-clair"
+              onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(texteRecu)}`, '_blank')}>
+              WhatsApp
+            </button>
             <Bouton onClick={() => setSucces(null)}><Icon name="plus" size={18} /> Nouvelle vente</Bouton>
           </div>
         </div>
@@ -151,21 +213,30 @@ export function Caisse({ entreprise, onVendu }: { entreprise: EntrepriseResume; 
         <div style={{ textAlign: 'center', padding: '6px 0 12px' }}>
           <div className="muet" style={{ fontSize: 13 }}>Total à encaisser</div>
           <div className="chiffre" style={{ fontSize: 40, fontWeight: 700 }}>{formaterFCFA(total)}</div>
+          {(remiseMontant > 0 || tvaApplicable) && panier.length > 0 && (
+            <div className="muet" style={{ fontSize: 12, marginTop: 2 }}>
+              {remiseMontant > 0 && <>Remise −{formaterFCFA(remiseMontant)} · </>}
+              {tvaApplicable && <>HT {formaterFCFA(totalHt)} + TVA {formaterFCFA(totalTva)}</>}
+            </div>
+          )}
         </div>
 
         {panier.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
             {panier.map((l, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10,
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
                 background: 'var(--fond)', borderRadius: 12, padding: '10px 12px' }}>
-                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.designation}</span>
+                <span style={{ flex: 1, minWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.designation}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <button onClick={() => changerQuantite(i, -1)} className="btn btn-clair" style={{ width: 28, height: 28, padding: 0 }}>−</button>
                   <span className="chiffre" style={{ minWidth: 18, textAlign: 'center' }}>{l.quantite}</span>
                   <button onClick={() => changerQuantite(i, 1)} className="btn btn-clair" style={{ width: 28, height: 28, padding: 0 }}>+</button>
                 </div>
+                <input value={l.remisePct ?? ''} onChange={(e) => changerRemiseLigne(i, e.target.value.replace(/\D/g, ''))}
+                  placeholder="0%" title="Remise sur cette ligne"
+                  style={{ width: 44, padding: '4px 6px', border: '1px solid var(--bord)', borderRadius: 8, fontSize: 12, textAlign: 'center' }} />
                 <span className="chiffre" style={{ fontWeight: 600, minWidth: 70, textAlign: 'right' }}>
-                  {formaterFCFA(l.quantite * l.prixUnitaire)}
+                  {formaterFCFA(l.quantite * prixApresRemises(l, remiseGlobalePct))}
                 </span>
                 <button onClick={() => retirer(i)} style={{ border: 0, background: 'transparent',
                   color: 'var(--danger)' }} aria-label="retirer"><Icon name="baisse" size={18} /></button>
@@ -198,6 +269,15 @@ export function Caisse({ entreprise, onVendu }: { entreprise: EntrepriseResume; 
           </button>
         </div>
       </div>
+
+      {panier.length > 0 && (
+        <div className="champ">
+          <label>Remise globale (%)</label>
+          <input inputMode="numeric" placeholder="0" value={remiseGlobale}
+            onChange={(e) => setRemiseGlobale(e.target.value.replace(/\D/g, ''))}
+            style={{ width: '100%', padding: '12px 14px', border: '1px solid var(--bord)', borderRadius: 12, boxSizing: 'border-box' }} />
+        </div>
+      )}
 
       {tiers.length > 0 && (
         <div className="champ" style={{ marginBottom: 4 }}>

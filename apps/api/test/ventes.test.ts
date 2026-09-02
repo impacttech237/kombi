@@ -56,4 +56,20 @@ describe('Ventes / caisse → comptabilité automatique', () => {
     expect(r.totalTtc).toBe(25000);
     expect(await e.caCumule()).toBe(25000);
   });
+
+  it('vente avec TVA (19,25%, entreprise assujettie au réel) : 4431 collecte la TVA, bilan équilibré', async () => {
+    const e = doEntreprise('vente-tva');
+    await e.initialiser('vente-tva', 'commerce', 2026);
+    const r = await e.enregistrerVente({
+      lignes: [{ designation: 'Article', quantite: 1, prixUnitaire: 10000, tauxTva: 0.1925 }],
+      modePaiement: 'especes',
+    });
+    expect(r.totalTtc).toBe(11925); // 10000 HT + 1925 TVA
+    expect(await e.caCumule()).toBe(10000); // le CA (classe 7) exclut la TVA collectée
+
+    const { bilan } = await e.etatsFinanciers();
+    expect(bilan.equilibre).toBe(true);
+    const tvaCollectee = (bilan.passif as { numero: string; montant: number }[]).find((l) => l.numero === '4431');
+    expect(tvaCollectee?.montant).toBe(1925);
+  });
 });
