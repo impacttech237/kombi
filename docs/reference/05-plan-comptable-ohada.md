@@ -44,8 +44,23 @@ débiteurs de 8 → au débit (Guide SYSCOHADA).
 | 602 | Achats de matières premières et fournitures liées |
 | 604 | Achats stockés de matières et fournitures |
 | 605 | Autres achats |
-| 622 | Locations et charges locatives |
+| 6051 | Fournitures non stockables — eau (sous-compte de 605) |
+| 6052 | Fournitures non stockables — énergie électrique (sous-compte de 605) |
+| 6054 | Fournitures de bureau (sous-compte de 605) |
+| 61 / 614 | Transports — transports du personnel |
+| 622 | Locations et charges locatives (loyer) |
+| 625 | Primes d'assurances |
 | 627 | Publicité, publications, relations publiques |
+| 628 | Frais de télécommunications |
+| 631 | Frais bancaires (Services extérieurs B) |
+| 641 | Impôts et taxes directs |
+| 661 | Rémunérations directes versées au personnel national (salaires) |
+| 664 | Charges sociales |
+
+Comptes ajoutés pour l'écran Dépenses (P0 #4) — numérotation standard SYSCOHADA
+révisée (classes 60 Achats, 61 Transports, 62/63 Services extérieurs A/B,
+64 Impôts et taxes, 66 Charges de personnel), cohérente avec les comptes déjà
+vérifiés ci-dessus.
 
 ### Classe 7 — Produits (recettes)
 | Compte | Intitulé |

@@ -116,6 +116,18 @@ export const creerCommande = (
 export const changerStatutCommande = (entrepriseId: string, id: string, statut: string) =>
   api<{ ok: boolean }>(`/api/commandes/${id}/statut`, { method: 'POST', body: { statut }, entrepriseId });
 
+// ── Dépenses ──
+export interface Depense {
+  id: string; categorie: string; compte_numero: string; libelle: string; montant: number;
+  mode_paiement: string; recurrente: number; date: string; tiers_nom: string | null;
+}
+export const listerDepenses = (entrepriseId: string) =>
+  api<{ depenses: Depense[] }>('/api/depenses', { entrepriseId }).then((r) => r.depenses);
+export const creerDepense = (
+  entrepriseId: string,
+  data: { categorie: string; libelle: string; montant: number; modePaiement: string; recurrente?: boolean },
+) => api<{ depenseId: string }>('/api/depenses', { method: 'POST', body: data, entrepriseId });
+
 /** Récupère le PDF de la facture (avec en-têtes d'auth) et retourne une URL blob affichable. */
 export async function urlPdfFacture(entrepriseId: string, id: string): Promise<string> {
   const BASE = import.meta.env.VITE_API_URL ?? '';

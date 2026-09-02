@@ -11,7 +11,7 @@ import {
   modulesActifsPourSecteur,
   type Secteur,
 } from '@kombi/shared';
-import { PLAN_COMPTABLE_DEFAUT, genererRecette, cmpApresEntree } from '@kombi/comptable';
+import { PLAN_COMPTABLE_DEFAUT, genererRecette, genererDepense, cmpApresEntree } from '@kombi/comptable';
 import { MIGRATIONS_DO } from './schema.js';
 
 const uid = () => crypto.randomUUID();
@@ -504,6 +504,65 @@ export class EntrepriseDO extends DurableObject {
       "SELECT COUNT(*) AS n FROM commande WHERE statut IN ('en_attente','en_cours')",
     ).toArray()[0] as { n: number };
     return r.n;
+  }
+
+  // ══════════════ Dépenses (charges courantes : loyer, eau, élec, transport, salaires…) ══════════════
+  /**
+   * Enregistre une dépense réglée : génère l'écriture comptable en partie double
+   * (débit charge / crédit trésorerie) via le moteur comptable. Atomique + idempotente.
+   */
+  async creerDepense(d: {
+    categorie: string; compteNumero: string; libelle: string; montant: number;
+    modePaiement: string; tiersId?: string | null; recurrente?: boolean; clientUuid?: string | null;
+  }): Promise<{ depenseId: string; deja: boolean }> {
+    if (d.clientUuid) {
+      const ex = this.sql
+        .exec('SELECT id FROM depense WHERE client_uuid = ?', d.clientUuid)
+        .toArray()[0] as { id: string } | undefined;
+      if (ex) return { depenseId: ex.id, deja: true };
+    }
+    const montant = Math.floor(d.montant);
+    if (montant <= 0) throw new Error('Montant de dépense invalide');
+
+    return this.ctx.storage.transactionSync(() => {
+      const exerciceId = this.exerciceOuvert();
+      const ecr = genererDepense({
+        montantHT: montant, modePaiement: d.modePaiement as never,
+        compteCharge: d.compteNumero, libelle: d.libelle,
+      });
+      const ecritureId = uid();
+      this.sql.exec(
+        `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, tiers_id, source, statut)
+         VALUES (?, ?, date('now'), ?, ?, ?, 'manuelle', 'brouillon')`,
+        ecritureId, exerciceId, d.libelle, d.modePaiement, d.tiersId ?? null,
+      );
+      for (const l of ecr.lignes) {
+        this.sql.exec(
+          'INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?, ?, ?, ?, ?)',
+          uid(), ecritureId, this.compteId(l.compteNumero), l.sens, l.montant,
+        );
+      }
+      this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
+
+      const depenseId = uid();
+      this.sql.exec(
+        `INSERT INTO depense (id, exercice_id, categorie, compte_numero, libelle, montant, mode_paiement,
+                              tiers_id, recurrente, ecriture_id, client_uuid)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        depenseId, exerciceId, d.categorie, d.compteNumero, d.libelle, montant, d.modePaiement,
+        d.tiersId ?? null, d.recurrente ? 1 : 0, ecritureId, d.clientUuid ?? null,
+      );
+      return { depenseId, deja: false };
+    });
+  }
+
+  async listerDepenses(): Promise<Record<string, unknown>[]> {
+    return this.sql.exec(
+      `SELECT d.id, d.categorie, d.compte_numero, d.libelle, d.montant, d.mode_paiement,
+              d.recurrente, d.date, t.nom AS tiers_nom
+         FROM depense d LEFT JOIN tiers t ON t.id = d.tiers_id
+        ORDER BY d.created_at DESC`,
+    ).toArray() as never;
   }
 
   // ══════════════ États financiers (bilan + compte de résultat) ══════════════

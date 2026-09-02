@@ -204,6 +204,38 @@ function statementsDe(sql: string): string[] {
   return sql.split('--##').map((s) => s.trim()).filter((s) => s.length > 0);
 }
 
+/**
+ * v3 — Écran Dépenses (charges 60-67 : loyer, eau, élec, transport, salaires…).
+ * La table `module` a un CHECK sur ses codes valides ; SQLite ne sait pas altérer un CHECK
+ * in-place, on recrée donc la table (copie → drop → renomme), pattern standard SQLite.
+ */
+const MIGRATION_V3_DEPENSES = `
+ALTER TABLE module RENAME TO module_v2
+--##
+CREATE TABLE module (
+  code TEXT PRIMARY KEY CHECK (code IN
+    ('ventes','tiers','facturation','commandes','comptabilite','fiscalite','stock','achats','depenses')),
+  actif INTEGER NOT NULL DEFAULT 1 CHECK (actif IN (0,1)),
+  config_json TEXT NOT NULL DEFAULT '{}'
+)
+--##
+INSERT INTO module (code, actif, config_json) SELECT code, actif, config_json FROM module_v2
+--##
+DROP TABLE module_v2
+--##
+INSERT OR IGNORE INTO module (code, actif) VALUES ('depenses', 1)
+--##
+CREATE TABLE IF NOT EXISTS depense (
+  id TEXT PRIMARY KEY, exercice_id TEXT NOT NULL REFERENCES exercice(id),
+  categorie TEXT NOT NULL, compte_numero TEXT NOT NULL, libelle TEXT NOT NULL,
+  montant INTEGER NOT NULL CHECK (montant > 0),
+  mode_paiement TEXT NOT NULL CHECK (mode_paiement IN ('especes','mtn_momo','orange_money','virement','cheque','autre')),
+  tiers_id TEXT REFERENCES tiers(id), recurrente INTEGER NOT NULL DEFAULT 0 CHECK (recurrente IN (0,1)),
+  date TEXT NOT NULL DEFAULT (datetime('now')), ecriture_id TEXT REFERENCES ecriture(id),
+  client_uuid TEXT UNIQUE, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+`;
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -232,7 +264,9 @@ export const MIGRATIONS_DO: readonly MigrationDO[] = [
   { v: 1, statements: statementsSchema() },
   // v2 — immuabilité des écritures validées (triggers UPDATE/DELETE bloquants).
   { v: 2, statements: statementsDe(MIGRATION_V2_IMMUABILITE) },
-  // v3… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v3 — écran Dépenses (module + table depense).
+  { v: 3, statements: statementsDe(MIGRATION_V3_DEPENSES) },
+  // v4… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */

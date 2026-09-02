@@ -19,6 +19,7 @@ export const CODES_MODULE = [
   'fiscalite', // IGS / régimes — cœur, toujours actif
   'stock', // optionnel — produits, mouvements, alertes
   'achats', // optionnel — achats fournisseurs (dépend de stock)
+  'depenses', // cœur — charges courantes (loyer, eau, élec, transport, salaires…)
 ] as const;
 export type CodeModule = (typeof CODES_MODULE)[number];
 
@@ -40,6 +41,7 @@ export const MODULES: Record<CodeModule, DefinitionModule> = {
   fiscalite: { code: 'fiscalite', nom: 'Fiscalité', coeur: true, dependances: ['comptabilite'] },
   stock: { code: 'stock', nom: 'Stock', coeur: false, dependances: [] },
   achats: { code: 'achats', nom: 'Achats fournisseurs', coeur: false, dependances: ['stock', 'tiers'] },
+  depenses: { code: 'depenses', nom: 'Dépenses', coeur: true, dependances: [] },
 };
 
 export const SECTEURS = ['commerce', 'service', 'mixte'] as const;

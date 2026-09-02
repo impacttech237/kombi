@@ -176,7 +176,7 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 ## ⭐ Ordre d'attaque recommandé (Top 10)
 1. 🚧 🔴 **Cycle de vie des exercices** : ✅ création auto de l’exercice N+1 + sélection par date (fait) ; ⬜ clôture / report à nouveau (P1).
 2. ✅ **Écritures immuables + atomiques** : triggers interdisant UPDATE/DELETE d'une écriture validée + transactions (`ctx.storage.transactionSync`) autour de chaque opération.
-3. ⬜ 🔴 **Écran Dépenses** (charges 60-67) : loyer, transport, salaires, élec, frais bancaires → résultat sincère + charges pour les prestataires.
+3. ✅ **Écran Dépenses** (charges 60-67) : loyer, transport, salaires, élec, frais bancaires → résultat sincère + charges pour les prestataires.
 4. ⬜ 🔴 **Crédit clients & dettes fournisseurs** : vente/achat à crédit (411/401) + écrans « on me doit » / « ce que je dois ».
 5. ⬜ 🔴 **Chaîne TVA** : enregistrer 4452 (déductible), imputer services en 4432, contraindre le taux 0/19,25 %, interdire TVA aux IGS, supprimer le double comptage vente↔facture.
 6. ⬜ 🟠 **Caisse comptoir** : quantités (bug figé à 1), remises, client rattaché, paiement partiel + rendu-monnaie, reçu client.
@@ -205,8 +205,12 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ⬜ 🟡 Lettrage 411/401 + rapprochement bancaire
 
 ## Dépenses & achats
-- ⬜ 🔴 Écran de dépense courante générique (catégorie → compte OHADA)
-- ⬜ 🟠 Charges saisissables même sans stock (prestataires)
+- ✅ Écran de dépense courante générique (catégorie → compte OHADA) : 13 catégories (loyer, eau,
+  électricité, télécom, fournitures, transport, assurance, publicité, frais bancaires, salaires,
+  charges sociales, impôts & taxes, autre), module cœur `depenses`, écriture générée automatiquement
+  (débit charge / crédit trésorerie), atomique et immuable comme toute écriture.
+- ✅ Charges saisissables même sans stock (prestataires) — le module `depenses` est cœur, actif quel
+  que soit le secteur (commerce/service/mixte).
 - ⬜ 🟡 Achat à crédit fournisseur (401) + TVA déductible (4452)
 
 ## Stock

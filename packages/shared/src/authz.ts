@@ -22,6 +22,8 @@ export const PERMISSIONS = [
   'commande:manage',
   'commande:read',
   'compta:read', // consulter la couche invisible (bilan, CR, IGS)
+  'depense:manage',
+  'depense:read',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -41,6 +43,8 @@ const PERMS_GERANT: readonly Permission[] = [
   'commande:manage',
   'commande:read',
   'compta:read',
+  'depense:manage',
+  'depense:read',
 ];
 
 const PERMS_CAISSIER: readonly Permission[] = [
