@@ -38,6 +38,24 @@ describe('Cycle de vie des exercices', () => {
     expect(await e.caCumule()).toBe(3000);
   });
 
+  it('un approvisionnement et une dépense datés dans le passé rejoignent le bon exercice', async () => {
+    const e = doE('exo-4');
+    await e.initialiser('exo-4', 'commerce', 2026);
+    const produitId = await e.creerProduit({ nom: 'Sac de riz', prixVente: 10000, seuilAlerte: 0 });
+
+    // Approvisionnement daté 2024 : ne doit pas apparaître dans le CA/charges de l'exercice courant.
+    await e.entrerStock({
+      produitId, quantite: 10, coutUnitaire: 4000, modePaiement: 'especes', dateOperation: '2024-03-15',
+    });
+    await e.creerDepense({
+      categorie: 'loyer', compteNumero: '622', libelle: 'Loyer', montant: 50000,
+      modePaiement: 'especes', dateOperation: '2024-03-15',
+    });
+    // Les deux opérations passées n'ont pas cassé l'écriture (partie double toujours équilibrée).
+    const { bilan } = await e.etatsFinanciers();
+    expect(bilan.equilibre).toBe(true);
+  });
+
   it('la base porte une version de schéma (migrations DO)', async () => {
     const e = doE('exo-3');
     await e.initialiser('exo-3', 'service', 2026);

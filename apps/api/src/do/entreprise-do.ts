@@ -495,6 +495,7 @@ export class EntrepriseDO extends DurableObject {
   async entrerStock(a: {
     produitId: string; quantite: number; coutUnitaire: number; modePaiement?: string | null;
     aCredit?: boolean; tiersId?: string | null; tauxTva?: number; regimeFiscal?: string | null;
+    dateOperation?: string | null;
   }, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }): Promise<{ nouveauStock: number; nouveauCmp: number }> {
     const prod = this.sql
       .exec('SELECT stock_actuel, cout_moyen_pondere FROM produit WHERE id = ?', a.produitId)
@@ -503,6 +504,10 @@ export class EntrepriseDO extends DurableObject {
     if (a.aCredit && !a.tiersId) throw new Error('Un fournisseur est requis pour un achat à crédit');
     if (!a.aCredit && !a.modePaiement) throw new Error('Mode de paiement requis');
     this.verifierTvaAutorisee(a.regimeFiscal, [a.tauxTva]);
+
+    // Date d'opération réelle (défaut : aujourd'hui, heure locale) → sélectionne le bon exercice.
+    const dateOp = a.dateOperation ?? this.dateCourante();
+    const exerciceId = this.exercicePourAnnee(Number(dateOp.slice(0, 4)));
 
     return this.ctx.storage.transactionSync(() => {
       const etat = cmpApresEntree(
@@ -526,7 +531,6 @@ export class EntrepriseDO extends DurableObject {
 
       // Écriture : achat (601) [+ TVA récupérable 4452] réglé par trésorerie, ou par dette
       // fournisseur (401) si à crédit, + entrée en stock (311/6031, valorisée HT).
-      const exerciceId = this.exerciceOuvert();
       const ecritureId = uid();
       const compteContrepartie = a.aCredit
         ? '401'
@@ -535,8 +539,8 @@ export class EntrepriseDO extends DurableObject {
           }).lignes[0]!.compteNumero; // récupère le compte de trésorerie du mode
       this.sql.exec(
         `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, source, statut)
-         VALUES (?, ?, date('now'), 'Approvisionnement', ?, 'achat', 'brouillon')`,
-        ecritureId, exerciceId, a.aCredit ? null : a.modePaiement,
+         VALUES (?, ?, ?, 'Approvisionnement', ?, 'achat', 'brouillon')`,
+        ecritureId, exerciceId, dateOp, a.aCredit ? null : a.modePaiement,
       );
       const l = (numero: string, sens: string, m: number) =>
         this.sql.exec(
@@ -555,9 +559,9 @@ export class EntrepriseDO extends DurableObject {
       if (a.aCredit) {
         achatId = uid();
         this.sql.exec(
-          `INSERT INTO achat_fournisseur (id, exercice_id, tiers_id, total_ht, total_tva, total_ttc, statut, ecriture_id)
-           VALUES (?, ?, ?, ?, ?, ?, 'a_credit', ?)`,
-          achatId, exerciceId, a.tiersId, montantHt, montantTva, montantRegle, ecritureId,
+          `INSERT INTO achat_fournisseur (id, exercice_id, tiers_id, date, total_ht, total_tva, total_ttc, statut, ecriture_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'a_credit', ?)`,
+          achatId, exerciceId, a.tiersId, dateOp, montantHt, montantTva, montantRegle, ecritureId,
         );
         this.sql.exec(
           `INSERT INTO ligne_achat (id, achat_id, produit_id, quantite, cout_unitaire, montant_ht)
@@ -970,7 +974,7 @@ export class EntrepriseDO extends DurableObject {
   async creerDepense(d: {
     categorie: string; compteNumero: string; libelle: string; montant: number;
     modePaiement: string; tiersId?: string | null; recurrente?: boolean; clientUuid?: string | null;
-    tauxTva?: number; regimeFiscal?: string | null;
+    tauxTva?: number; regimeFiscal?: string | null; dateOperation?: string | null;
   }, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }): Promise<{ depenseId: string; deja: boolean }> {
     if (d.clientUuid) {
       const ex = this.sql
@@ -981,9 +985,11 @@ export class EntrepriseDO extends DurableObject {
     const montant = Math.floor(d.montant);
     if (montant <= 0) throw new Error('Montant de dépense invalide');
     this.verifierTvaAutorisee(d.regimeFiscal, [d.tauxTva]);
+    // Date d'opération réelle (défaut : aujourd'hui, heure locale) → sélectionne le bon exercice.
+    const dateOp = d.dateOperation ?? this.dateCourante();
+    const exerciceId = this.exercicePourAnnee(Number(dateOp.slice(0, 4)));
 
     return this.ctx.storage.transactionSync(() => {
-      const exerciceId = this.exerciceOuvert();
       // `montant` = HT (le compte de charge est toujours débité hors-taxe) ; la TVA récupérable
       // (4452), si applicable, s'ajoute au montant réellement décaissé (voir genererDepense).
       const ecr = genererDepense({
@@ -993,8 +999,8 @@ export class EntrepriseDO extends DurableObject {
       const ecritureId = uid();
       this.sql.exec(
         `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, tiers_id, source, statut)
-         VALUES (?, ?, date('now'), ?, ?, ?, 'manuelle', 'brouillon')`,
-        ecritureId, exerciceId, d.libelle, d.modePaiement, d.tiersId ?? null,
+         VALUES (?, ?, ?, ?, ?, ?, 'manuelle', 'brouillon')`,
+        ecritureId, exerciceId, dateOp, d.libelle, d.modePaiement, d.tiersId ?? null,
       );
       for (const l of ecr.lignes) {
         this.sql.exec(
@@ -1007,10 +1013,10 @@ export class EntrepriseDO extends DurableObject {
       const depenseId = uid();
       this.sql.exec(
         `INSERT INTO depense (id, exercice_id, categorie, compte_numero, libelle, montant, mode_paiement,
-                              tiers_id, recurrente, ecriture_id, client_uuid)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                              tiers_id, recurrente, ecriture_id, client_uuid, date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         depenseId, exerciceId, d.categorie, d.compteNumero, d.libelle, montant, d.modePaiement,
-        d.tiersId ?? null, d.recurrente ? 1 : 0, ecritureId, d.clientUuid ?? null,
+        d.tiersId ?? null, d.recurrente ? 1 : 0, ecritureId, d.clientUuid ?? null, dateOp,
       );
       this.journaliser({
         acteur, action: 'depense.creer', entite: 'depense', entiteId: depenseId,

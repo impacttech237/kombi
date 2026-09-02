@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { CATEGORIES_DEPENSE, compteDeCategorie, zModePaiement, zMontantPositif, zTauxTva, messageErreurZod } from '@kombi/shared';
+import { CATEGORIES_DEPENSE, compteDeCategorie, zModePaiement, zMontantPositif, zTauxTva, zDateISO, messageErreurZod } from '@kombi/shared';
 import { requirePermission } from '../middleware/permission.js';
 import { stubEntreprise, regimeFiscalDe, type AppEnv } from '../types.js';
 
@@ -15,6 +15,7 @@ const zDepense = z.object({
   recurrente: z.boolean().optional().default(false),
   clientUuid: z.string().nullish(),
   tauxTva: zTauxTva.optional().default(0),
+  dateOperation: zDateISO.nullish(),
 });
 
 export const depenses = new Hono<AppEnv>();
@@ -37,7 +38,7 @@ depenses.post('/', requirePermission('depense:manage'), async (c) => {
     categorie: d.categorie, compteNumero: compteDeCategorie(d.categorie), libelle: d.libelle,
     montant: d.montant, modePaiement: d.modePaiement,
     tiersId: d.tiersId ?? null, recurrente: d.recurrente, clientUuid: d.clientUuid ?? null,
-    tauxTva: d.tauxTva, regimeFiscal,
+    tauxTva: d.tauxTva, regimeFiscal, dateOperation: d.dateOperation ?? null,
   }, { utilisateurId: c.get('utilisateurId'), role: c.get('role') });
   return c.json(res, res.deja ? 200 : 201);
 });

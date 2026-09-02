@@ -197,6 +197,14 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
     (§6 : pipeline Cloudflare Queue → D1, hors scope d'un MVP à un seul niveau de risque raisonnable
     à ce stade ; les plans/quotas ci-dessus couvrent la partie immédiatement actionnable).
 
+11. ✅ 🔴 **Date d'opération réelle** (dépenses, achats/approvisionnements) : `entrerStock()` et
+    `creerDepense()` acceptent désormais `dateOperation` (comme `enregistrerVente()` depuis
+    l'étape des exercices), et sélectionnent le bon exercice via `exercicePourAnnee()` au lieu de
+    toujours écrire `date('now')`. Permet de saisir le soir un achat/une dépense survenu(e) plus
+    tôt (ou la veille) sans fausser la date comptable. Les factures gardent volontairement
+    `date('now')` à l'émission : leur numérotation gap-less doit refléter l'instant réel
+    d'émission, pas une date arbitraire.
+
 ## Caisse & ventes
 - ✅ Vente à crédit (411) : `enregistrerVente({ aCredit: true, tiersId })` débite la créance client
   au lieu de la trésorerie (comme une facture émise) ; `payerVente()` encaisse ensuite (total ou
