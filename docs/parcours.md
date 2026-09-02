@@ -260,8 +260,14 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ✅ Achat à crédit fournisseur (401) + TVA déductible (4452)
 
 ## Stock
-- ⬜ 🟠 Sur-vente silencieuse (CMV tronqué + stock plancher 0) → bloquer ou tracer
-- ⬜ 🟠 Coût d'achat / CMP / marge visibles sur la fiche produit
+- ✅ Sur-vente **tracée, pas bloquée** (spec §4 : « bloquer ou tracer » — le terrain ne doit jamais
+  être bloqué en caisse) : le CMV n'est plus tronqué au stock affiché (`Math.min(quantite,
+  stock_actuel)` → `quantite` pleine), sinon le coût — et donc la marge — de la partie vendue
+  au-delà du stock connu était silencieusement sous-évalué. `enregistrerVente()` renvoie
+  `enSurvente`, et la caisse affiche un avertissement non bloquant par ligne quand la quantité
+  demandée dépasse le stock affiché.
+- ✅ Coût d'achat / CMP / marge visibles sur la fiche produit (`Stock.tsx`, écran réservé aux rôles
+  avec `stock:read` — jamais le caissier).
 - ✅ « Rupture » vs « Stock bas » (distinguer ≤ seuil de = 0) : `listerProduits()` expose
   désormais `en_rupture` (stock = 0) en plus de `en_alerte` (stock ≤ seuil) ; `Stock.tsx` affiche
   la puce « Rupture » seulement à 0, « Stock bas » entre 1 et le seuil.

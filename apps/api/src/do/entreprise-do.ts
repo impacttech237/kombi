@@ -260,12 +260,12 @@ export class EntrepriseDO extends DurableObject {
    */
   async enregistrerVente(
     v: VenteEntree, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
-  ): Promise<{ venteId: string; totalTtc: number; deja: boolean }> {
+  ): Promise<{ venteId: string; totalTtc: number; deja: boolean; enSurvente: boolean }> {
     if (v.clientUuid) {
       const ex = this.sql
         .exec('SELECT id, total_ttc FROM vente WHERE client_uuid = ?', v.clientUuid)
         .toArray()[0] as { id: string; total_ttc: number } | undefined;
-      if (ex) return { venteId: ex.id, totalTtc: ex.total_ttc, deja: true };
+      if (ex) return { venteId: ex.id, totalTtc: ex.total_ttc, deja: true, enSurvente: false };
     }
     if (!v.lignes.length) throw new Error('Vente sans ligne');
     if (v.aCredit && !v.tiersId) throw new Error('Un client est requis pour une vente à crédit');
@@ -280,6 +280,7 @@ export class EntrepriseDO extends DurableObject {
       let totalHt = 0;
       let totalTva = 0;
       let totalCmv = 0; // coût des marchandises vendues (inventaire permanent)
+      let enSurvente = false;
       // Calcule le CMP à sortir pour chaque ligne référençant un produit.
       const calc = v.lignes.map((l) => {
         const ht = Math.round(l.quantite * l.prixUnitaire);
@@ -292,7 +293,12 @@ export class EntrepriseDO extends DurableObject {
             .toArray()[0] as { stock_actuel: number; cout_moyen_pondere: number } | undefined;
           if (p) {
             coutUnit = p.cout_moyen_pondere;
-            totalCmv += Math.min(l.quantite, p.stock_actuel) * p.cout_moyen_pondere; // non-bloquant
+            // Non bloquant (spec §4 : « bloquer ou tracer la sur-vente ») — le terrain ne doit
+            // jamais être bloqué en caisse. Mais on trace : le CMV est valorisé sur la quantité
+            // RÉELLEMENT vendue (jamais tronquée au stock affiché), sinon le coût et donc la marge
+            // seraient silencieusement sous-évalués pour la partie vendue au-delà du stock connu.
+            if (l.quantite > p.stock_actuel) enSurvente = true;
+            totalCmv += l.quantite * p.cout_moyen_pondere;
           }
         }
         return { ...l, ht, coutUnit };
@@ -370,9 +376,12 @@ export class EntrepriseDO extends DurableObject {
       }
       this.journaliser({
         acteur, action: v.aCredit ? 'vente.credit' : 'vente.enregistrer', entite: 'vente', entiteId: venteId,
-        apres: { totalTtc, modePaiement: v.aCredit ? null : v.modePaiement, aCredit: !!v.aCredit, nbLignes: calc.length },
+        apres: {
+          totalTtc, modePaiement: v.aCredit ? null : v.modePaiement, aCredit: !!v.aCredit,
+          nbLignes: calc.length, enSurvente,
+        },
       });
-      return { venteId, totalTtc, deja: false };
+      return { venteId, totalTtc, deja: false, enSurvente };
     });
   }
 

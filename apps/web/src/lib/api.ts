@@ -58,7 +58,7 @@ export const enregistrerVente = (
     lignes: LigneCaisse[]; modePaiement?: string | null; aCredit?: boolean;
     tiersId?: string | null; clientUuid: string;
   },
-) => api<{ venteId: string; totalTtc: number }>('/api/ventes', { method: 'POST', body: data, entrepriseId });
+) => api<{ venteId: string; totalTtc: number; enSurvente: boolean }>('/api/ventes', { method: 'POST', body: data, entrepriseId });
 
 export const payerVente = (entrepriseId: string, venteId: string, data: { montant: number; modePaiement: string }) =>
   api<{ statut: string; regle: number }>(`/api/ventes/${venteId}/payer`, { method: 'POST', body: data, entrepriseId });

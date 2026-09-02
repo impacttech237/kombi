@@ -49,7 +49,16 @@ export function Stock({ entreprise }: { entreprise: EntrepriseResume }) {
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600 }}>{p.nom}</div>
-                  <div className="muet" style={{ fontSize: 13 }}>{formaterFCFA(p.prix_vente)} · vente</div>
+                  <div className="muet" style={{ fontSize: 13 }}>
+                    {formaterFCFA(p.prix_vente)} · vente
+                    {p.cout_moyen_pondere > 0 && (
+                      <> · {formaterFCFA(p.cout_moyen_pondere)} CMP
+                        {p.prix_vente > 0 && (
+                          <> · marge {Math.round(((p.prix_vente - p.cout_moyen_pondere) / p.prix_vente) * 100)}%</>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div className="chiffre" style={{ fontWeight: 700 }}>{p.stock_actuel}</div>

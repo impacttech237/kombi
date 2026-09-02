@@ -232,25 +232,36 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
 
         {panier.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-            {panier.map((l, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-                background: 'var(--fond)', borderRadius: 12, padding: '10px 12px' }}>
-                <span style={{ flex: 1, minWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.designation}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <button onClick={() => changerQuantite(i, -1)} className="btn btn-clair" style={{ width: 28, height: 28, padding: 0 }}>−</button>
-                  <span className="chiffre" style={{ minWidth: 18, textAlign: 'center' }}>{l.quantite}</span>
-                  <button onClick={() => changerQuantite(i, 1)} className="btn btn-clair" style={{ width: 28, height: 28, padding: 0 }}>+</button>
+            {panier.map((l, i) => {
+              const produitLie = l.produitId ? produits.find((p) => p.id === l.produitId) : undefined;
+              const survente = produitLie ? l.quantite > produitLie.stock_actuel : false;
+              return (
+              <div key={i}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                  background: 'var(--fond)', borderRadius: 12, padding: '10px 12px' }}>
+                  <span style={{ flex: 1, minWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.designation}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button onClick={() => changerQuantite(i, -1)} className="btn btn-clair" style={{ width: 28, height: 28, padding: 0 }}>−</button>
+                    <span className="chiffre" style={{ minWidth: 18, textAlign: 'center' }}>{l.quantite}</span>
+                    <button onClick={() => changerQuantite(i, 1)} className="btn btn-clair" style={{ width: 28, height: 28, padding: 0 }}>+</button>
+                  </div>
+                  <input value={l.remisePct ?? ''} onChange={(e) => changerRemiseLigne(i, e.target.value.replace(/\D/g, ''))}
+                    placeholder="0%" title="Remise sur cette ligne"
+                    style={{ width: 44, padding: '4px 6px', border: '1px solid var(--bord)', borderRadius: 8, fontSize: 12, textAlign: 'center' }} />
+                  <span className="chiffre" style={{ fontWeight: 600, minWidth: 70, textAlign: 'right' }}>
+                    {formaterFCFA(l.quantite * prixApresRemises(l, remiseGlobalePct))}
+                  </span>
+                  <button onClick={() => retirer(i)} style={{ border: 0, background: 'transparent',
+                    color: 'var(--danger)' }} aria-label="retirer"><Icon name="baisse" size={18} /></button>
                 </div>
-                <input value={l.remisePct ?? ''} onChange={(e) => changerRemiseLigne(i, e.target.value.replace(/\D/g, ''))}
-                  placeholder="0%" title="Remise sur cette ligne"
-                  style={{ width: 44, padding: '4px 6px', border: '1px solid var(--bord)', borderRadius: 8, fontSize: 12, textAlign: 'center' }} />
-                <span className="chiffre" style={{ fontWeight: 600, minWidth: 70, textAlign: 'right' }}>
-                  {formaterFCFA(l.quantite * prixApresRemises(l, remiseGlobalePct))}
-                </span>
-                <button onClick={() => retirer(i)} style={{ border: 0, background: 'transparent',
-                  color: 'var(--danger)' }} aria-label="retirer"><Icon name="baisse" size={18} /></button>
+                {survente && (
+                  <p style={{ color: 'var(--danger)', fontSize: 12, margin: '2px 4px 0' }}>
+                    Stock affiché : {produitLie!.stock_actuel} — vente au-delà, la vente sera quand même enregistrée.
+                  </p>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
