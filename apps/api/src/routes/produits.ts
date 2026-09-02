@@ -1,7 +1,22 @@
 import { Hono } from 'hono';
-import { MODE_PAIEMENT, type ModePaiement } from '@kombi/shared';
+import { z } from 'zod';
+import { zModePaiement, zMontantPositif, zMontantPositifOuNul, messageErreurZod } from '@kombi/shared';
 import { requirePermission } from '../middleware/permission.js';
 import { stubEntreprise, type AppEnv } from '../types.js';
+
+const zProduit = z.object({
+  nom: z.string().trim().min(1, 'Nom requis').max(120),
+  sku: z.string().trim().max(64).nullish(),
+  prixVente: zMontantPositifOuNul,
+  seuilAlerte: zMontantPositifOuNul.optional().default(0),
+  unite: z.string().trim().max(32).nullish(),
+});
+
+const zEntreeStock = z.object({
+  quantite: zMontantPositif,
+  coutUnitaire: zMontantPositifOuNul,
+  modePaiement: zModePaiement,
+});
 
 export const produits = new Hono<AppEnv>();
 
@@ -13,32 +28,26 @@ produits.get('/', requirePermission('stock:read'), async (c) => {
 
 /** Crée un produit. */
 produits.post('/', requirePermission('stock:manage'), async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const nom = String(body?.nom ?? '').trim();
-  const prixVente = Math.floor(Number(body?.prixVente ?? 0));
-  if (!nom) return c.json({ erreur: 'Nom requis' }, 400);
-  if (!(prixVente >= 0)) return c.json({ erreur: 'Prix invalide' }, 400);
+  const corps = zProduit.safeParse(await c.req.json().catch(() => null));
+  if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);
+  const p = corps.data;
 
   const id = await stubEntreprise(c.env, c.get('entrepriseId')).creerProduit({
-    nom, sku: body?.sku ? String(body.sku).trim() : null, prixVente,
-    seuilAlerte: Math.floor(Number(body?.seuilAlerte ?? 0)),
-    unite: body?.unite ? String(body.unite) : undefined,
+    nom: p.nom, sku: p.sku ?? null, prixVente: p.prixVente, seuilAlerte: p.seuilAlerte,
+    unite: p.unite ?? undefined,
   });
   return c.json({ produitId: id }, 201);
 });
 
 /** Approvisionnement : entrée en stock (met à jour le CMP + écriture d'achat). */
 produits.post('/:id/entree', requirePermission('stock:manage'), async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const quantite = Math.floor(Number(body?.quantite ?? 0));
-  const coutUnitaire = Math.floor(Number(body?.coutUnitaire ?? 0));
-  const modePaiement = body?.modePaiement as ModePaiement;
-  if (quantite <= 0) return c.json({ erreur: 'Quantité invalide' }, 400);
-  if (coutUnitaire < 0) return c.json({ erreur: 'Coût invalide' }, 400);
-  if (!MODE_PAIEMENT.includes(modePaiement)) return c.json({ erreur: 'Mode de paiement invalide' }, 400);
+  const corps = zEntreeStock.safeParse(await c.req.json().catch(() => null));
+  if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);
+  const e = corps.data;
 
   const res = await stubEntreprise(c.env, c.get('entrepriseId')).entrerStock({
-    produitId: c.req.param('id'), quantite, coutUnitaire, modePaiement,
+    produitId: c.req.param('id'), quantite: e.quantite, coutUnitaire: e.coutUnitaire,
+    modePaiement: e.modePaiement,
   });
   return c.json(res);
 });

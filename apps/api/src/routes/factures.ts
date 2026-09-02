@@ -1,8 +1,21 @@
 import { Hono } from 'hono';
-import { MODE_PAIEMENT, type ModePaiement } from '@kombi/shared';
+import { z } from 'zod';
+import { zModePaiement, zMontantPositif, zLigneMontant, zDateISO, messageErreurZod } from '@kombi/shared';
 import { requirePermission } from '../middleware/permission.js';
 import { stubEntreprise, type AppEnv } from '../types.js';
 import { genererFacturePDF, type DonneesFacture } from '../pdf/facture-pdf.js';
+
+const zCreationFacture = z.object({
+  type: z.enum(['devis', 'facture']).default('facture'),
+  tiersId: z.string().min(1, 'Client requis'),
+  dateEcheance: zDateISO.nullish(),
+  lignes: z.array(zLigneMontant).min(1, 'Ajoutez au moins une ligne'),
+});
+
+const zPaiementFacture = z.object({
+  montant: zMontantPositif,
+  modePaiement: zModePaiement,
+});
 
 export const factures = new Hono<AppEnv>();
 
@@ -25,22 +38,15 @@ factures.get('/', requirePermission('facture:read'), async (c) => {
 });
 
 factures.post('/', requirePermission('facture:manage'), async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const type = body?.type === 'devis' ? 'devis' : 'facture';
-  const tiersId = String(body?.tiersId ?? '');
-  if (!tiersId) return c.json({ erreur: 'Client requis' }, 400);
-  const lignes = (Array.isArray(body?.lignes) ? body.lignes : [])
-    .map((l: Record<string, unknown>) => ({
-      designation: String(l.designation ?? 'Article').slice(0, 120),
-      quantite: Math.max(1, Math.floor(Number(l.quantite ?? 1))),
-      prixUnitaire: Math.max(0, Math.floor(Number(l.prixUnitaire ?? 0))),
-      tauxTva: Number(l.tauxTva ?? 0),
-    }))
-    .filter((l: { prixUnitaire: number }) => l.prixUnitaire > 0);
+  const corps = zCreationFacture.safeParse(await c.req.json().catch(() => null));
+  if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);
+  const f = corps.data;
+
+  const lignes = f.lignes.filter((l) => l.prixUnitaire > 0);
   if (!lignes.length) return c.json({ erreur: 'Ajoutez au moins une ligne' }, 400);
 
   const id = await stubEntreprise(c.env, c.get('entrepriseId')).creerFacture({
-    type, tiersId, dateEcheance: body?.dateEcheance ?? null, lignes,
+    type: f.type, tiersId: f.tiersId, dateEcheance: f.dateEcheance ?? null, lignes,
   });
   return c.json({ factureId: id }, 201);
 });
@@ -54,12 +60,10 @@ factures.post('/:id/emettre', requirePermission('facture:manage'), async (c) => 
 });
 
 factures.post('/:id/payer', requirePermission('facture:manage'), async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const montant = Math.floor(Number(body?.montant ?? 0));
-  const modePaiement = body?.modePaiement as ModePaiement;
-  if (montant <= 0) return c.json({ erreur: 'Montant invalide' }, 400);
-  if (!MODE_PAIEMENT.includes(modePaiement)) return c.json({ erreur: 'Mode de paiement invalide' }, 400);
-  const res = await stubEntreprise(c.env, c.get('entrepriseId')).payerFacture(c.req.param('id'), montant, modePaiement);
+  const corps = zPaiementFacture.safeParse(await c.req.json().catch(() => null));
+  if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);
+  const res = await stubEntreprise(c.env, c.get('entrepriseId'))
+    .payerFacture(c.req.param('id'), corps.data.montant, corps.data.modePaiement);
   return c.json(res);
 });
 

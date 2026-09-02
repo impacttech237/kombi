@@ -13,8 +13,13 @@ export type SystemeOhada = (typeof SYSTEME_OHADA)[number];
 export const NATURE_ACTIVITE = ['negoce', 'artisanal', 'service', 'liberale'] as const;
 export type NatureActivite = (typeof NATURE_ACTIVITE)[number];
 
-/** Rôles simples (mémo de cadrage §4). admin = accès total, gérant = gestion, caissier = ventes/caisse. */
-export const ROLE_MEMBRE = ['admin', 'gerant', 'caissier'] as const;
+/**
+ * Rôles (mémo de cadrage §4 + extension P0 #5) :
+ * admin = accès total · gérant = gestion quotidienne · caissier = ventes/caisse ·
+ * comptable = lecture seule des données financières (revue, sans opérer) ·
+ * employé = opérationnel hors caisse/finance (commandes, tiers).
+ */
+export const ROLE_MEMBRE = ['admin', 'gerant', 'caissier', 'comptable', 'employe'] as const;
 export type RoleMembre = (typeof ROLE_MEMBRE)[number];
 
 export const TYPE_COMMANDE = ['commande', 'mission'] as const;

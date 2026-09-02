@@ -8,6 +8,7 @@
 
 import { betterAuth } from 'better-auth';
 import { D1Dialect } from 'kysely-d1';
+import { origenesConfiance } from '../lib/origins.js';
 
 export interface AuthEnv {
   BETTER_AUTH_SECRET: string;
@@ -17,10 +18,7 @@ export interface AuthEnv {
 }
 
 export function creerAuth(db: D1Database, env: AuthEnv) {
-  const trusted = (env.BETTER_AUTH_TRUSTED_ORIGINS ?? 'http://localhost:5173,http://localhost:8787')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const trusted = origenesConfiance(env);
   return betterAuth({
     database: { dialect: new D1Dialect({ database: db }), type: 'sqlite' },
     secret: env.BETTER_AUTH_SECRET,

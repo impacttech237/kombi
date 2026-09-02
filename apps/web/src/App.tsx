@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { peut, type RoleMembre } from '@kombi/shared';
 import { useSession, signOut } from './lib/auth.js';
 import { listerEntreprises, type EntrepriseResume } from './lib/api.js';
 import { activerSyncAuto } from './offline/sync.js';
@@ -10,6 +11,7 @@ import { Stock } from './pages/Stock.js';
 import { Factures } from './pages/Factures.js';
 import { Commandes } from './pages/Commandes.js';
 import { Depenses } from './pages/Depenses.js';
+import { Equipe } from './pages/Equipe.js';
 import { Comptabilite } from './pages/Comptabilite.js';
 import { Ecran, TopBar, BottomNav } from './components/Layout.js';
 import { OfflineBanner } from './components/OfflineBanner.js';
@@ -57,9 +59,16 @@ function Espace() {
     location.reload();
   }
 
+  const role = active.role as RoleMembre;
+  const masquer = [
+    ...(active.secteur === 'service' ? ['stock'] : []),
+    ...(peut(role, 'compta:read') ? [] : ['compta']),
+    ...(peut(role, 'vente:create') ? [] : ['caisse']),
+    ...(peut(role, 'facture:read') ? [] : ['factures']),
+  ];
+
   return (
-    <Ecran nav={<BottomNav actif={onglet} onNaviguer={setOnglet}
-      masquer={active.secteur === 'service' ? ['stock'] : []} />}>
+    <Ecran nav={<BottomNav actif={onglet} onNaviguer={setOnglet} masquer={masquer} />}>
       <TopBar nomEntreprise={active.raison_sociale} onChangeEntreprise={() => setOnglet('dashboard')} />
       <div style={{ marginTop: 14 }}>
         <OfflineBanner />
@@ -69,9 +78,13 @@ function Espace() {
           : onglet === 'factures' ? <Factures entreprise={active} />
           : onglet === 'commandes' ? <Commandes entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'depenses' ? <Depenses entreprise={active} onRetour={() => setOnglet('dashboard')} />
+          : onglet === 'equipe' ? <Equipe entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : <Comptabilite entreprise={active} />}
       </div>
-      <div style={{ textAlign: 'center', marginTop: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 18 }}>
+        {peut(role, 'membre:manage') && (
+          <Bouton variante="ghost" onClick={() => setOnglet('equipe')}>Équipe</Bouton>
+        )}
         <Bouton variante="ghost" onClick={deconnexion}>Se déconnecter</Bouton>
       </div>
     </Ecran>

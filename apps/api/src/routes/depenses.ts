@@ -1,7 +1,20 @@
 import { Hono } from 'hono';
-import { MODE_PAIEMENT, CATEGORIES_DEPENSE, compteDeCategorie, type ModePaiement } from '@kombi/shared';
+import { z } from 'zod';
+import { CATEGORIES_DEPENSE, compteDeCategorie, zModePaiement, zMontantPositif, messageErreurZod } from '@kombi/shared';
 import { requirePermission } from '../middleware/permission.js';
 import { stubEntreprise, type AppEnv } from '../types.js';
+
+const zDepense = z.object({
+  categorie: z.enum(CATEGORIES_DEPENSE.map((c) => c.code) as [string, ...string[]], {
+    errorMap: () => ({ message: 'Catégorie de dépense invalide' }),
+  }),
+  libelle: z.string().trim().min(1, 'Libellé requis').max(160),
+  montant: zMontantPositif,
+  modePaiement: zModePaiement,
+  tiersId: z.string().nullish(),
+  recurrente: z.boolean().optional().default(false),
+  clientUuid: z.string().nullish(),
+});
 
 export const depenses = new Hono<AppEnv>();
 
@@ -14,23 +27,14 @@ depenses.get('/categories', requirePermission('depense:read'), (c) => c.json({ c
 
 /** Enregistre une dépense réglée → génère l'écriture comptable (débit charge / crédit trésorerie). */
 depenses.post('/', requirePermission('depense:manage'), async (c) => {
-  const body = await c.req.json().catch(() => null);
-
-  const modePaiement = body?.modePaiement as ModePaiement;
-  if (!MODE_PAIEMENT.includes(modePaiement)) return c.json({ erreur: 'Mode de paiement invalide' }, 400);
-
-  const categorie = String(body?.categorie ?? '');
-  if (!CATEGORIES_DEPENSE.some((cat) => cat.code === categorie)) {
-    return c.json({ erreur: 'Catégorie de dépense invalide' }, 400);
-  }
-  const libelle = String(body?.libelle ?? '').trim();
-  if (!libelle) return c.json({ erreur: 'Libellé requis' }, 400);
-  const montant = Math.floor(Number(body?.montant ?? 0));
-  if (montant <= 0) return c.json({ erreur: 'Montant invalide' }, 400);
+  const corps = zDepense.safeParse(await c.req.json().catch(() => null));
+  if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);
+  const d = corps.data;
 
   const res = await stubEntreprise(c.env, c.get('entrepriseId')).creerDepense({
-    categorie, compteNumero: compteDeCategorie(categorie), libelle, montant, modePaiement,
-    tiersId: body?.tiersId ?? null, recurrente: Boolean(body?.recurrente), clientUuid: body?.clientUuid ?? null,
+    categorie: d.categorie, compteNumero: compteDeCategorie(d.categorie), libelle: d.libelle,
+    montant: d.montant, modePaiement: d.modePaiement,
+    tiersId: d.tiersId ?? null, recurrente: d.recurrente, clientUuid: d.clientUuid ?? null,
   });
   return c.json(res, res.deja ? 200 : 201);
 });

@@ -20,4 +20,20 @@ describe('Autorisation par rôle', () => {
     expect(peut('gerant', 'membre:manage')).toBe(false);
     expect(peut('gerant', 'entreprise:manage')).toBe(false);
   });
+
+  it('comptable lit les données financières mais n\'opère rien', () => {
+    expect(peut('comptable', 'compta:read')).toBe(true);
+    expect(peut('comptable', 'depense:read')).toBe(true);
+    expect(peut('comptable', 'vente:create')).toBe(false);
+    expect(peut('comptable', 'depense:manage')).toBe(false);
+    expect(peut('comptable', 'stock:manage')).toBe(false);
+  });
+
+  it('employé suit les commandes et tiers, sans accès à la caisse ni aux finances', () => {
+    expect(peut('employe', 'commande:manage')).toBe(true);
+    expect(peut('employe', 'tiers:read')).toBe(true);
+    expect(peut('employe', 'vente:create')).toBe(false);
+    expect(peut('employe', 'depense:read')).toBe(false);
+    expect(peut('employe', 'compta:read')).toBe(false);
+  });
 });

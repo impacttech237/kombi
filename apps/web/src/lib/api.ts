@@ -36,6 +36,17 @@ export const creerEntreprise = (data: {
   raisonSociale: string; secteur: string; natureActivite: string; niu?: string;
 }) => api<{ entrepriseId: string }>('/api/entreprises', { method: 'POST', body: data });
 
+// ── Équipe (membres & rôles) ──
+export interface Membre { id: string; nom: string; email: string; role: string; }
+export const listerMembres = (entrepriseId: string) =>
+  api<{ membres: Membre[] }>(`/api/entreprises/${entrepriseId}/membres`).then((r) => r.membres);
+export const ajouterMembre = (entrepriseId: string, data: { email: string; role: string }) =>
+  api<{ ok: boolean }>(`/api/entreprises/${entrepriseId}/membres`, { method: 'POST', body: data });
+export const changerRoleMembre = (entrepriseId: string, membreId: string, role: string) =>
+  api<{ ok: boolean }>(`/api/entreprises/${entrepriseId}/membres/${membreId}/role`, { method: 'POST', body: { role } });
+export const retirerMembre = (entrepriseId: string, membreId: string) =>
+  api<{ ok: boolean }>(`/api/entreprises/${entrepriseId}/membres/${membreId}`, { method: 'DELETE' });
+
 export interface LigneCaisse { designation: string; quantite: number; prixUnitaire: number; produitId?: string; }
 
 export const enregistrerVente = (

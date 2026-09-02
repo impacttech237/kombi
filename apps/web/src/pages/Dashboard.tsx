@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { formaterFCFA, TERMINOLOGIE, type Secteur } from '@kombi/shared';
+import { formaterFCFA, TERMINOLOGIE, peut, type Secteur, type RoleMembre } from '@kombi/shared';
 import { api, statsJour, listerCommandes, listerDepenses, type EntrepriseResume } from '../lib/api.js';
 import { Bouton, CarteStat, Icon } from '../components/ui.js';
 
@@ -18,19 +18,26 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses }: {
   const [nbCmd, setNbCmd] = useState<number | null>(null);
   const [totalDepenses, setTotalDepenses] = useState<number | null>(null);
   const [erreur, setErreur] = useState('');
+  const role = entreprise.role as RoleMembre;
+  const voitCompta = peut(role, 'compta:read');
+  const voitDepenses = peut(role, 'depense:read');
 
   useEffect(() => {
-    api<IgsResp>('/api/fiscalite/igs', { entrepriseId: entreprise.id })
-      .then(setIgs)
-      .catch((e) => setErreur(e instanceof Error ? e.message : 'Erreur'));
+    if (voitCompta) {
+      api<IgsResp>('/api/fiscalite/igs', { entrepriseId: entreprise.id })
+        .then(setIgs)
+        .catch((e) => setErreur(e instanceof Error ? e.message : 'Erreur'));
+    }
     statsJour(entreprise.id).then(setJour).catch(() => {});
     listerCommandes(entreprise.id)
       .then((cs) => setNbCmd(cs.filter((c) => c.statut === 'en_attente' || c.statut === 'en_cours').length))
       .catch(() => {});
-    listerDepenses(entreprise.id)
-      .then((ds) => setTotalDepenses(ds.reduce((s, d) => s + d.montant, 0)))
-      .catch(() => {});
-  }, [entreprise.id]);
+    if (voitDepenses) {
+      listerDepenses(entreprise.id)
+        .then((ds) => setTotalDepenses(ds.reduce((s, d) => s + d.montant, 0)))
+        .catch(() => {});
+    }
+  }, [entreprise.id, voitCompta, voitDepenses]);
 
   return (
     <>
@@ -43,11 +50,15 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses }: {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <CarteStat titre="Chiffre d'affaires" icone="argent"
-          valeur={igs ? formaterFCFA(igs.caCumule) : '—'} delta="Exercice" positif />
-        <CarteStat titre="IGS estimé" icone="graph"
-          valeur={igs?.igs ? formaterFCFA(igs.igs.igsAnnuel) : (igs ? 'Régime réel' : '—')}
-          delta={igs?.igs ? `Classe ${igs.igs.classe}` : undefined} positif />
+        {voitCompta && (
+          <>
+            <CarteStat titre="Chiffre d'affaires" icone="argent"
+              valeur={igs ? formaterFCFA(igs.caCumule) : '—'} delta="Exercice" positif />
+            <CarteStat titre="IGS estimé" icone="graph"
+              valeur={igs?.igs ? formaterFCFA(igs.igs.igsAnnuel) : (igs ? 'Régime réel' : '—')}
+              delta={igs?.igs ? `Classe ${igs.igs.classe}` : undefined} positif />
+          </>
+        )}
         <CarteStat titre="Ventes du jour" icone="caisse"
           valeur={jour ? formaterFCFA(jour.totalJour) : '—'}
           delta={jour ? `${jour.nbVentes} vente${jour.nbVentes > 1 ? 's' : ''}` : undefined} positif />
@@ -55,10 +66,12 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses }: {
           <CarteStat titre={term.commandes[0]!.toUpperCase() + term.commandes.slice(1)} icone="boite"
             valeur={nbCmd !== null ? String(nbCmd) : '—'} delta="en cours" positif />
         </button>
-        <button onClick={onDepenses} style={{ all: 'unset', cursor: 'pointer' }}>
-          <CarteStat titre="Dépenses" icone="baisse"
-            valeur={totalDepenses !== null ? formaterFCFA(totalDepenses) : '—'} delta="Exercice" positif={false} />
-        </button>
+        {voitDepenses && (
+          <button onClick={onDepenses} style={{ all: 'unset', cursor: 'pointer' }}>
+            <CarteStat titre="Dépenses" icone="baisse"
+              valeur={totalDepenses !== null ? formaterFCFA(totalDepenses) : '—'} delta="Exercice" positif={false} />
+          </button>
+        )}
       </div>
 
       <div className="carte" style={{ marginTop: 14 }}>

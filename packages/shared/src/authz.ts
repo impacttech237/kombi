@@ -56,10 +56,31 @@ const PERMS_CAISSIER: readonly Permission[] = [
   'facture:read',
 ];
 
+/** Lecture seule des données financières — revue sans opérer (audit, préparation de la déclaration). */
+const PERMS_COMPTABLE: readonly Permission[] = [
+  'vente:read',
+  'stock:read',
+  'facture:read',
+  'tiers:read',
+  'commande:read',
+  'depense:read',
+  'compta:read',
+];
+
+/** Opérationnel hors caisse/finance : suivi des commandes et des tiers, pas d'argent. */
+const PERMS_EMPLOYE: readonly Permission[] = [
+  'tiers:read',
+  'commande:read',
+  'commande:manage',
+  'facture:read',
+];
+
 export const PERMISSIONS_PAR_ROLE: Record<RoleMembre, ReadonlySet<Permission>> = {
   admin: TOUTES,
   gerant: new Set(PERMS_GERANT),
   caissier: new Set(PERMS_CAISSIER),
+  comptable: new Set(PERMS_COMPTABLE),
+  employe: new Set(PERMS_EMPLOYE),
 };
 
 /** Le rôle a-t-il la permission demandée ? */

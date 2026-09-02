@@ -180,8 +180,8 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 4. ⬜ 🔴 **Crédit clients & dettes fournisseurs** : vente/achat à crédit (411/401) + écrans « on me doit » / « ce que je dois ».
 5. ⬜ 🔴 **Chaîne TVA** : enregistrer 4452 (déductible), imputer services en 4432, contraindre le taux 0/19,25 %, interdire TVA aux IGS, supprimer le double comptage vente↔facture.
 6. ⬜ 🟠 **Caisse comptoir** : quantités (bug figé à 1), remises, client rattaché, paiement partiel + rendu-monnaie, reçu client.
-7. ⬜ 🔴 **Sécurité** : restreindre le CORS aux origines de confiance + rate-limiting auth + validation Zod (montants/taux/dates).
-8. ⬜ 🟠 **Employés & rôles** : écran d'invitation caissier, nav filtrée par rôle, protéger la route fiscalité (`requirePermission('compta:read')`).
+7. ✅ **Sécurité** : CORS restreint aux origines de confiance + rate-limiting auth (D1, 10 req/min/IP) + validation Zod (montants/taux/dates) sur ventes/dépenses/produits/factures.
+8. ✅ **Employés & rôles** : rôles comptable/employé, écran Équipe (ajout par email + changement de rôle + retrait), nav filtrée par rôle, route fiscalité protégée (`requirePermission('compta:read')`).
 9. ⬜ 🟠 **États & livres légaux** : livre-journal, grand-livre, balance + bilan/CR au format SYSCOHADA à rubriques + SIG ; date d'opération réelle (locale, pas UTC).
 10. ⬜ 🔴 **Décisions structurantes** : versioning du schéma DO, collecte d'agrégats (back-office + plans d'abonnement), mécanisme d'avoir, vrai tableau de bord (retirer le faux graphe).
 
@@ -240,8 +240,11 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ⬜ 🟡 Marge, meilleures ventes, dépenses du jour, alertes stock
 
 ## Multi-utilisateurs & rôles
-- ⬜ 🟠 Écran d'invitation d'employés + changement de rôle
-- ⬜ 🟠 Navigation filtrée par permissions + protéger la route fiscalité
+- ✅ Écran Équipe : ajout d'un membre par email + changement de rôle + retrait (`membre:manage`,
+  admin uniquement) ; rôles étendus `comptable` (lecture financière seule) et `employe`
+  (commandes/tiers, hors caisse/finance).
+- ✅ Navigation filtrée par permissions (onglets Compta/Caisse/Factures masqués si non autorisés)
+  + route fiscalité protégée (`requirePermission('compta:read')`).
 - ⬜ 🟡 Journal d'audit consultable (exigence NFR)
 
 ## Comptabilité — écritures
@@ -270,10 +273,11 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ⬜ 🟡 Clôture d'exercice + à-nouveaux
 
 ## Technique · archi · sécurité
-- ⬜ 🔴 CORS restreint aux origines de confiance
+- ✅ CORS restreint aux origines de confiance (`BETTER_AUTH_TRUSTED_ORIGINS`, même liste que better-auth)
 - ✅ 🔴 Versioning du schéma des Durable Objects (`MIGRATIONS_DO` + `schema_version`, appliqué au boot)
-- ⬜ 🟠 Validation Zod sur tous les bodies
-- ⬜ 🟠 Rate limiting (auth au minimum)
+- ✅ Validation Zod sur les bodies à risque financier (ventes, dépenses, produits, factures) —
+  montants entiers positifs, taux TVA bornés 0–1, dates ISO strictes
+- ✅ Rate limiting sur `/api/auth/*` (POST) : 10 req/min/IP, fenêtre fixe en D1
 - ⬜ 🟠 Offline étendu (factures/tiers/produits/encaissements) + cache lecture
 - ⬜ 🟡 Cache session (rôle + entreprises) pour soulager D1 à l'échelle
 - ⬜ 🟡 Icônes PWA (installabilité)

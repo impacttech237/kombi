@@ -5,6 +5,9 @@ import { creerAuth } from './auth/auth.js';
 import { authentifier } from './middleware/auth.js';
 import { tenant } from './middleware/tenant.js';
 import { requireModule } from './middleware/module.js';
+import { requirePermission } from './middleware/permission.js';
+import { limiterDebit } from './middleware/rate-limit.js';
+import { origenesConfiance } from './lib/origins.js';
 import { entreprises } from './routes/entreprises.js';
 import { fiscalite } from './routes/fiscalite.js';
 import { ventes } from './routes/ventes.js';
@@ -17,12 +20,22 @@ import { etats } from './routes/etats.js';
 
 const app = new Hono<AppEnv>();
 
-app.use('*', cors({ origin: (o) => o, credentials: true }));
+// CORS restreint aux origines de confiance (même liste que better-auth) — jamais de reflet ouvert.
+app.use('*', (c, next) =>
+  cors({
+    origin: (origin) => (origenesConfiance(c.env).includes(origin) ? origin : undefined),
+    credentials: true,
+  })(c, next),
+);
 
 app.get('/health', (c) => c.json({ ok: true, service: 'kombi-api' }));
 
 // ── Auth better-auth : /api/auth/** (inscription, connexion, session…) ──
-app.on(['GET', 'POST'], '/api/auth/*', (c) => creerAuth(c.env.DB, c.env).handler(c.req.raw));
+// Les mutations (connexion, inscription…) sont freinées contre le brute-force ; les lectures
+// (session courante) ne le sont pas, car appelées à chaque chargement de page.
+app.on('POST', '/api/auth/*', limiterDebit({ limite: 10, fenetreSecondes: 60, prefixe: 'auth' }),
+  (c) => creerAuth(c.env.DB, c.env).handler(c.req.raw));
+app.on('GET', '/api/auth/*', (c) => creerAuth(c.env.DB, c.env).handler(c.req.raw));
 
 // ── Entreprises : authentifié, sans tenant (on crée/liste avant de choisir) ──
 app.use('/api/entreprises/*', authentifier);
@@ -30,7 +43,7 @@ app.use('/api/entreprises', authentifier);
 app.route('/api/entreprises', entreprises);
 
 // ── Routes métier : authentifié + tenant (isolation multi-entreprises) ──
-app.use('/api/fiscalite/*', authentifier, tenant);
+app.use('/api/fiscalite/*', authentifier, tenant, requirePermission('compta:read'));
 app.route('/api/fiscalite', fiscalite);
 
 app.use('/api/ventes/*', authentifier, tenant, requireModule('ventes'));

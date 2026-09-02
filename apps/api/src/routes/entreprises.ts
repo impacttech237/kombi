@@ -1,5 +1,9 @@
 import { Hono } from 'hono';
-import { SECTEURS, NATURE_ACTIVITE, type Secteur, type NatureActivite } from '@kombi/shared';
+import { z } from 'zod';
+import {
+  SECTEURS, NATURE_ACTIVITE, ROLE_MEMBRE, peut, messageErreurZod,
+  type Secteur, type NatureActivite, type RoleMembre,
+} from '@kombi/shared';
 import { planCreationEntreprise } from '../services/onboarding.js';
 import { stubEntreprise, type AppEnv } from '../types.js';
 
@@ -63,4 +67,102 @@ entreprises.get('/:id/modules', async (c) => {
 
   const modules = await stubEntreprise(c.env, id).modules();
   return c.json({ modules });
+});
+
+// ══════════════ Équipe : membres de l'entreprise (rôles) ══════════════
+
+async function rolePourEntreprise(
+  db: D1Database, utilisateurId: string, entrepriseId: string,
+): Promise<RoleMembre | null> {
+  const row = await db.prepare(
+    'SELECT role FROM membre_entreprise WHERE utilisateur_id = ? AND entreprise_id = ?',
+  )
+    .bind(utilisateurId, entrepriseId)
+    .first<{ role: RoleMembre }>();
+  return row?.role ?? null;
+}
+
+/** Liste les membres de l'entreprise et leur rôle — réservé à qui gère l'équipe (admin). */
+entreprises.get('/:id/membres', async (c) => {
+  const entrepriseId = c.req.param('id');
+  const role = await rolePourEntreprise(c.env.DB, c.get('utilisateurId'), entrepriseId);
+  if (!role || !peut(role, 'membre:manage')) return c.json({ erreur: 'Accès refusé' }, 403);
+
+  const res = await c.env.DB.prepare(
+    `SELECT m.id, m.role, u.nom, u.email
+       FROM membre_entreprise m JOIN utilisateur u ON u.id = m.utilisateur_id
+      WHERE m.entreprise_id = ?
+      ORDER BY u.nom`,
+  )
+    .bind(entrepriseId)
+    .all();
+  return c.json({ membres: res.results ?? [] });
+});
+
+const zAjoutMembre = z.object({
+  email: z.string().trim().email('Email invalide'),
+  role: z.enum(ROLE_MEMBRE),
+});
+
+/**
+ * Ajoute un membre par email. L'utilisateur doit déjà avoir un compte Kombi (pas d'invitation
+ * par email en MVP — voir docs/parcours.md, backlog « écran d'invitation »).
+ */
+entreprises.post('/:id/membres', async (c) => {
+  const entrepriseId = c.req.param('id');
+  const role = await rolePourEntreprise(c.env.DB, c.get('utilisateurId'), entrepriseId);
+  if (!role || !peut(role, 'membre:manage')) return c.json({ erreur: 'Accès refusé' }, 403);
+
+  const corps = zAjoutMembre.safeParse(await c.req.json().catch(() => null));
+  if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);
+
+  const utilisateur = await c.env.DB.prepare('SELECT id FROM utilisateur WHERE email = ?')
+    .bind(corps.data.email)
+    .first<{ id: string }>();
+  if (!utilisateur) {
+    return c.json({ erreur: "Cette personne doit d'abord créer un compte Kombi avec cet email" }, 404);
+  }
+
+  const dejaMembre = await c.env.DB.prepare(
+    'SELECT 1 FROM membre_entreprise WHERE utilisateur_id = ? AND entreprise_id = ?',
+  )
+    .bind(utilisateur.id, entrepriseId)
+    .first();
+  if (dejaMembre) return c.json({ erreur: 'Cette personne fait déjà partie de l\'équipe' }, 409);
+
+  await c.env.DB.prepare(
+    'INSERT INTO membre_entreprise (id, utilisateur_id, entreprise_id, role) VALUES (?, ?, ?, ?)',
+  )
+    .bind(crypto.randomUUID(), utilisateur.id, entrepriseId, corps.data.role)
+    .run();
+  return c.json({ ok: true }, 201);
+});
+
+const zRole = z.object({ role: z.enum(ROLE_MEMBRE) });
+
+/** Change le rôle d'un membre. */
+entreprises.post('/:id/membres/:membreId/role', async (c) => {
+  const entrepriseId = c.req.param('id');
+  const role = await rolePourEntreprise(c.env.DB, c.get('utilisateurId'), entrepriseId);
+  if (!role || !peut(role, 'membre:manage')) return c.json({ erreur: 'Accès refusé' }, 403);
+
+  const corps = zRole.safeParse(await c.req.json().catch(() => null));
+  if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);
+
+  await c.env.DB.prepare('UPDATE membre_entreprise SET role = ? WHERE id = ? AND entreprise_id = ?')
+    .bind(corps.data.role, c.req.param('membreId'), entrepriseId)
+    .run();
+  return c.json({ ok: true });
+});
+
+/** Retire un membre de l'équipe. */
+entreprises.delete('/:id/membres/:membreId', async (c) => {
+  const entrepriseId = c.req.param('id');
+  const role = await rolePourEntreprise(c.env.DB, c.get('utilisateurId'), entrepriseId);
+  if (!role || !peut(role, 'membre:manage')) return c.json({ erreur: 'Accès refusé' }, 403);
+
+  await c.env.DB.prepare('DELETE FROM membre_entreprise WHERE id = ? AND entreprise_id = ?')
+    .bind(c.req.param('membreId'), entrepriseId)
+    .run();
+  return c.json({ ok: true });
 });
