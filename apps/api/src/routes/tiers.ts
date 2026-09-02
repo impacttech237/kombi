@@ -17,6 +17,15 @@ tiers.post('/', requirePermission('tiers:manage'), async (c) => {
   const id = await stubEntreprise(c.env, c.get('entrepriseId')).creerTiers({
     type, nom, niu: body?.niu ? String(body.niu).trim() : undefined,
     telephone: body?.telephone ? String(body.telephone).trim() : undefined,
+    email: body?.email ? String(body.email).trim() : undefined,
+    adresse: body?.adresse ? String(body.adresse).trim() : undefined,
   });
   return c.json({ tiersId: id }, 201);
+});
+
+/** Fiche tiers : coordonnées, solde et historique des opérations. */
+tiers.get('/:id', requirePermission('tiers:read'), async (c) => {
+  const fiche = await stubEntreprise(c.env, c.get('entrepriseId')).getTiersDetail(c.req.param('id'));
+  if (!fiche) return c.json({ erreur: 'Tiers introuvable' }, 404);
+  return c.json(fiche);
 });

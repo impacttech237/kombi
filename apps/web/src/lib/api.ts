@@ -133,13 +133,28 @@ export const payerAchat = (entrepriseId: string, achatId: string, data: { montan
   api<{ statut: string; regle: number }>(`/api/achats/${achatId}/payer`, { method: 'POST', body: data, entrepriseId });
 
 // ── Tiers ──
-export interface Tiers { id: string; nom: string; type: string; niu: string | null; telephone: string | null; }
+export interface Tiers {
+  id: string; nom: string; type: string; niu: string | null; telephone: string | null;
+  email: string | null; adresse: string | null;
+}
 export const listerTiers = (entrepriseId: string) =>
   api<{ tiers: Tiers[] }>('/api/tiers', { entrepriseId }).then((r) => r.tiers);
 export const creerTiers = (
   entrepriseId: string,
-  data: { nom: string; telephone?: string; niu?: string; type?: 'client' | 'fournisseur' },
+  data: {
+    nom: string; telephone?: string; niu?: string; email?: string; adresse?: string;
+    type?: 'client' | 'fournisseur';
+  },
 ) => api<{ tiersId: string }>('/api/tiers', { method: 'POST', body: { ...data, type: data.type ?? 'client' }, entrepriseId });
+
+export interface TiersDetail extends Tiers {
+  ventes: { id: string; date: string; total_ttc: number; statut: string }[];
+  factures: { id: string; numero: string | null; type: string; total_ttc: number; statut: string; date_emission: string | null }[];
+  achats: { id: string; date: string; total_ttc: number; statut: string }[];
+  soldeDu: number; soldeAPayer: number;
+}
+export const getTiersDetail = (entrepriseId: string, id: string) =>
+  api<TiersDetail>(`/api/tiers/${id}`, { entrepriseId });
 
 // ── Factures ──
 export interface FactureResume {

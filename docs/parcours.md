@@ -304,9 +304,15 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ⬜ ⚪ Vrai brouillon modifiable (émission non forcée)
 
 ## Tiers (clients / fournisseurs)
-- ⬜ 🟠 Écran Tiers dédié (liste/recherche globale) — `creerTiers` accepte maintenant `type`
+- ✅ Écran Tiers dédié (liste/recherche globale) : `Tiers.tsx`, accessible depuis le bouton
+  « Clients & fournisseurs » (gérant/admin/comptable via `tiers:read`) — recherche par nom,
+  création (nom, type, téléphone, NIU, email, adresse — `creerTiers` acceptait déjà `type`,
+  email/adresse manquaient à la création).
   (fournisseur créable depuis le formulaire d'approvisionnement), mais pas d'écran de gestion à part
-- ⬜ 🟠 Fiche tiers (historique, solde dû, NIU, téléphone)
+- ✅ Fiche tiers (historique, solde dû, NIU, téléphone) : `getTiersDetail()` calcule le solde
+  (« nous doit » = ventes à crédit + factures impayées non soldées par avoir ; « on lui doit » =
+  achats à crédit) et liste les 20 dernières ventes/factures/achats liés — accessible en cliquant
+  un tiers dans l'écran dédié.
 
 ## Pilotage / tableau de bord
 - ✅ Retirer le faux graphe (`FauxGraphe`) → vraies données (`tendance7Jours`, 7 derniers jours)

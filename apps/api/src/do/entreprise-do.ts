@@ -216,17 +216,59 @@ export class EntrepriseDO extends DurableObject {
   }
 
   // ── Tiers (exemple d'accès aux données de l'entreprise) ──
-  async creerTiers(t: { type: string; nom: string; niu?: string; telephone?: string }): Promise<string> {
+  async creerTiers(t: {
+    type: string; nom: string; niu?: string; telephone?: string; email?: string; adresse?: string;
+  }): Promise<string> {
     const id = uid();
     this.sql.exec(
-      'INSERT INTO tiers (id, type, nom, niu, telephone) VALUES (?, ?, ?, ?, ?)',
-      id, t.type, t.nom, t.niu ?? null, t.telephone ?? null,
+      'INSERT INTO tiers (id, type, nom, niu, telephone, email, adresse) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      id, t.type, t.nom, t.niu ?? null, t.telephone ?? null, t.email ?? null, t.adresse ?? null,
     );
     return id;
   }
 
   async listerTiers(): Promise<Record<string, unknown>[]> {
     return this.sql.exec('SELECT * FROM tiers ORDER BY nom').toArray() as never;
+  }
+
+  /** Fiche tiers : coordonnées, solde (dû par lui / à lui) et historique des opérations liées. */
+  async getTiersDetail(tiersId: string): Promise<Record<string, unknown> | null> {
+    const t = this.sql.exec('SELECT * FROM tiers WHERE id = ?', tiersId).toArray()[0] as Record<string, unknown> | undefined;
+    if (!t) return null;
+
+    const ventes = this.sql.exec(
+      `SELECT id, date, total_ttc, statut FROM vente WHERE tiers_id = ? ORDER BY date DESC LIMIT 20`, tiersId,
+    ).toArray();
+    const factures = this.sql.exec(
+      `SELECT id, numero, type, total_ttc, statut, date_emission FROM facture WHERE tiers_id = ? ORDER BY created_at DESC LIMIT 20`,
+      tiersId,
+    ).toArray();
+    const achats = this.sql.exec(
+      `SELECT id, date, total_ttc, statut FROM achat_fournisseur WHERE tiers_id = ? ORDER BY date DESC LIMIT 20`, tiersId,
+    ).toArray();
+
+    const soldeVentesCredit = this.sql.exec(
+      `SELECT COALESCE(SUM(total_ttc - COALESCE((SELECT SUM(montant) FROM paiement_vente WHERE vente_id = v.id), 0)), 0) AS solde
+         FROM vente v WHERE v.tiers_id = ? AND v.statut IN ('a_credit', 'payee_partiellement')`,
+      tiersId,
+    ).toArray()[0] as { solde: number };
+    const soldeFacturesDues = this.sql.exec(
+      `SELECT COALESCE(SUM(total_ttc - COALESCE((SELECT SUM(montant) FROM paiement_facture WHERE facture_id = f.id), 0)), 0) AS solde
+         FROM facture f WHERE f.tiers_id = ? AND f.type = 'facture' AND f.statut IN ('envoyee', 'payee_partiellement', 'en_retard')
+           AND NOT EXISTS (SELECT 1 FROM facture av WHERE av.avoir_de_id = f.id)`,
+      tiersId,
+    ).toArray()[0] as { solde: number };
+    const soldeDettes = this.sql.exec(
+      `SELECT COALESCE(SUM(total_ttc - COALESCE((SELECT SUM(montant) FROM paiement_achat WHERE achat_id = a.id), 0)), 0) AS solde
+         FROM achat_fournisseur a WHERE a.tiers_id = ? AND a.statut IN ('a_credit', 'payee_partiellement')`,
+      tiersId,
+    ).toArray()[0] as { solde: number };
+
+    return {
+      ...t, ventes, factures, achats,
+      soldeDu: soldeVentesCredit.solde + soldeFacturesDues.solde, // ce que ce client nous doit
+      soldeAPayer: soldeDettes.solde, // ce qu'on doit à ce fournisseur
+    };
   }
 
   private compteId(numero: string): string {

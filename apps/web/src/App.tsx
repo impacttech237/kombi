@@ -15,6 +15,7 @@ import { Depenses } from './pages/Depenses.js';
 import { Creances } from './pages/Creances.js';
 import { Dettes } from './pages/Dettes.js';
 import { Equipe } from './pages/Equipe.js';
+import { Tiers } from './pages/Tiers.js';
 import { Comptabilite } from './pages/Comptabilite.js';
 import { Ecran, TopBar, BottomNav } from './components/Layout.js';
 import { OfflineBanner } from './components/OfflineBanner.js';
@@ -85,9 +86,13 @@ function Espace() {
           : onglet === 'creances' ? <Creances entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'dettes' ? <Dettes entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'equipe' ? <Equipe entreprise={active} onRetour={() => setOnglet('dashboard')} />
+          : onglet === 'tiers' ? <Tiers entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : <Comptabilite entreprise={active} />}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
+        {peut(role, 'tiers:read') && (
+          <Bouton variante="ghost" onClick={() => setOnglet('tiers')}>Clients &amp; fournisseurs</Bouton>
+        )}
         {peut(role, 'membre:manage') && (
           <Bouton variante="ghost" onClick={() => setOnglet('equipe')}>Équipe</Bouton>
         )}
