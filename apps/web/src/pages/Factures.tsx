@@ -11,6 +11,12 @@ const STATUT_LIBELLE: Record<string, string> = {
   payee: 'Payée', en_retard: 'En retard', annulee: 'Annulée',
 };
 
+const MODES_PAIEMENT = [
+  { value: 'especes', label: 'Espèces' }, { value: 'mtn_momo', label: 'MTN MoMo' },
+  { value: 'orange_money', label: 'Orange Money' }, { value: 'virement', label: 'Virement' },
+  { value: 'cheque', label: 'Chèque' },
+];
+
 export function Factures({ entreprise }: { entreprise: EntrepriseResume }) {
   const [liste, setListe] = useState<FactureResume[] | null>(null);
   const [vue, setVue] = useState<'liste' | 'nouveau'>('liste');
@@ -46,6 +52,7 @@ function CarteFacture({ entreprise, f, onMaj }: { entreprise: EntrepriseResume; 
   const [ouvert, setOuvert] = useState(false);
   const [payMode, setPayMode] = useState(false);
   const [montant, setMontant] = useState(String(f.total_ttc));
+  const [modePaiement, setModePaiement] = useState('especes');
   const paye = f.statut === 'payee';
 
   async function voirPdf() {
@@ -56,7 +63,7 @@ function CarteFacture({ entreprise, f, onMaj }: { entreprise: EntrepriseResume; 
     window.open(`https://wa.me/?text=${txt}`, '_blank');
   }
   async function payer() {
-    await payerFacture(entreprise.id, f.id, { montant: Number(montant), modePaiement: 'especes' });
+    await payerFacture(entreprise.id, f.id, { montant: Number(montant), modePaiement });
     setPayMode(false); onMaj();
   }
   async function avoir() {
@@ -94,9 +101,13 @@ function CarteFacture({ entreprise, f, onMaj }: { entreprise: EntrepriseResume; 
             <button className="btn btn-clair" onClick={avoir} style={{ color: 'var(--danger)' }}>Avoir</button>
           )}
           {payMode && (
-            <div style={{ display: 'flex', gap: 8, width: '100%', marginTop: 6 }}>
+            <div style={{ display: 'flex', gap: 8, width: '100%', marginTop: 6, flexWrap: 'wrap' }}>
               <input value={montant} inputMode="numeric" onChange={(e) => setMontant(e.target.value.replace(/\D/g, ''))}
-                style={{ flex: 1, padding: '10px 12px', border: '1px solid var(--bord)', borderRadius: 12 }} />
+                style={{ width: 110, padding: '10px 12px', border: '1px solid var(--bord)', borderRadius: 12 }} />
+              <select value={modePaiement} onChange={(e) => setModePaiement(e.target.value)}
+                style={{ padding: '10px 12px', border: '1px solid var(--bord)', borderRadius: 12 }}>
+                {MODES_PAIEMENT.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
               <Bouton onClick={payer}>Valider</Bouton>
             </div>
           )}

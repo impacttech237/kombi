@@ -226,7 +226,11 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   vente (l'avoir sur facture prend le relais) ou si déjà annulée. Écran « Historique des ventes »
   (`Ventes.tsx`, accessible depuis la Caisse) : bouton Annuler visible seulement pour les rôles
   ayant `vente:annuler` (admin/gérant — pas caissier, contrôle anti-fraude volontaire).
-- ⬜ 🟡 Fond de caisse + clôture journalière (Z de caisse)
+- ⬜ 🟡 Fond de caisse + clôture journalière (Z de caisse) — **Phase V2 dans la spec elle-même**
+  (§9.3), reporté délibérément : nécessite une nouvelle table `session_caisse` + notion de session
+  active par caissier rattachée à chaque vente, changement de modèle plus large qu'un correctif
+  ponctuel. Les autres items 🟡 du même palier (retours, encaissement facture, etc.) sont MVP+/V1
+  et traités en priorité.
 - ⬜ ⚪ Sélecteur d'article : recherche + code-barres
 
 ## Créances & dettes
@@ -241,7 +245,9 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   côté API, seul le frontend forçait `client`).
 - ✅ Statut « en retard » calculé à la volée sur les factures (`date_echeance < aujourd'hui`),
   sans tâche planifiée — un vrai statut persisté + relances restent à faire (🟡).
-- ⬜ 🟡 Encaissement facture bridé (montant/mode en dur) → partiel + mode réel
+- ✅ Encaissement facture : sélecteur de mode de paiement réel (`Factures.tsx` envoyait toujours
+  `modePaiement: 'especes'` en dur alors que `payerFacture()` côté API acceptait déjà n'importe
+  quel mode et un montant partiel) — le montant partiel était déjà possible, seul le mode manquait.
 - ⬜ 🟡 Lettrage 411/401 + rapprochement bancaire
 
 ## Dépenses & achats
