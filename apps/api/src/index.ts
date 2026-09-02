@@ -12,6 +12,7 @@ import { entreprises } from './routes/entreprises.js';
 import { fiscalite } from './routes/fiscalite.js';
 import { ventes } from './routes/ventes.js';
 import { produits } from './routes/produits.js';
+import { achats } from './routes/achats.js';
 import { tiers } from './routes/tiers.js';
 import { factures } from './routes/factures.js';
 import { commandes } from './routes/commandes.js';
@@ -51,6 +52,9 @@ app.route('/api/ventes', ventes);
 
 app.use('/api/produits/*', authentifier, tenant, requireModule('stock'));
 app.route('/api/produits', produits);
+
+app.use('/api/achats/*', authentifier, tenant, requireModule('achats'));
+app.route('/api/achats', achats);
 
 app.use('/api/tiers/*', authentifier, tenant, requireModule('tiers'));
 app.route('/api/tiers', tiers);

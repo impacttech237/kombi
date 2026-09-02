@@ -451,15 +451,19 @@ export class EntrepriseDO extends DurableObject {
   /**
    * Approvisionnement (achat) : entrée en stock au coût d'achat, recalcul du CMP (inventaire
    * permanent), mouvement de stock, et écriture comptable (601/trésorerie + 311/6031).
+   * À crédit (`aCredit`) : crédite la dette fournisseur (401) au lieu de la trésorerie — exactement
+   * symétrique de la vente à crédit — et enregistre un `achat_fournisseur` pour le suivi des dettes.
    */
   async entrerStock(a: {
-    produitId: string; quantite: number; coutUnitaire: number; modePaiement: string;
-    tiersId?: string | null;
+    produitId: string; quantite: number; coutUnitaire: number; modePaiement?: string | null;
+    aCredit?: boolean; tiersId?: string | null;
   }, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }): Promise<{ nouveauStock: number; nouveauCmp: number }> {
     const prod = this.sql
       .exec('SELECT stock_actuel, cout_moyen_pondere FROM produit WHERE id = ?', a.produitId)
       .toArray()[0] as { stock_actuel: number; cout_moyen_pondere: number } | undefined;
     if (!prod) throw new Error('Produit introuvable');
+    if (a.aCredit && !a.tiersId) throw new Error('Un fournisseur est requis pour un achat à crédit');
+    if (!a.aCredit && !a.modePaiement) throw new Error('Mode de paiement requis');
 
     return this.ctx.storage.transactionSync(() => {
       const etat = cmpApresEntree(
@@ -478,16 +482,19 @@ export class EntrepriseDO extends DurableObject {
         uid(), a.produitId, a.quantite, Math.floor(a.coutUnitaire),
       );
 
-      // Écriture : achat (601) réglé par trésorerie + entrée en stock (311/6031).
+      // Écriture : achat (601) réglé par trésorerie, ou par dette fournisseur (401) si à crédit,
+      // + entrée en stock (311/6031).
       const exerciceId = this.exerciceOuvert();
       const ecritureId = uid();
-      const tresorerie = genererRecette({
-        montantHT: 0, modePaiement: a.modePaiement as never, compteProduit: '701', libelle: 'x',
-      }).lignes[0]!.compteNumero; // récupère le compte de trésorerie du mode
+      const compteContrepartie = a.aCredit
+        ? '401'
+        : genererRecette({
+            montantHT: 0, modePaiement: a.modePaiement as never, compteProduit: '701', libelle: 'x',
+          }).lignes[0]!.compteNumero; // récupère le compte de trésorerie du mode
       this.sql.exec(
         `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, source, statut)
          VALUES (?, ?, date('now'), 'Approvisionnement', ?, 'achat', 'brouillon')`,
-        ecritureId, exerciceId, a.modePaiement,
+        ecritureId, exerciceId, a.aCredit ? null : a.modePaiement,
       );
       const l = (numero: string, sens: string, m: number) =>
         this.sql.exec(
@@ -495,18 +502,87 @@ export class EntrepriseDO extends DurableObject {
           uid(), ecritureId, this.compteId(numero), sens, m,
         );
       l('601', 'debit', montant);
-      l(tresorerie, 'credit', montant);
+      l(compteContrepartie, 'credit', montant);
       l('311', 'debit', montant);
       l('6031', 'credit', montant);
       this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
 
+      // Achat à crédit : trace la dette fournisseur (montant dû, suivi dans « ce que je dois »).
+      let achatId: string | null = null;
+      if (a.aCredit) {
+        achatId = uid();
+        this.sql.exec(
+          `INSERT INTO achat_fournisseur (id, exercice_id, tiers_id, total_ht, total_ttc, statut, ecriture_id)
+           VALUES (?, ?, ?, ?, ?, 'a_credit', ?)`,
+          achatId, exerciceId, a.tiersId, montant, montant, ecritureId,
+        );
+        this.sql.exec(
+          `INSERT INTO ligne_achat (id, achat_id, produit_id, quantite, cout_unitaire, montant_ht)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          uid(), achatId, a.produitId, a.quantite, Math.floor(a.coutUnitaire), montant,
+        );
+      }
+
       this.journaliser({
-        acteur, action: 'stock.entree', entite: 'produit', entiteId: a.produitId,
+        acteur, action: a.aCredit ? 'achat.credit' : 'stock.entree', entite: 'produit', entiteId: a.produitId,
         avant: { stock: prod.stock_actuel, cmp: prod.cout_moyen_pondere },
-        apres: { stock: etat.quantite, cmp: etat.cmp, quantiteEntree: a.quantite },
+        apres: { stock: etat.quantite, cmp: etat.cmp, quantiteEntree: a.quantite, aCredit: !!a.aCredit, achatId },
       });
       return { nouveauStock: etat.quantite, nouveauCmp: etat.cmp };
     });
+  }
+
+  /** Encaisse (total ou partiel) une dette fournisseur : dette 401 débitée / trésorerie créditée. */
+  async payerAchat(
+    achatId: string, montant: number, modePaiement: string,
+    acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
+  ): Promise<{ statut: string; regle: number }> {
+    const achat = this.sql.exec('SELECT total_ttc, exercice_id, statut FROM achat_fournisseur WHERE id = ?', achatId)
+      .toArray()[0] as { total_ttc: number; exercice_id: string; statut: string } | undefined;
+    if (!achat) throw new Error('Achat introuvable');
+    if (achat.statut !== 'a_credit' && achat.statut !== 'payee_partiellement') {
+      throw new Error('Cet achat n\'attend pas de règlement');
+    }
+
+    return this.ctx.storage.transactionSync(() => {
+      const dejaRow = this.sql.exec('SELECT COALESCE(SUM(montant),0) AS p FROM paiement_achat WHERE achat_id = ?', achatId)
+        .toArray()[0] as { p: number };
+      const regle = dejaRow.p + montant;
+
+      const ecritureId = uid();
+      this.sql.exec(
+        `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, mode_paiement, source, statut)
+         VALUES (?, ?, date('now'), 'Règlement fournisseur', ?, 'achat', 'brouillon')`,
+        ecritureId, achat.exercice_id, modePaiement,
+      );
+      const tresorerie = genererRecette({ montantHT: 0, modePaiement: modePaiement as never, compteProduit: '701', libelle: 'x' }).lignes[0]!.compteNumero;
+      this.sql.exec('INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?,?,?,?,?)', uid(), ecritureId, this.compteId('401'), 'debit', montant);
+      this.sql.exec('INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?,?,?,?,?)', uid(), ecritureId, this.compteId(tresorerie), 'credit', montant);
+      this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
+
+      this.sql.exec(
+        "INSERT INTO paiement_achat (id, achat_id, date, montant, mode_paiement, ecriture_id) VALUES (?, ?, date('now'), ?, ?, ?)",
+        uid(), achatId, montant, modePaiement, ecritureId,
+      );
+      const statut = regle >= achat.total_ttc ? 'regle' : 'payee_partiellement';
+      this.sql.exec('UPDATE achat_fournisseur SET statut = ? WHERE id = ?', statut, achatId);
+      this.journaliser({
+        acteur, action: 'achat.payer', entite: 'achat_fournisseur', entiteId: achatId,
+        apres: { montant, modePaiement, statut, regle },
+      });
+      return { statut, regle };
+    });
+  }
+
+  /** Dettes fournisseurs non soldées (« ce que je dois »). */
+  async listerDettesFournisseurs(): Promise<Record<string, unknown>[]> {
+    return this.sql.exec(
+      `SELECT a.id, a.date, a.total_ttc, a.statut, t.nom AS tiers_nom,
+              COALESCE((SELECT SUM(montant) FROM paiement_achat WHERE achat_id = a.id), 0) AS regle
+         FROM achat_fournisseur a LEFT JOIN tiers t ON t.id = a.tiers_id
+        WHERE a.statut IN ('a_credit', 'payee_partiellement')
+        ORDER BY a.date ASC`,
+    ).toArray() as never;
   }
 
   // ══════════════ Facturation & devis ══════════════
@@ -642,6 +718,25 @@ export class EntrepriseDO extends DurableObject {
          FROM facture f LEFT JOIN tiers t ON t.id = f.tiers_id
         ORDER BY f.created_at DESC`,
     ).toArray() as never;
+  }
+
+  /**
+   * Factures émises non soldées (« on me doit »), avec montant dû et retard calculés à la volée
+   * (pas de statut `en_retard` persisté ni de tâche planifiée — dérivé de `date_echeance`).
+   */
+  async listerFacturesImpayees(): Promise<Record<string, unknown>[]> {
+    const rows = this.sql.exec(
+      `SELECT f.id, f.numero, f.total_ttc, f.date_emission, f.date_echeance, t.nom AS tiers_nom,
+              COALESCE((SELECT SUM(montant) FROM paiement_facture WHERE facture_id = f.id), 0) AS regle
+         FROM facture f LEFT JOIN tiers t ON t.id = f.tiers_id
+        WHERE f.type = 'facture' AND f.statut IN ('envoyee', 'payee_partiellement', 'en_retard')
+        ORDER BY f.date_echeance ASC`,
+    ).toArray() as { id: string; numero: string; total_ttc: number; date_emission: string | null; date_echeance: string | null; tiers_nom: string | null; regle: number }[];
+    const aujourdhui = this.dateCourante();
+    return rows.map((r) => ({
+      ...r, montantDu: r.total_ttc - r.regle,
+      enRetard: r.date_echeance !== null && r.date_echeance < aujourdhui,
+    }));
   }
 
   async getFacture(factureId: string): Promise<Record<string, unknown> | null> {

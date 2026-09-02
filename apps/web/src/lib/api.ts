@@ -89,17 +89,28 @@ export const creerProduit = (
 export const approvisionner = (
   entrepriseId: string,
   produitId: string,
-  data: { quantite: number; coutUnitaire: number; modePaiement: string },
+  data: { quantite: number; coutUnitaire: number; modePaiement?: string | null; aCredit?: boolean; tiersId?: string | null },
 ) => api<{ nouveauStock: number; nouveauCmp: number }>(
   `/api/produits/${produitId}/entree`, { method: 'POST', body: data, entrepriseId },
 );
+
+// ── Dettes fournisseurs (« ce que je dois ») ──
+export interface DetteFournisseur {
+  id: string; date: string; total_ttc: number; statut: string; tiers_nom: string | null; regle: number;
+}
+export const listerDettesFournisseurs = (entrepriseId: string) =>
+  api<{ dettes: DetteFournisseur[] }>('/api/achats/dettes', { entrepriseId }).then((r) => r.dettes);
+export const payerAchat = (entrepriseId: string, achatId: string, data: { montant: number; modePaiement: string }) =>
+  api<{ statut: string; regle: number }>(`/api/achats/${achatId}/payer`, { method: 'POST', body: data, entrepriseId });
 
 // ── Tiers ──
 export interface Tiers { id: string; nom: string; type: string; niu: string | null; telephone: string | null; }
 export const listerTiers = (entrepriseId: string) =>
   api<{ tiers: Tiers[] }>('/api/tiers', { entrepriseId }).then((r) => r.tiers);
-export const creerTiers = (entrepriseId: string, data: { nom: string; telephone?: string; niu?: string }) =>
-  api<{ tiersId: string }>('/api/tiers', { method: 'POST', body: { ...data, type: 'client' }, entrepriseId });
+export const creerTiers = (
+  entrepriseId: string,
+  data: { nom: string; telephone?: string; niu?: string; type?: 'client' | 'fournisseur' },
+) => api<{ tiersId: string }>('/api/tiers', { method: 'POST', body: { ...data, type: data.type ?? 'client' }, entrepriseId });
 
 // ── Factures ──
 export interface FactureResume {
@@ -110,6 +121,13 @@ export interface LigneFacture { designation: string; quantite: number; prixUnita
 
 export const listerFactures = (entrepriseId: string) =>
   api<{ factures: FactureResume[] }>('/api/factures', { entrepriseId }).then((r) => r.factures);
+
+export interface FactureImpayee {
+  id: string; numero: string; total_ttc: number; date_echeance: string | null;
+  tiers_nom: string | null; regle: number; montantDu: number; enRetard: boolean;
+}
+export const listerFacturesImpayees = (entrepriseId: string) =>
+  api<{ factures: FactureImpayee[] }>('/api/factures/impayees', { entrepriseId }).then((r) => r.factures);
 export const creerFacture = (
   entrepriseId: string,
   data: { type: string; tiersId: string; lignes: LigneFacture[]; dateEcheance?: string },

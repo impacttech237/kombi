@@ -295,6 +295,38 @@ CREATE TABLE IF NOT EXISTS paiement_vente (
 )
 `;
 
+/**
+ * v6 — Dettes fournisseurs (401) : achat à crédit + remboursement échelonné, symétrique de la
+ * vente à crédit (v5). `achat_fournisseur` existait déjà (v1) mais n'était jamais peuplée
+ * (l'approvisionnement réglait toujours comptant) et son statut ne portait pas la notion de dette.
+ */
+const MIGRATION_V6_DETTES = `
+CREATE TABLE achat_fournisseur_v6 (
+  id TEXT PRIMARY KEY, exercice_id TEXT NOT NULL REFERENCES exercice(id),
+  tiers_id TEXT NOT NULL REFERENCES tiers(id), date TEXT NOT NULL DEFAULT (datetime('now')),
+  total_ht INTEGER NOT NULL DEFAULT 0, total_tva INTEGER NOT NULL DEFAULT 0, total_ttc INTEGER NOT NULL DEFAULT 0,
+  statut TEXT NOT NULL DEFAULT 'regle' CHECK (statut IN ('regle','a_credit','payee_partiellement','annule')),
+  ecriture_id TEXT REFERENCES ecriture(id), client_uuid TEXT UNIQUE, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+--##
+INSERT INTO achat_fournisseur_v6 (id, exercice_id, tiers_id, date, total_ht, total_tva, total_ttc,
+                                  statut, ecriture_id, client_uuid, created_at)
+  SELECT id, exercice_id, tiers_id, date, total_ht, total_tva, total_ttc,
+         CASE statut WHEN 'annule' THEN 'annule' ELSE 'regle' END, ecriture_id, client_uuid, created_at
+    FROM achat_fournisseur
+--##
+DROP TABLE achat_fournisseur
+--##
+ALTER TABLE achat_fournisseur_v6 RENAME TO achat_fournisseur
+--##
+CREATE TABLE IF NOT EXISTS paiement_achat (
+  id TEXT PRIMARY KEY, achat_id TEXT NOT NULL REFERENCES achat_fournisseur(id) ON DELETE CASCADE,
+  date TEXT NOT NULL DEFAULT (datetime('now')), montant INTEGER NOT NULL CHECK (montant > 0),
+  mode_paiement TEXT NOT NULL CHECK (mode_paiement IN ('especes','mtn_momo','orange_money','virement','cheque','autre')),
+  ecriture_id TEXT REFERENCES ecriture(id)
+)
+`;
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -338,7 +370,9 @@ export const MIGRATIONS_DO: readonly MigrationDO[] = [
   { v: 4, statements: statementsDe(MIGRATION_V4_AUDIT_LOG) },
   // v5 — corrections caisse : vente à crédit (411) + remboursement échelonné.
   { v: 5, statements: statementsDe(MIGRATION_V5_CAISSE) },
-  // v6… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v6 — dettes fournisseurs (401) : achat à crédit + remboursement échelonné.
+  { v: 6, statements: statementsDe(MIGRATION_V6_DETTES) },
+  // v7… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */

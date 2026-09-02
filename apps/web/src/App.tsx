@@ -11,6 +11,8 @@ import { Stock } from './pages/Stock.js';
 import { Factures } from './pages/Factures.js';
 import { Commandes } from './pages/Commandes.js';
 import { Depenses } from './pages/Depenses.js';
+import { Creances } from './pages/Creances.js';
+import { Dettes } from './pages/Dettes.js';
 import { Equipe } from './pages/Equipe.js';
 import { Comptabilite } from './pages/Comptabilite.js';
 import { Ecran, TopBar, BottomNav } from './components/Layout.js';
@@ -72,12 +74,14 @@ function Espace() {
       <TopBar nomEntreprise={active.raison_sociale} onChangeEntreprise={() => setOnglet('dashboard')} />
       <div style={{ marginTop: 14 }}>
         <OfflineBanner />
-        {onglet === 'dashboard' ? <Dashboard entreprise={active} onCaisse={() => setOnglet('caisse')} onCommandes={() => setOnglet('commandes')} onDepenses={() => setOnglet('depenses')} />
+        {onglet === 'dashboard' ? <Dashboard entreprise={active} onCaisse={() => setOnglet('caisse')} onCommandes={() => setOnglet('commandes')} onDepenses={() => setOnglet('depenses')} onCreances={() => setOnglet('creances')} onDettes={() => setOnglet('dettes')} />
           : onglet === 'caisse' ? <Caisse entreprise={active} />
           : onglet === 'stock' ? <Stock entreprise={active} />
           : onglet === 'factures' ? <Factures entreprise={active} />
           : onglet === 'commandes' ? <Commandes entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'depenses' ? <Depenses entreprise={active} onRetour={() => setOnglet('dashboard')} />
+          : onglet === 'creances' ? <Creances entreprise={active} onRetour={() => setOnglet('dashboard')} />
+          : onglet === 'dettes' ? <Dettes entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'equipe' ? <Equipe entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : <Comptabilite entreprise={active} />}
       </div>

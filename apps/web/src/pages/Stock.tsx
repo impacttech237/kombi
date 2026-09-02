@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA } from '@kombi/shared';
 import {
-  listerProduits, creerProduit, approvisionner, type EntrepriseResume, type Produit,
+  listerProduits, creerProduit, approvisionner, listerTiers, creerTiers,
+  type EntrepriseResume, type Produit, type Tiers,
 } from '../lib/api.js';
 import { Bouton, Champ, Icon } from '../components/ui.js';
 
@@ -101,15 +102,34 @@ function Approvisionner({ entreprise, produit, onFait }: {
   const [qte, setQte] = useState('');
   const [cout, setCout] = useState(String(produit.cout_moyen_pondere || ''));
   const [mode, setMode] = useState('especes');
+  const [aCredit, setACredit] = useState(false);
+  const [fournisseurs, setFournisseurs] = useState<Tiers[]>([]);
+  const [fournisseurId, setFournisseurId] = useState('');
+  const [nouveauFournisseur, setNouveauFournisseur] = useState('');
   const [charge, setCharge] = useState(false);
+  const [erreur, setErreur] = useState('');
+
+  useEffect(() => {
+    listerTiers(entreprise.id)
+      .then((ts) => setFournisseurs(ts.filter((t) => t.type === 'fournisseur' || t.type === 'les_deux')))
+      .catch(() => {});
+  }, [entreprise.id]);
 
   async function valider() {
-    setCharge(true);
+    setErreur(''); setCharge(true);
     try {
+      let tiersId = fournisseurId;
+      if (aCredit && !tiersId && nouveauFournisseur.trim()) {
+        tiersId = (await creerTiers(entreprise.id, { nom: nouveauFournisseur.trim(), type: 'fournisseur' })).tiersId;
+      }
+      if (aCredit && !tiersId) { setErreur('Choisissez ou créez un fournisseur'); setCharge(false); return; }
       await approvisionner(entreprise.id, produit.id, {
-        quantite: Number(qte), coutUnitaire: Number(cout), modePaiement: mode,
+        quantite: Number(qte), coutUnitaire: Number(cout),
+        modePaiement: aCredit ? null : mode, aCredit, tiersId: aCredit ? tiersId : null,
       });
       onFait();
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Erreur');
     } finally { setCharge(false); }
   }
   return (
@@ -121,10 +141,30 @@ function Approvisionner({ entreprise, produit, onFait }: {
           onChange={(v) => setQte(v.replace(/\D/g, ''))} placeholder="10" />
         <Champ label="Coût d'achat unitaire (FCFA)" type="text" value={cout}
           onChange={(v) => setCout(v.replace(/\D/g, ''))} placeholder="3000" />
-        <Champ label="Payé par" value={mode} onChange={setMode} options={[
-          { value: 'especes', label: 'Espèces' }, { value: 'mtn_momo', label: 'MTN MoMo' },
-          { value: 'orange_money', label: 'Orange Money' }, { value: 'virement', label: 'Virement' },
-        ]} />
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 14px', fontSize: 14 }}>
+          <input type="checkbox" checked={aCredit} onChange={(e) => setACredit(e.target.checked)} />
+          Achat à crédit (fournisseur payé plus tard)
+        </label>
+
+        {aCredit ? (
+          <>
+            {fournisseurs.length > 0 && (
+              <Champ label="Fournisseur" value={fournisseurId} onChange={(v) => { setFournisseurId(v); setNouveauFournisseur(''); }}
+                options={[{ value: '', label: 'Nouveau fournisseur…' }, ...fournisseurs.map((f) => ({ value: f.id, label: f.nom }))]} />
+            )}
+            {!fournisseurId && (
+              <Champ label="Nom du fournisseur" value={nouveauFournisseur} onChange={setNouveauFournisseur} placeholder="Ex. Grossiste Awa" />
+            )}
+          </>
+        ) : (
+          <Champ label="Payé par" value={mode} onChange={setMode} options={[
+            { value: 'especes', label: 'Espèces' }, { value: 'mtn_momo', label: 'MTN MoMo' },
+            { value: 'orange_money', label: 'Orange Money' }, { value: 'virement', label: 'Virement' },
+          ]} />
+        )}
+
+        {erreur && <p style={{ color: 'var(--danger)', fontSize: 14 }}>{erreur}</p>}
         <div style={{ display: 'flex', gap: 10 }}>
           <Bouton variante="clair" onClick={onFait}>Annuler</Bouton>
           <Bouton bloc onClick={valider} disabled={charge || !qte || !cout}>

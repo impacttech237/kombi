@@ -15,8 +15,11 @@ const zProduit = z.object({
 const zEntreeStock = z.object({
   quantite: zMontantPositif,
   coutUnitaire: zMontantPositifOuNul,
-  modePaiement: zModePaiement,
-});
+  modePaiement: zModePaiement.nullish(),
+  aCredit: z.boolean().optional().default(false),
+  tiersId: z.string().nullish(),
+}).refine((v) => v.aCredit || v.modePaiement, { message: 'Mode de paiement requis (ou achat à crédit)' })
+  .refine((v) => !v.aCredit || v.tiersId, { message: 'Un fournisseur est requis pour un achat à crédit' });
 
 export const produits = new Hono<AppEnv>();
 
@@ -47,7 +50,7 @@ produits.post('/:id/entree', requirePermission('stock:manage'), async (c) => {
 
   const res = await stubEntreprise(c.env, c.get('entrepriseId')).entrerStock({
     produitId: c.req.param('id'), quantite: e.quantite, coutUnitaire: e.coutUnitaire,
-    modePaiement: e.modePaiement,
+    modePaiement: e.modePaiement ?? null, aCredit: e.aCredit, tiersId: e.tiersId ?? null,
   }, { utilisateurId: c.get('utilisateurId'), role: c.get('role') });
   return c.json(res);
 });

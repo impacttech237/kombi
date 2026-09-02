@@ -37,6 +37,12 @@ factures.get('/', requirePermission('facture:read'), async (c) => {
   return c.json({ factures: liste });
 });
 
+/** Factures émises non soldées (« on me doit »), avec montant dû et retard calculés. */
+factures.get('/impayees', requirePermission('facture:read'), async (c) => {
+  const liste = await stubEntreprise(c.env, c.get('entrepriseId')).listerFacturesImpayees();
+  return c.json({ factures: liste });
+});
+
 factures.post('/', requirePermission('facture:manage'), async (c) => {
   const corps = zCreationFacture.safeParse(await c.req.json().catch(() => null));
   if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);

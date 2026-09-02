@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA, TERMINOLOGIE, peut, type Secteur, type RoleMembre } from '@kombi/shared';
-import { api, statsJour, listerCommandes, listerDepenses, type EntrepriseResume } from '../lib/api.js';
+import {
+  api, statsJour, listerCommandes, listerDepenses, listerVentesACredit, listerFacturesImpayees,
+  listerDettesFournisseurs, type EntrepriseResume,
+} from '../lib/api.js';
 import { Bouton, CarteStat, Icon } from '../components/ui.js';
 
 interface IgsResp {
@@ -9,18 +12,23 @@ interface IgsResp {
   igs: { igsAnnuel: number; classe: number } | null;
 }
 
-export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses }: {
+export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses, onCreances, onDettes }: {
   entreprise: EntrepriseResume; onCaisse?: () => void; onCommandes?: () => void; onDepenses?: () => void;
+  onCreances?: () => void; onDettes?: () => void;
 }) {
   const term = TERMINOLOGIE[(entreprise.secteur as Secteur) ?? 'commerce'];
   const [igs, setIgs] = useState<IgsResp | null>(null);
   const [jour, setJour] = useState<{ nbVentes: number; totalJour: number } | null>(null);
   const [nbCmd, setNbCmd] = useState<number | null>(null);
   const [totalDepenses, setTotalDepenses] = useState<number | null>(null);
+  const [totalCreances, setTotalCreances] = useState<number | null>(null);
+  const [totalDettes, setTotalDettes] = useState<number | null>(null);
   const [erreur, setErreur] = useState('');
   const role = entreprise.role as RoleMembre;
   const voitCompta = peut(role, 'compta:read');
   const voitDepenses = peut(role, 'depense:read');
+  const voitCreances = peut(role, 'vente:read') || peut(role, 'facture:read');
+  const voitDettes = peut(role, 'achat:read');
 
   useEffect(() => {
     if (voitCompta) {
@@ -37,7 +45,23 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses }: {
         .then((ds) => setTotalDepenses(ds.reduce((s, d) => s + d.montant, 0)))
         .catch(() => {});
     }
-  }, [entreprise.id, voitCompta, voitDepenses]);
+    if (voitCreances) {
+      Promise.all([
+        listerVentesACredit(entreprise.id).catch(() => []),
+        listerFacturesImpayees(entreprise.id).catch(() => []),
+      ]).then(([ventes, factures]) => {
+        setTotalCreances(
+          ventes.reduce((s, v) => s + (v.total_ttc - v.regle), 0)
+          + factures.reduce((s, f) => s + f.montantDu, 0),
+        );
+      });
+    }
+    if (voitDettes) {
+      listerDettesFournisseurs(entreprise.id)
+        .then((ds) => setTotalDettes(ds.reduce((s, d) => s + (d.total_ttc - d.regle), 0)))
+        .catch(() => {});
+    }
+  }, [entreprise.id, voitCompta, voitDepenses, voitCreances, voitDettes]);
 
   return (
     <>
@@ -70,6 +94,18 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses }: {
           <button onClick={onDepenses} style={{ all: 'unset', cursor: 'pointer' }}>
             <CarteStat titre="Dépenses" icone="baisse"
               valeur={totalDepenses !== null ? formaterFCFA(totalDepenses) : '—'} delta="Exercice" positif={false} />
+          </button>
+        )}
+        {voitCreances && (
+          <button onClick={onCreances} style={{ all: 'unset', cursor: 'pointer' }}>
+            <CarteStat titre="On me doit" icone="argent"
+              valeur={totalCreances !== null ? formaterFCFA(totalCreances) : '—'} delta="à encaisser" positif />
+          </button>
+        )}
+        {voitDettes && (
+          <button onClick={onDettes} style={{ all: 'unset', cursor: 'pointer' }}>
+            <CarteStat titre="Ce que je dois" icone="boite"
+              valeur={totalDettes !== null ? formaterFCFA(totalDettes) : '—'} delta="à régler" positif={false} />
           </button>
         )}
       </div>

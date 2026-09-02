@@ -177,7 +177,7 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 1. 🚧 🔴 **Cycle de vie des exercices** : ✅ création auto de l’exercice N+1 + sélection par date (fait) ; ⬜ clôture / report à nouveau (P1).
 2. ✅ **Écritures immuables + atomiques** : triggers interdisant UPDATE/DELETE d'une écriture validée + transactions (`ctx.storage.transactionSync`) autour de chaque opération.
 3. ✅ **Écran Dépenses** (charges 60-67) : loyer, transport, salaires, élec, frais bancaires → résultat sincère + charges pour les prestataires.
-4. ⬜ 🔴 **Crédit clients & dettes fournisseurs** : vente/achat à crédit (411/401) + écrans « on me doit » / « ce que je dois ».
+4. ✅ **Crédit clients & dettes fournisseurs** : vente/achat à crédit (411/401) + écrans « on me doit » / « ce que je dois », factures impayées avec retard calculé.
 5. ⬜ 🔴 **Chaîne TVA** : enregistrer 4452 (déductible), imputer services en 4432, contraindre le taux 0/19,25 %, interdire TVA aux IGS, supprimer le double comptage vente↔facture.
 6. ✅ **Caisse comptoir** : quantités éditables, vente à crédit (411), client rattaché, montant
    reçu + rendu-monnaie, reçu imprimable + partage WhatsApp, remise ligne/globale, TVA conditionnée
@@ -207,9 +207,17 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ⬜ ⚪ Sélecteur d'article : recherche + code-barres
 
 ## Créances & dettes
-- ⬜ 🔴 Écran créances clients (« on me doit », par ancienneté)
-- ⬜ 🔴 Dettes fournisseurs (401) + écran « ce que je dois »
-- ⬜ 🟠 Échéancier + statut « en retard » auto + relance
+- ✅ Écran créances clients (« on me doit ») : `Creances.tsx` unifie ventes à crédit
+  (`listerVentesACredit`) et factures impayées (`listerFacturesImpayees`), encaissement partiel/total
+  inline (réutilise `payerVente`/`payerFacture`).
+- ✅ Dettes fournisseurs (401) + écran « ce que je dois » (`Dettes.tsx`) : `entrerStock({ aCredit,
+  tiersId })` crédite 401 au lieu de la trésorerie (symétrique de la vente à crédit), peuple enfin
+  `achat_fournisseur`/`ligne_achat` (schéma présent depuis v1 mais jamais rempli jusqu'ici) ;
+  `payerAchat()` règle total/partiel ; formulaire d'approvisionnement (`Stock.tsx`) propose
+  désormais « à crédit » + sélection/création de fournisseur (`creerTiers` acceptait déjà un type
+  côté API, seul le frontend forçait `client`).
+- ✅ Statut « en retard » calculé à la volée sur les factures (`date_echeance < aujourd'hui`),
+  sans tâche planifiée — un vrai statut persisté + relances restent à faire (🟡).
 - ⬜ 🟡 Encaissement facture bridé (montant/mode en dur) → partiel + mode réel
 - ⬜ 🟡 Lettrage 411/401 + rapprochement bancaire
 
@@ -239,13 +247,14 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ⬜ ⚪ Vrai brouillon modifiable (émission non forcée)
 
 ## Tiers (clients / fournisseurs)
-- ⬜ 🟠 Écran Tiers dédié + création de fournisseur (`creerTiers` force `type:'client'`)
+- ⬜ 🟠 Écran Tiers dédié (liste/recherche globale) — `creerTiers` accepte maintenant `type`
+  (fournisseur créable depuis le formulaire d'approvisionnement), mais pas d'écran de gestion à part
 - ⬜ 🟠 Fiche tiers (historique, solde dû, NIU, téléphone)
 
 ## Pilotage / tableau de bord
 - ⬜ 🟠 Retirer le faux graphe (`FauxGraphe`) → vraies données
 - ⬜ 🟠 Trésorerie du jour (espèces + MoMo/Orange)
-- ⬜ 🟠 Impayés / créances en tête d'accueil
+- ✅ Impayés / créances en tête d'accueil : cartes « On me doit » / « Ce que je dois » sur le dashboard
 - ⬜ 🟡 Marge, meilleures ventes, dépenses du jour, alertes stock
 
 ## Multi-utilisateurs & rôles

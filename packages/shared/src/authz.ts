@@ -15,6 +15,7 @@ export const PERMISSIONS = [
   'stock:manage',
   'stock:read',
   'achat:manage',
+  'achat:read',
   'facture:manage',
   'facture:read',
   'tiers:manage',
@@ -37,6 +38,7 @@ const PERMS_GERANT: readonly Permission[] = [
   'stock:manage',
   'stock:read',
   'achat:manage',
+  'achat:read',
   'facture:manage',
   'facture:read',
   'tiers:manage',
@@ -61,6 +63,7 @@ const PERMS_CAISSIER: readonly Permission[] = [
 const PERMS_COMPTABLE: readonly Permission[] = [
   'vente:read',
   'stock:read',
+  'achat:read',
   'facture:read',
   'tiers:read',
   'commande:read',
