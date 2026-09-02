@@ -1387,6 +1387,26 @@ export class EntrepriseDO extends DurableObject {
     return row.total;
   }
 
+  /**
+   * Trésorerie du jour : mouvement net (débit − crédit) de chaque compte de trésorerie pour les
+   * écritures datées aujourd'hui — capture toute opération qui la mouvemente (vente comptant,
+   * dépense, encaissement de créance, règlement de dette), quelle que soit sa source, puisqu'elles
+   * postent toutes sur ces mêmes comptes (`COMPTE_TRESORERIE_PAR_MODE`).
+   */
+  async tresorerieDuJour(): Promise<{ especes: number; mtnMomo: number; orangeMoney: number; banque: number }> {
+    const aujourdhui = this.dateCourante();
+    const net = (numero: string) => {
+      const row = this.sql.exec(
+        `SELECT COALESCE(SUM(CASE WHEN l.sens = 'debit' THEN l.montant ELSE -l.montant END), 0) AS net
+           FROM ligne_ecriture l JOIN compte_comptable c ON c.id = l.compte_id JOIN ecriture e ON e.id = l.ecriture_id
+          WHERE c.numero = ? AND e.statut = 'validee' AND date(e.date_operation) = ?`,
+        numero, aujourdhui,
+      ).toArray()[0] as { net: number };
+      return row.net;
+    };
+    return { especes: net('571'), mtnMomo: net('552'), orangeMoney: net('553'), banque: net('521') };
+  }
+
   /** Journal général : liste des écritures validées, la plus récente en premier. */
   async listerEcritures(): Promise<Record<string, unknown>[]> {
     return this.sql.exec(

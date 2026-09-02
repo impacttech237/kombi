@@ -3,7 +3,7 @@ import { formaterFCFA, TERMINOLOGIE, peut, type Secteur, type RoleMembre } from 
 import {
   api, statsJour, tendance7Jours, listerCommandes, listerDepenses, listerVentesACredit,
   listerFacturesImpayees, listerDettesFournisseurs, margeCumulee, meilleuresVentes, depensesDuJour,
-  listerProduits, type EntrepriseResume, type MeilleureVente,
+  tresorerieDuJour, listerProduits, type EntrepriseResume, type MeilleureVente, type TresorerieJour,
 } from '../lib/api.js';
 import { Bouton, CarteStat, Icon } from '../components/ui.js';
 
@@ -29,6 +29,7 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses, onCre
   const [top, setTop] = useState<MeilleureVente[] | null>(null);
   const [depensesJour, setDepensesJour] = useState<number | null>(null);
   const [alertesStock, setAlertesStock] = useState<number | null>(null);
+  const [tresorerie, setTresorerie] = useState<TresorerieJour | null>(null);
   const [erreur, setErreur] = useState('');
   const role = entreprise.role as RoleMembre;
   const voitCompta = peut(role, 'compta:read');
@@ -71,6 +72,7 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses, onCre
         .catch(() => {});
     }
     if (voitCompta) margeCumulee(entreprise.id).then(setMarge).catch(() => {});
+    if (voitCompta) tresorerieDuJour(entreprise.id).then(setTresorerie).catch(() => {});
     if (voitVentes) meilleuresVentes(entreprise.id).then(setTop).catch(() => {});
     if (voitDepenses) depensesDuJour(entreprise.id).then(setDepensesJour).catch(() => {});
     if (voitStock) {
@@ -152,6 +154,27 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses, onCre
             </p>
           ) : <GrapheTendance donnees={tendance} />}
       </div>
+
+      {voitCompta && tresorerie !== null && (
+        tresorerie.especes !== 0 || tresorerie.mtnMomo !== 0 || tresorerie.orangeMoney !== 0 || tresorerie.banque !== 0
+      ) && (
+        <div className="carte" style={{ marginTop: 14 }}>
+          <strong style={{ display: 'block', marginBottom: 10 }}>Trésorerie du jour</strong>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[
+              ['Espèces', tresorerie.especes], ['MTN MoMo', tresorerie.mtnMomo],
+              ['Orange Money', tresorerie.orangeMoney], ['Banque', tresorerie.banque],
+            ].filter(([, v]) => (v as number) !== 0).map(([label, v]) => (
+              <div key={label as string} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
+                <span className="muet">{label}</span>
+                <span className="chiffre" style={{ fontWeight: 600, color: (v as number) >= 0 ? 'var(--vert)' : 'var(--danger)' }}>
+                  {formaterFCFA(v as number)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {voitVentes && top !== null && top.length > 0 && (
         <div className="carte" style={{ marginTop: 14 }}>

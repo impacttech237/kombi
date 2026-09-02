@@ -316,7 +316,11 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 
 ## Pilotage / tableau de bord
 - ✅ Retirer le faux graphe (`FauxGraphe`) → vraies données (`tendance7Jours`, 7 derniers jours)
-- ⬜ 🟠 Trésorerie du jour (espèces + MoMo/Orange)
+- ✅ Trésorerie du jour (espèces + MoMo/Orange) : `tresorerieDuJour()` agrège le mouvement net
+  (débit − crédit) des comptes 571/552/553/521 pour les écritures datées aujourd'hui — capture
+  toute opération qui les mouvemente (vente comptant, dépense, encaissement de créance, règlement
+  de dette), peu importe sa source, puisqu'elles postent toutes sur ces mêmes comptes. Carte
+  dashboard réservée à `compta:read`.
 - ✅ Impayés / créances en tête d'accueil : cartes « On me doit » / « Ce que je dois » sur le dashboard
 - ✅ Marge, meilleures ventes, dépenses du jour, alertes stock : `margeCumulee()` (CA net − coût
   réel des articles vendus, calculé ligne à ligne — pas via le solde 6031 qui mesure la variation

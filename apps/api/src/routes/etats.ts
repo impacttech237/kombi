@@ -10,6 +10,12 @@ etats.get('/', requirePermission('compta:read'), async (c) => {
   return c.json(e);
 });
 
+/** Trésorerie du jour par mode (espèces, MTN MoMo, Orange Money, banque) — tableau de bord. */
+etats.get('/tresorerie-jour', requirePermission('compta:read'), async (c) => {
+  const t = await stubEntreprise(c.env, c.get('entrepriseId')).tresorerieDuJour();
+  return c.json(t);
+});
+
 /** Journal d'audit immuable : entrées + preuve d'intégrité de la chaîne de hash. */
 etats.get('/audit', requirePermission('audit:read'), async (c) => {
   const e = stubEntreprise(c.env, c.get('entrepriseId'));

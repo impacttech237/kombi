@@ -95,6 +95,10 @@ export const meilleuresVentes = (entrepriseId: string) =>
 export const depensesDuJour = (entrepriseId: string) =>
   api<{ total: number }>('/api/depenses/jour', { entrepriseId }).then((r) => r.total);
 
+export interface TresorerieJour { especes: number; mtnMomo: number; orangeMoney: number; banque: number; }
+export const tresorerieDuJour = (entrepriseId: string) =>
+  api<TresorerieJour>('/api/etats/tresorerie-jour', { entrepriseId });
+
 export interface Produit {
   id: string; nom: string; sku: string | null; unite: string;
   prix_vente: number; cout_moyen_pondere: number; stock_actuel: number;
