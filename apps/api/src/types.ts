@@ -5,8 +5,10 @@ export interface Bindings {
   DB: D1Database; // control plane : identité, registre entreprises, auth
   ENTREPRISE: DurableObjectNamespace<EntrepriseDO>; // 1 base par entreprise (D13)
   DOCS: R2Bucket;
+  ASSETS: Fetcher; // sert la PWA (front) depuis le même Worker (même origine)
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL?: string;
+  BETTER_AUTH_TRUSTED_ORIGINS?: string;
 }
 
 /** Stub du Durable Object d'une entreprise (sa base SQLite dédiée). */

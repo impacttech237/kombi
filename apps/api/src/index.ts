@@ -18,8 +18,7 @@ const app = new Hono<AppEnv>();
 
 app.use('*', cors({ origin: (o) => o, credentials: true }));
 
-app.get('/', (c) => c.json({ service: 'kombi-api', statut: 'ok' }));
-app.get('/health', (c) => c.json({ ok: true }));
+app.get('/health', (c) => c.json({ ok: true, service: 'kombi-api' }));
 
 // ── Auth better-auth : /api/auth/** (inscription, connexion, session…) ──
 app.on(['GET', 'POST'], '/api/auth/*', (c) => creerAuth(c.env.DB, c.env).handler(c.req.raw));
@@ -50,6 +49,9 @@ app.route('/api/commandes', commandes);
 
 app.use('/api/etats/*', authentifier, tenant, requireModule('comptabilite'));
 app.route('/api/etats', etats);
+
+// Tout le reste (hors /api) = la PWA servie depuis le même Worker (même origine → cookies OK).
+app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
 export default app;
 

@@ -40,11 +40,11 @@
 ## Infra / déploiement
 | État | Élément |
 |---|---|
-| ✅ | Ressources Cloudflare créées (D1 `kombi-db`, R2 `kombi-documents`, Pages `kombi`) |
+| ✅ | Ressources Cloudflare créées (D1 `kombi-db`, R2 `kombi-documents`, DO) |
 | ✅ | Dépôt GitHub `impacttech237/kombi` |
-| ⬜ | Déployer l'API (Worker + DO) et le front (Pages) en ligne |
-| ⬜ | CI GitHub Actions (test + typecheck + deploy) |
-| ⬜ | Renseigner NIU entreprise (mentions facture) ; icônes PWA
+| ✅ | **EN LIGNE : https://kombi-api.impacttech237.workers.dev** (API + PWA même origine + DO) |
+| ✅ | Parcours prod vérifié : inscription → entreprise → vente → CA |
+| ⬜ | CI GitHub Actions (test + deploy) ; domaine personnalisé ; NIU/icônes PWA
 
 ## Hors périmètre (rappel)
 Paie/CNPS (pas de schéma RH complexe), IA conversationnelle, OCR, scoring, connecteur DGI,
