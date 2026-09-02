@@ -27,6 +27,10 @@ jobs:
       - name: Typecheck
         run: pnpm -r typecheck
 
+      # Requis avant les tests : le pool vitest-workers lit wrangler.toml ([assets] -> ../web/dist).
+      - name: Build de la PWA
+        run: pnpm --filter @kombi/web build
+
       - name: Tests
         run: pnpm -r test
 
