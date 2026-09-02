@@ -290,7 +290,11 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   `facture.devis_id` (migration DO v7, simple `ALTER TABLE ADD COLUMN`) — le devis d'origine n'est
   jamais modifié ni comptabilisé (il garde son éventuel DEV-xxx). Un seul devis ne peut être
   converti qu'une fois. Bouton « Convertir en facture » dans `Factures.tsx`, badge « Convertie ».
-- ⬜ 🟠 WhatsApp envoie réellement le PDF (destinataire + lien)
+- ✅ WhatsApp envoie réellement le PDF (destinataire + fichier) : partage natif (`navigator.share`
+  avec le PDF en pièce jointe réelle — pas un lien vers un endpoint authentifié que le
+  destinataire ne pourrait pas ouvrir) sur mobile, avec repli sur un lien `wa.me` pré-rempli avec
+  le numéro du client (`tiers.telephone`, indicatif CEMAC 237 par défaut) si le partage natif
+  n'est pas supporté (desktop).
 - ⬜ 🟡 Acompte (facture / commande)
 - ✅ Contrôle des mentions Art. 150 (NIU client) avant émission : `emettreFacture()` refuse
   d'émettre une **facture** (pas un devis) sans NIU client, mais seulement pour les entreprises

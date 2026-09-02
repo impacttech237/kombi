@@ -1090,7 +1090,8 @@ export class EntrepriseDO extends DurableObject {
   async listerFactures(): Promise<Record<string, unknown>[]> {
     return this.sql.exec(
       `SELECT f.id, f.type, f.numero, f.statut, f.total_ttc, f.date_emission, f.date_echeance, f.avoir_de_id,
-              t.nom AS tiers_nom, EXISTS (SELECT 1 FROM facture av WHERE av.avoir_de_id = f.id) AS a_un_avoir,
+              t.nom AS tiers_nom, t.telephone AS tiers_telephone,
+              EXISTS (SELECT 1 FROM facture av WHERE av.avoir_de_id = f.id) AS a_un_avoir,
               EXISTS (SELECT 1 FROM facture cv WHERE cv.devis_id = f.id) AS a_ete_converti
          FROM facture f LEFT JOIN tiers t ON t.id = f.tiers_id
         ORDER BY f.created_at DESC`,

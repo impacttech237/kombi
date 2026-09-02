@@ -144,7 +144,7 @@ export const creerTiers = (
 // ── Factures ──
 export interface FactureResume {
   id: string; type: string; numero: string | null; statut: string;
-  total_ttc: number; date_emission: string | null; tiers_nom: string | null;
+  total_ttc: number; date_emission: string | null; tiers_nom: string | null; tiers_telephone: string | null;
   avoir_de_id: string | null; a_un_avoir: number; a_ete_converti: number;
 }
 export interface LigneFacture { designation: string; quantite: number; prixUnitaire: number; }
@@ -218,13 +218,24 @@ export const creerDepense = (
   data: { categorie: string; libelle: string; montant: number; modePaiement: string; recurrente?: boolean },
 ) => api<{ depenseId: string }>('/api/depenses', { method: 'POST', body: data, entrepriseId });
 
-/** Récupère le PDF de la facture (avec en-têtes d'auth) et retourne une URL blob affichable. */
-export async function urlPdfFacture(entrepriseId: string, id: string): Promise<string> {
+/** Récupère le PDF de la facture (avec en-têtes d'auth) sous forme de blob brut. */
+async function blobPdfFacture(entrepriseId: string, id: string): Promise<Blob> {
   const BASE = import.meta.env.VITE_API_URL ?? '';
   const res = await fetch(`${BASE}/api/factures/${id}/pdf`, {
     headers: { 'x-entreprise-id': entrepriseId },
     credentials: 'include',
   });
   if (!res.ok) throw new Error('PDF indisponible');
-  return URL.createObjectURL(await res.blob());
+  return res.blob();
+}
+
+/** Le PDF sous forme de `File` (partage natif — WhatsApp, etc.) nommé d'après le numéro. */
+export async function fichierPdfFacture(entrepriseId: string, id: string, nomFichier: string): Promise<File> {
+  const blob = await blobPdfFacture(entrepriseId, id);
+  return new File([blob], nomFichier, { type: 'application/pdf' });
+}
+
+/** Récupère le PDF de la facture (avec en-têtes d'auth) et retourne une URL blob affichable. */
+export async function urlPdfFacture(entrepriseId: string, id: string): Promise<string> {
+  return URL.createObjectURL(await blobPdfFacture(entrepriseId, id));
 }

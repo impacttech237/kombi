@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA } from '@kombi/shared';
 import {
-  listerFactures, creerFacture, emettreFacture, creerAvoir, payerFacture, urlPdfFacture,
+  listerFactures, creerFacture, emettreFacture, creerAvoir, payerFacture, urlPdfFacture, fichierPdfFacture,
   convertirDevisEnFacture, listerTiers, creerTiers,
   type EntrepriseResume, type FactureResume, type Tiers, type LigneFacture,
 } from '../lib/api.js';
+
+/** Numéro au format attendu par wa.me (chiffres seulement, indicatif CEMAC 237 par défaut). */
+function numeroWhatsApp(telephone: string): string {
+  const chiffres = telephone.replace(/\D/g, '');
+  return chiffres.startsWith('237') ? chiffres : `237${chiffres.replace(/^0+/, '')}`;
+}
 import { Bouton, Champ, Icon } from '../components/ui.js';
 
 const STATUT_LIBELLE: Record<string, string> = {
@@ -59,9 +65,21 @@ function CarteFacture({ entreprise, f, onMaj }: { entreprise: EntrepriseResume; 
   async function voirPdf() {
     try { window.open(await urlPdfFacture(entreprise.id, f.id), '_blank'); } catch { /* ignore */ }
   }
-  function whatsapp() {
-    const txt = encodeURIComponent(`Bonjour, voici votre ${f.type} ${f.numero ?? ''} d'un montant de ${formaterFCFA(f.total_ttc)}. Merci !`);
-    window.open(`https://wa.me/?text=${txt}`, '_blank');
+  async function whatsapp() {
+    const texte = `Bonjour, voici votre ${f.type} ${f.numero ?? ''} d'un montant de ${formaterFCFA(f.total_ttc)}. Merci !`;
+    // Partage natif (mobile) : le fichier PDF est réellement attaché, pas seulement un lien —
+    // l'utilisateur choisit WhatsApp dans la feuille de partage du téléphone.
+    try {
+      const fichier = await fichierPdfFacture(entreprise.id, f.id, `${f.numero ?? 'facture'}.pdf`);
+      if (navigator.canShare?.({ files: [fichier] })) {
+        await navigator.share({ files: [fichier], text: texte, title: f.numero ?? 'Facture' });
+        return;
+      }
+    } catch { /* PDF ou partage natif indisponible → repli lien texte ci-dessous */ }
+    const lien = f.tiers_telephone
+      ? `https://wa.me/${numeroWhatsApp(f.tiers_telephone)}?text=${encodeURIComponent(texte)}`
+      : `https://wa.me/?text=${encodeURIComponent(texte)}`;
+    window.open(lien, '_blank');
   }
   async function payer() {
     await payerFacture(entreprise.id, f.id, { montant: Number(montant), modePaiement });
