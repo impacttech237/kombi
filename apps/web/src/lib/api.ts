@@ -85,6 +85,16 @@ export const statsJour = (entrepriseId: string) =>
 export const tendance7Jours = (entrepriseId: string) =>
   api<{ tendance: { jour: string; total: number }[] }>('/api/ventes/tendance', { entrepriseId }).then((r) => r.tendance);
 
+export const margeCumulee = (entrepriseId: string) =>
+  api<{ marge: number }>('/api/ventes/marge', { entrepriseId }).then((r) => r.marge);
+
+export interface MeilleureVente { designation: string; quantite: number; montant_ht: number; }
+export const meilleuresVentes = (entrepriseId: string) =>
+  api<{ top: MeilleureVente[] }>('/api/ventes/top', { entrepriseId }).then((r) => r.top);
+
+export const depensesDuJour = (entrepriseId: string) =>
+  api<{ total: number }>('/api/depenses/jour', { entrepriseId }).then((r) => r.total);
+
 export interface Produit {
   id: string; nom: string; sku: string | null; unite: string;
   prix_vente: number; cout_moyen_pondere: number; stock_actuel: number;

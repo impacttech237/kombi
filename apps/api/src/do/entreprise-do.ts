@@ -1196,6 +1196,45 @@ export class EntrepriseDO extends DurableObject {
     return row.ca;
   }
 
+  /**
+   * Marge brute cumulée (CA net − coût des marchandises effectivement vendues) — donnée sensible,
+   * réservée. Le coût est calculé ligne à ligne (`ligne_vente.cout_unitaire`, capturé au CMP du
+   * jour de la vente), PAS via le solde du compte 6031 : ce dernier mesure la variation de stock
+   * de la période entière (achats compris) et serait négatif tant que des articles achetés
+   * restent invendus — inadapté à une marge par période.
+   */
+  async margeCumulee(): Promise<number> {
+    const ca = await this.caCumule();
+    const row = this.sql
+      .exec(
+        `SELECT COALESCE(SUM(lv.quantite * lv.cout_unitaire), 0) AS cogs
+           FROM ligne_vente lv JOIN vente v ON v.id = lv.vente_id
+          WHERE v.statut != 'annulee' AND v.exercice_id = ?`,
+        this.exerciceOuvert(),
+      )
+      .toArray()[0] as { cogs: number };
+    return ca - row.cogs;
+  }
+
+  /** Meilleures ventes de l'exercice (par chiffre d'affaires HT), ventes annulées exclues. */
+  async meilleuresVentes(limite = 5): Promise<Record<string, unknown>[]> {
+    return this.sql.exec(
+      `SELECT lv.designation, SUM(lv.quantite) AS quantite, SUM(lv.montant_ht) AS montant_ht
+         FROM ligne_vente lv JOIN vente v ON v.id = lv.vente_id
+        WHERE v.statut != 'annulee' AND v.exercice_id = ?
+        GROUP BY lv.designation ORDER BY montant_ht DESC LIMIT ?`,
+      this.exerciceOuvert(), limite,
+    ).toArray() as never;
+  }
+
+  /** Total des dépenses du jour (heure locale) — pour le tableau de bord. */
+  async depensesDuJour(): Promise<number> {
+    const row = this.sql
+      .exec("SELECT COALESCE(SUM(montant), 0) AS total FROM depense WHERE date(date) = ?", this.dateCourante())
+      .toArray()[0] as { total: number };
+    return row.total;
+  }
+
   /** Journal général : liste des écritures validées, la plus récente en premier. */
   async listerEcritures(): Promise<Record<string, unknown>[]> {
     return this.sql.exec(

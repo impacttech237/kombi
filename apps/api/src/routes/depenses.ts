@@ -27,6 +27,12 @@ depenses.get('/', requirePermission('depense:read'), async (c) => {
 
 depenses.get('/categories', requirePermission('depense:read'), (c) => c.json({ categories: CATEGORIES_DEPENSE }));
 
+/** Total des dépenses du jour (tableau de bord). */
+depenses.get('/jour', requirePermission('depense:read'), async (c) => {
+  const total = await stubEntreprise(c.env, c.get('entrepriseId')).depensesDuJour();
+  return c.json({ total });
+});
+
 /** Enregistre une dépense réglée → génère l'écriture comptable (débit charge / crédit trésorerie). */
 depenses.post('/', requirePermission('depense:manage'), async (c) => {
   const corps = zDepense.safeParse(await c.req.json().catch(() => null));

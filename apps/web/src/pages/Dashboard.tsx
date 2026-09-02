@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { formaterFCFA, TERMINOLOGIE, peut, type Secteur, type RoleMembre } from '@kombi/shared';
 import {
   api, statsJour, tendance7Jours, listerCommandes, listerDepenses, listerVentesACredit,
-  listerFacturesImpayees, listerDettesFournisseurs, type EntrepriseResume,
+  listerFacturesImpayees, listerDettesFournisseurs, margeCumulee, meilleuresVentes, depensesDuJour,
+  listerProduits, type EntrepriseResume, type MeilleureVente,
 } from '../lib/api.js';
 import { Bouton, CarteStat, Icon } from '../components/ui.js';
 
@@ -24,12 +25,18 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses, onCre
   const [totalCreances, setTotalCreances] = useState<number | null>(null);
   const [totalDettes, setTotalDettes] = useState<number | null>(null);
   const [tendance, setTendance] = useState<{ jour: string; total: number }[] | null>(null);
+  const [marge, setMarge] = useState<number | null>(null);
+  const [top, setTop] = useState<MeilleureVente[] | null>(null);
+  const [depensesJour, setDepensesJour] = useState<number | null>(null);
+  const [alertesStock, setAlertesStock] = useState<number | null>(null);
   const [erreur, setErreur] = useState('');
   const role = entreprise.role as RoleMembre;
   const voitCompta = peut(role, 'compta:read');
   const voitDepenses = peut(role, 'depense:read');
   const voitCreances = peut(role, 'vente:read') || peut(role, 'facture:read');
   const voitDettes = peut(role, 'achat:read');
+  const voitVentes = peut(role, 'vente:read');
+  const voitStock = entreprise.secteur !== 'service' && peut(role, 'stock:read');
 
   useEffect(() => {
     if (voitCompta) {
@@ -63,7 +70,15 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses, onCre
         .then((ds) => setTotalDettes(ds.reduce((s, d) => s + (d.total_ttc - d.regle), 0)))
         .catch(() => {});
     }
-  }, [entreprise.id, voitCompta, voitDepenses, voitCreances, voitDettes]);
+    if (voitCompta) margeCumulee(entreprise.id).then(setMarge).catch(() => {});
+    if (voitVentes) meilleuresVentes(entreprise.id).then(setTop).catch(() => {});
+    if (voitDepenses) depensesDuJour(entreprise.id).then(setDepensesJour).catch(() => {});
+    if (voitStock) {
+      listerProduits(entreprise.id)
+        .then((ps) => setAlertesStock(ps.filter((p) => p.en_alerte === 1).length))
+        .catch(() => {});
+    }
+  }, [entreprise.id, voitCompta, voitDepenses, voitCreances, voitDettes, voitVentes, voitStock]);
 
   return (
     <>
@@ -80,6 +95,8 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses, onCre
           <>
             <CarteStat titre="Chiffre d'affaires" icone="argent"
               valeur={igs ? formaterFCFA(igs.caCumule) : '—'} delta="Exercice" positif />
+            <CarteStat titre="Marge brute" icone="graph"
+              valeur={marge !== null ? formaterFCFA(marge) : '—'} delta="Exercice" positif />
             <CarteStat titre="IGS estimé" icone="graph"
               valeur={igs?.igs ? formaterFCFA(igs.igs.igsAnnuel) : (igs ? 'Régime réel' : '—')}
               delta={igs?.igs ? `Classe ${igs.igs.classe}` : undefined} positif />
@@ -97,6 +114,17 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses, onCre
             <CarteStat titre="Dépenses" icone="baisse"
               valeur={totalDepenses !== null ? formaterFCFA(totalDepenses) : '—'} delta="Exercice" positif={false} />
           </button>
+        )}
+        {voitDepenses && (
+          <button onClick={onDepenses} style={{ all: 'unset', cursor: 'pointer' }}>
+            <CarteStat titre="Dépenses du jour" icone="baisse"
+              valeur={depensesJour !== null ? formaterFCFA(depensesJour) : '—'} delta="Aujourd'hui" positif={false} />
+          </button>
+        )}
+        {voitStock && (
+          <CarteStat titre="Alertes stock" icone="stock"
+            valeur={alertesStock !== null ? String(alertesStock) : '—'}
+            delta={alertesStock === 0 ? 'RAS' : 'à réapprovisionner'} positif={alertesStock === 0} />
         )}
         {voitCreances && (
           <button onClick={onCreances} style={{ all: 'unset', cursor: 'pointer' }}>
@@ -124,6 +152,24 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses, onCre
             </p>
           ) : <GrapheTendance donnees={tendance} />}
       </div>
+
+      {voitVentes && top !== null && top.length > 0 && (
+        <div className="carte" style={{ marginTop: 14 }}>
+          <strong style={{ display: 'block', marginBottom: 10 }}>Meilleures ventes</strong>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {top.map((t, i) => (
+              <div key={t.designation} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span className="muet" style={{ fontSize: 13, width: 16 }}>{i + 1}</span>
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {t.designation}
+                </span>
+                <span className="muet" style={{ fontSize: 13 }}>×{t.quantite}</span>
+                <span className="chiffre" style={{ fontWeight: 600, fontSize: 14 }}>{formaterFCFA(t.montant_ht)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {erreur && <p style={{ color: 'var(--danger)', fontSize: 13, marginTop: 10 }}>{erreur}</p>}
     </>

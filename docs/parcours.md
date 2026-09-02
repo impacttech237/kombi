@@ -291,7 +291,13 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ✅ Retirer le faux graphe (`FauxGraphe`) → vraies données (`tendance7Jours`, 7 derniers jours)
 - ⬜ 🟠 Trésorerie du jour (espèces + MoMo/Orange)
 - ✅ Impayés / créances en tête d'accueil : cartes « On me doit » / « Ce que je dois » sur le dashboard
-- ⬜ 🟡 Marge, meilleures ventes, dépenses du jour, alertes stock
+- ✅ Marge, meilleures ventes, dépenses du jour, alertes stock : `margeCumulee()` (CA net − coût
+  réel des articles vendus, calculé ligne à ligne — pas via le solde 6031 qui mesure la variation
+  de stock de toute la période et serait faussé par les achats non encore revendus),
+  `meilleuresVentes()` (top 5 par CA HT, ventes annulées exclues), `depensesDuJour()`, et un
+  compteur d'alertes stock (issu de `listerProduits().en_alerte`) — 4 nouvelles cartes sur le
+  tableau de bord, la marge réservée à `compta:read` (un caissier ne la voit pas, comme demandé
+  par la spec §12).
 
 ## Multi-utilisateurs & rôles
 - ✅ Écran Équipe : ajout d'un membre par email + changement de rôle + retrait (`membre:manage`,

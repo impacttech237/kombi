@@ -80,3 +80,15 @@ ventes.get('/tendance', requirePermission('vente:read'), async (c) => {
   const tendance = await stubEntreprise(c.env, c.get('entrepriseId')).tendance7Jours();
   return c.json({ tendance });
 });
+
+/** Marge brute cumulée — donnée sensible, réservée à ceux qui voient la couche comptable. */
+ventes.get('/marge', requirePermission('compta:read'), async (c) => {
+  const marge = await stubEntreprise(c.env, c.get('entrepriseId')).margeCumulee();
+  return c.json({ marge });
+});
+
+/** Meilleures ventes de l'exercice (tableau de bord). */
+ventes.get('/top', requirePermission('vente:read'), async (c) => {
+  const top = await stubEntreprise(c.env, c.get('entrepriseId')).meilleuresVentes(5);
+  return c.json({ top });
+});
