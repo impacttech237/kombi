@@ -348,7 +348,10 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ✅ Rate limiting sur `/api/auth/*` (POST) : 10 req/min/IP, fenêtre fixe en D1
 - ⬜ 🟠 Offline étendu (factures/tiers/produits/encaissements) + cache lecture
 - ⬜ 🟡 Cache session (rôle + entreprises) pour soulager D1 à l'échelle
-- ⬜ 🟡 Icônes PWA (installabilité)
+- ✅ Icônes PWA (installabilité) : `apps/web/public/icon-192.png`/`icon-512.png` générées (le
+  manifeste les référençait déjà mais les fichiers n'existaient pas → PWA non installable/icône
+  cassée), reprenant le design du logo (carré émeraude arrondi + « K » — `Logo` dans `ui.tsx`) ;
+  variante `purpose: maskable` ajoutée pour Android.
 - ⬜ 🟡 Vérification email + limiter l'auto-provisioning
 - ⬜ 🟡 Observabilité (onError Hono, logs structurés, ID de requête)
 - ⬜ ⚪ Backoff + plafond de tentatives sur la synchro offline
