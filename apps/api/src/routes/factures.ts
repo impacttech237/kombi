@@ -95,6 +95,12 @@ factures.post('/depuis-vente/:venteId', requirePermission('facture:manage'), asy
   return c.json(res, 201);
 });
 
+/** Convertit un devis en une nouvelle facture (brouillon), liée via facture.devis_id. */
+factures.post('/:id/convertir', requirePermission('facture:manage'), async (c) => {
+  const factureId = await stubEntreprise(c.env, c.get('entrepriseId')).convertirDevisEnFacture(c.req.param('id'));
+  return c.json({ factureId }, 201);
+});
+
 /** Avoir : corrige une facture émise sans la supprimer (contre-passation complète). */
 factures.post('/:id/avoir', requirePermission('facture:manage'), async (c) => {
   const ent = await emetteur(c, c.get('entrepriseId'));

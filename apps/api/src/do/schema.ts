@@ -327,6 +327,15 @@ CREATE TABLE IF NOT EXISTS paiement_achat (
 )
 `;
 
+/**
+ * v7 — Conversion devis → facture : trace la facture issue d'un devis (`facture.devis_id`),
+ * pour éviter une double conversion et afficher le lien dans l'UI. Simple ADD COLUMN (nullable,
+ * pas de FK réécrite par SQLite) — aucun besoin du contournement RENAME décrit ci-dessus.
+ */
+const MIGRATION_V7_DEVIS = `
+ALTER TABLE facture ADD COLUMN devis_id TEXT REFERENCES facture(id)
+`;
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -372,7 +381,9 @@ export const MIGRATIONS_DO: readonly MigrationDO[] = [
   { v: 5, statements: statementsDe(MIGRATION_V5_CAISSE) },
   // v6 — dettes fournisseurs (401) : achat à crédit + remboursement échelonné.
   { v: 6, statements: statementsDe(MIGRATION_V6_DETTES) },
-  // v7… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v7 — conversion devis → facture (facture.devis_id).
+  { v: 7, statements: statementsDe(MIGRATION_V7_DEVIS) },
+  // v8… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */

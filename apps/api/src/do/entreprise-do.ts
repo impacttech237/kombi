@@ -810,6 +810,52 @@ export class EntrepriseDO extends DurableObject {
     return id;
   }
 
+  /**
+   * Convertit un devis en facture : crée une NOUVELLE facture (brouillon, sa propre numérotation
+   * FAC-xxx à l'émission) à partir des lignes du devis, liée via `facture.devis_id`. Le devis
+   * d'origine n'est ni modifié ni supprimé (il garde son éventuel numéro DEV-xxx) — un devis
+   * n'est jamais comptabilisé, contrairement à la facture qui en résulte. Un seul devis ne peut
+   * être converti qu'une fois.
+   */
+  async convertirDevisEnFacture(devisId: string): Promise<string> {
+    const devis = this.sql.exec(
+      'SELECT type, exercice_id, tiers_id, date_echeance FROM facture WHERE id = ?', devisId,
+    ).toArray()[0] as { type: string; exercice_id: string; tiers_id: string; date_echeance: string | null } | undefined;
+    if (!devis) throw new Error('Devis introuvable');
+    if (devis.type !== 'devis') throw new Error('Seul un devis peut être converti en facture');
+    const dejaConverti = this.sql.exec('SELECT 1 FROM facture WHERE devis_id = ?', devisId).toArray()[0];
+    if (dejaConverti) throw new Error('Ce devis a déjà été converti en facture');
+
+    const lignes = this.sql.exec(
+      'SELECT designation, quantite, prix_unitaire, taux_tva FROM ligne_facture WHERE facture_id = ? ORDER BY ordre',
+      devisId,
+    ).toArray() as { designation: string; quantite: number; prix_unitaire: number; taux_tva: number }[];
+    if (!lignes.length) throw new Error('Devis sans ligne');
+
+    let totalHt = 0, totalTva = 0;
+    for (const l of lignes) {
+      const ht = Math.round(l.quantite * l.prix_unitaire);
+      totalHt += ht;
+      totalTva += Math.round(ht * l.taux_tva);
+    }
+    const id = uid();
+    this.sql.exec(
+      `INSERT INTO facture (id, exercice_id, type, tiers_id, date_echeance, statut, total_ht, total_tva, total_ttc, devis_id)
+       VALUES (?, ?, 'facture', ?, ?, 'brouillon', ?, ?, ?, ?)`,
+      id, devis.exercice_id, devis.tiers_id, devis.date_echeance, totalHt, totalTva, totalHt + totalTva, devisId,
+    );
+    let ordre = 0;
+    for (const l of lignes) {
+      this.sql.exec(
+        `INSERT INTO ligne_facture (id, facture_id, designation, quantite, prix_unitaire, taux_tva, montant_ht, ordre)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        uid(), id, l.designation, l.quantite, l.prix_unitaire, l.taux_tva,
+        Math.round(l.quantite * l.prix_unitaire), ordre++,
+      );
+    }
+    return id;
+  }
+
   /** Émet la facture : numéro séquentiel gap-less + (si facture) créance client 411/701. */
   async emettreFacture(
     factureId: string, prefixe: string, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
@@ -1044,7 +1090,8 @@ export class EntrepriseDO extends DurableObject {
   async listerFactures(): Promise<Record<string, unknown>[]> {
     return this.sql.exec(
       `SELECT f.id, f.type, f.numero, f.statut, f.total_ttc, f.date_emission, f.date_echeance, f.avoir_de_id,
-              t.nom AS tiers_nom, EXISTS (SELECT 1 FROM facture av WHERE av.avoir_de_id = f.id) AS a_un_avoir
+              t.nom AS tiers_nom, EXISTS (SELECT 1 FROM facture av WHERE av.avoir_de_id = f.id) AS a_un_avoir,
+              EXISTS (SELECT 1 FROM facture cv WHERE cv.devis_id = f.id) AS a_ete_converti
          FROM facture f LEFT JOIN tiers t ON t.id = f.tiers_id
         ORDER BY f.created_at DESC`,
     ).toArray() as never;

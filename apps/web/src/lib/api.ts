@@ -145,7 +145,7 @@ export const creerTiers = (
 export interface FactureResume {
   id: string; type: string; numero: string | null; statut: string;
   total_ttc: number; date_emission: string | null; tiers_nom: string | null;
-  avoir_de_id: string | null; a_un_avoir: number;
+  avoir_de_id: string | null; a_un_avoir: number; a_ete_converti: number;
 }
 export interface LigneFacture { designation: string; quantite: number; prixUnitaire: number; }
 
@@ -166,6 +166,8 @@ export const emettreFacture = (entrepriseId: string, id: string) =>
   api<{ numero: string }>(`/api/factures/${id}/emettre`, { method: 'POST', entrepriseId });
 export const creerAvoir = (entrepriseId: string, id: string) =>
   api<{ avoirId: string; numero: string }>(`/api/factures/${id}/avoir`, { method: 'POST', entrepriseId });
+export const convertirDevisEnFacture = (entrepriseId: string, id: string) =>
+  api<{ factureId: string }>(`/api/factures/${id}/convertir`, { method: 'POST', entrepriseId });
 export const payerFacture = (entrepriseId: string, id: string, data: { montant: number; modePaiement: string }) =>
   api<{ statut: string; regle: number }>(`/api/factures/${id}/payer`, { method: 'POST', body: data, entrepriseId });
 

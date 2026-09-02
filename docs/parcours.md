@@ -285,7 +285,11 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 ## Facturation & devis
 - ✅ Mécanisme d'avoir (`creerAvoir`) — contre-passation intégrale, partage la numérotation des
   factures (préfixe AVO), bouton dans `Factures.tsx`
-- ⬜ 🟠 Conversion devis → facture
+- ✅ Conversion devis → facture : `convertirDevisEnFacture()` crée une NOUVELLE facture (brouillon,
+  sa propre numérotation FAC-xxx à l'émission) à partir des lignes du devis, liée via
+  `facture.devis_id` (migration DO v7, simple `ALTER TABLE ADD COLUMN`) — le devis d'origine n'est
+  jamais modifié ni comptabilisé (il garde son éventuel DEV-xxx). Un seul devis ne peut être
+  converti qu'une fois. Bouton « Convertir en facture » dans `Factures.tsx`, badge « Convertie ».
 - ⬜ 🟠 WhatsApp envoie réellement le PDF (destinataire + lien)
 - ⬜ 🟡 Acompte (facture / commande)
 - ✅ Contrôle des mentions Art. 150 (NIU client) avant émission : `emettreFacture()` refuse
