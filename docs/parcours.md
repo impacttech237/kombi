@@ -178,7 +178,10 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 2. ✅ **Écritures immuables + atomiques** : triggers interdisant UPDATE/DELETE d'une écriture validée + transactions (`ctx.storage.transactionSync`) autour de chaque opération.
 3. ✅ **Écran Dépenses** (charges 60-67) : loyer, transport, salaires, élec, frais bancaires → résultat sincère + charges pour les prestataires.
 4. ✅ **Crédit clients & dettes fournisseurs** : vente/achat à crédit (411/401) + écrans « on me doit » / « ce que je dois », factures impayées avec retard calculé.
-5. ⬜ 🔴 **Chaîne TVA** : enregistrer 4452 (déductible), imputer services en 4432, contraindre le taux 0/19,25 %, interdire TVA aux IGS, supprimer le double comptage vente↔facture.
+5. ✅ **Chaîne TVA** : 4452 (déductible, achats/dépenses) ; 4431/4432 selon secteur (biens/services,
+   au lieu de toujours 4431) ; taux contraint à {0 ; 0,1925} (Zod) ; TVA interdite à l'IGS (rejet
+   serveur, régime lu en D1 — jamais mis en cache côté DO) ; double comptage vente↔facture supprimé
+   (`creerFactureDepuisVente` réutilise l'écriture existante au lieu d'en créer une seconde).
 6. ✅ **Caisse comptoir** : quantités éditables, vente à crédit (411), client rattaché, montant
    reçu + rendu-monnaie, reçu imprimable + partage WhatsApp, remise ligne/globale, TVA conditionnée
    par `assujetti_tva` et interdite à l'IGS. §9.1 de la spec technique intégralement livré.
@@ -228,7 +231,7 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   (débit charge / crédit trésorerie), atomique et immuable comme toute écriture.
 - ✅ Charges saisissables même sans stock (prestataires) — le module `depenses` est cœur, actif quel
   que soit le secteur (commerce/service/mixte).
-- ⬜ 🟡 Achat à crédit fournisseur (401) + TVA déductible (4452)
+- ✅ Achat à crédit fournisseur (401) + TVA déductible (4452)
 
 ## Stock
 - ⬜ 🟠 Sur-vente silencieuse (CMV tronqué + stock plancher 0) → bloquer ou tracer
@@ -270,9 +273,12 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 
 ## Comptabilité — écritures
 - ✅ Écritures immuables (triggers UPDATE/DELETE) + atomicité (transactions)
-- ⬜ 🔴 Supprimer le double comptage CA vente ↔ facture
-- ⬜ 🔴 Date d'opération réelle (paramètre + heure locale Africa/Douala)
-- ⬜ 🟠 TVA déductible 4452 à l'achat · TVA services en 4432 · taux contraint
+- ✅ Double comptage CA vente ↔ facture supprimé (`creerFactureDepuisVente` — facture-document
+  réutilisant l'écriture de la vente, sans écran « historique des ventes » pour le déclencher
+  pour l'instant : l'API existe, reste à l'exposer dans l'UI)
+- ⬜ 🔴 Date d'opération réelle (paramètre + heure locale Africa/Douala) — fait pour `enregistrerVente`
+  uniquement ; dépenses/achats/factures utilisent encore `date('now')` (UTC serveur)
+- ✅ TVA déductible 4452 à l'achat · TVA services en 4432 · taux contraint à {0 ; 0,1925}
 - ⬜ 🟡 Régularisations (agios/frais 631/671, RRR, escomptes, écarts inventaire)
 - ⬜ 🟡 Amortissements & provisions (immobilisations)
 - ⬜ 🟡 Étendre le plan comptable par défaut + mapping catégorie → compte

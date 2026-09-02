@@ -24,6 +24,8 @@ export interface SaisieRecette {
   readonly modePaiement: ModePaiement;
   readonly compteProduit: string; // ex '701'
   readonly libelle: string;
+  /** TVA collectée : 4431 (biens, défaut) ou 4432 (prestations de services). */
+  readonly compteTvaCollectee?: string;
 }
 
 export interface SaisieDepense {
@@ -48,7 +50,7 @@ export function genererRecette(s: SaisieRecette): EcritureGeneree {
     { compteNumero: compteTresorerie(s.modePaiement), sens: 'debit', montant: ttc },
     { compteNumero: s.compteProduit, sens: 'credit', montant: s.montantHT },
   ];
-  if (tva > 0) lignes.push({ compteNumero: '4431', sens: 'credit', montant: tva });
+  if (tva > 0) lignes.push({ compteNumero: s.compteTvaCollectee ?? '4431', sens: 'credit', montant: tva });
   return { libelle: s.libelle, lignes };
 }
 

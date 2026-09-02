@@ -89,7 +89,10 @@ export const creerProduit = (
 export const approvisionner = (
   entrepriseId: string,
   produitId: string,
-  data: { quantite: number; coutUnitaire: number; modePaiement?: string | null; aCredit?: boolean; tiersId?: string | null },
+  data: {
+    quantite: number; coutUnitaire: number; modePaiement?: string | null; aCredit?: boolean;
+    tiersId?: string | null; tauxTva?: number;
+  },
 ) => api<{ nouveauStock: number; nouveauCmp: number }>(
   `/api/produits/${produitId}/entree`, { method: 'POST', body: data, entrepriseId },
 );

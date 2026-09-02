@@ -16,6 +16,16 @@ export function stubEntreprise(env: Bindings, entrepriseId: string) {
   return env.ENTREPRISE.get(env.ENTREPRISE.idFromName(entrepriseId));
 }
 
+/**
+ * Régime fiscal courant (D1, source de vérité) — jamais mis en cache côté DO pour rester à jour
+ * si l'entreprise bascule IGS↔Réel. La TVA est interdite au régime IGS (CGI Art. 142).
+ */
+export async function regimeFiscalDe(env: Bindings, entrepriseId: string): Promise<string | null> {
+  const row = await env.DB.prepare('SELECT regime_fiscal FROM entreprise WHERE id = ?')
+    .bind(entrepriseId).first<{ regime_fiscal: string }>();
+  return row?.regime_fiscal ?? null;
+}
+
 /** Variables de contexte posées par les middlewares. */
 export interface Variables {
   utilisateurId: string;

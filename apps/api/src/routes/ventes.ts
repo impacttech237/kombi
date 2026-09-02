@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zModePaiement, zMontantPositif, zLigneMontant, zDateISO, messageErreurZod } from '@kombi/shared';
 import { requirePermission } from '../middleware/permission.js';
-import { stubEntreprise, type AppEnv } from '../types.js';
+import { stubEntreprise, regimeFiscalDe, type AppEnv } from '../types.js';
 
 const zVente = z.object({
   modePaiement: zModePaiement.nullish(),
@@ -29,9 +29,10 @@ ventes.post('/', requirePermission('vente:create'), async (c) => {
   const lignes = v.lignes.filter((l) => l.prixUnitaire > 0);
   if (!lignes.length) return c.json({ erreur: 'Ajoutez au moins un article avec un montant' }, 400);
 
+  const regimeFiscal = await regimeFiscalDe(c.env, entrepriseId);
   const res = await stubEntreprise(c.env, entrepriseId).enregistrerVente({
     lignes, modePaiement: v.modePaiement ?? null, aCredit: v.aCredit, tiersId: v.tiersId ?? null, caissierId,
-    clientUuid: v.clientUuid ?? null, dateOperation: v.dateOperation ?? null,
+    clientUuid: v.clientUuid ?? null, dateOperation: v.dateOperation ?? null, regimeFiscal,
   }, { utilisateurId: caissierId, role: c.get('role') });
   return c.json(res, res.deja ? 200 : 201);
 });

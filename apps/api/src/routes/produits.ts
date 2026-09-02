@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { zModePaiement, zMontantPositif, zMontantPositifOuNul, messageErreurZod } from '@kombi/shared';
+import { zModePaiement, zMontantPositif, zMontantPositifOuNul, zTauxTva, messageErreurZod } from '@kombi/shared';
 import { requirePermission } from '../middleware/permission.js';
-import { stubEntreprise, type AppEnv } from '../types.js';
+import { stubEntreprise, regimeFiscalDe, type AppEnv } from '../types.js';
 
 const zProduit = z.object({
   nom: z.string().trim().min(1, 'Nom requis').max(120),
@@ -18,6 +18,7 @@ const zEntreeStock = z.object({
   modePaiement: zModePaiement.nullish(),
   aCredit: z.boolean().optional().default(false),
   tiersId: z.string().nullish(),
+  tauxTva: zTauxTva.optional().default(0),
 }).refine((v) => v.aCredit || v.modePaiement, { message: 'Mode de paiement requis (ou achat à crédit)' })
   .refine((v) => !v.aCredit || v.tiersId, { message: 'Un fournisseur est requis pour un achat à crédit' });
 
@@ -48,9 +49,11 @@ produits.post('/:id/entree', requirePermission('stock:manage'), async (c) => {
   if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);
   const e = corps.data;
 
+  const regimeFiscal = await regimeFiscalDe(c.env, c.get('entrepriseId'));
   const res = await stubEntreprise(c.env, c.get('entrepriseId')).entrerStock({
     produitId: c.req.param('id'), quantite: e.quantite, coutUnitaire: e.coutUnitaire,
     modePaiement: e.modePaiement ?? null, aCredit: e.aCredit, tiersId: e.tiersId ?? null,
+    tauxTva: e.tauxTva, regimeFiscal,
   }, { utilisateurId: c.get('utilisateurId'), role: c.get('role') });
   return c.json(res);
 });

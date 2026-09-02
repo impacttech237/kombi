@@ -41,6 +41,8 @@ export interface VenteEntree {
   clientUuid?: string | null;
   /** Date de l'opération (ISO 'YYYY-MM-DD'). Défaut : aujourd'hui (heure locale Douala). */
   dateOperation?: string | null;
+  /** Régime fiscal courant de l'entreprise (lu en D1 par la route) — la TVA est interdite à l'IGS. */
+  regimeFiscal?: string | null;
 }
 
 export class EntrepriseDO extends DurableObject {
@@ -235,6 +237,18 @@ export class EntrepriseDO extends DurableObject {
     return row.id;
   }
 
+  /** TVA interdite au régime IGS (CGI Art. 142 — l'IGS est un régime forfaitaire sans TVA). */
+  private verifierTvaAutorisee(regimeFiscal: string | null | undefined, taux: readonly (number | undefined)[]): void {
+    if (regimeFiscal === 'igs' && taux.some((t) => (t ?? 0) > 0)) {
+      throw new Error('La TVA est interdite au régime IGS (CGI Art. 142)');
+    }
+  }
+
+  /** Compte de TVA collectée : 4431 (vente de biens) ou 4432 (prestations de services). */
+  private compteTvaCollectee(secteur: string): string {
+    return secteur === 'service' ? '4432' : '4431';
+  }
+
   /** Exercice de l'année courante (créé automatiquement si absent) — corrige la casse au 1er janvier. */
   private exerciceOuvert(): string {
     return this.exercicePourAnnee(this.anneeCourante());
@@ -256,6 +270,7 @@ export class EntrepriseDO extends DurableObject {
     if (!v.lignes.length) throw new Error('Vente sans ligne');
     if (v.aCredit && !v.tiersId) throw new Error('Un client est requis pour une vente à crédit');
     if (!v.aCredit && !v.modePaiement) throw new Error('Mode de paiement requis');
+    this.verifierTvaAutorisee(v.regimeFiscal, v.lignes.map((l) => l.tauxTva));
     // Lecture async AVANT la transaction (transactionSync exige un callback 100% synchrone).
     const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
 
@@ -291,17 +306,18 @@ export class EntrepriseDO extends DurableObject {
       // Écriture partie double : produit de la vente. Au comptant (réutilise le moteur comptable) —
       // débit trésorerie / crédit produit. À crédit — débit créance client (411) / crédit produit,
       // exactement comme une facture émise (voir emettreFacture).
+      const compteTva = this.compteTvaCollectee(secteur);
       const ecr = v.aCredit
         ? {
             lignes: [
               { compteNumero: '411', sens: 'debit' as const, montant: totalTtc },
               { compteNumero: compteProduit, sens: 'credit' as const, montant: totalHt },
-              ...(totalTva > 0 ? [{ compteNumero: '4431', sens: 'credit' as const, montant: totalTva }] : []),
+              ...(totalTva > 0 ? [{ compteNumero: compteTva, sens: 'credit' as const, montant: totalTva }] : []),
             ],
           }
         : genererRecette({
             montantHT: totalHt, tva: totalTva, modePaiement: v.modePaiement as never,
-            compteProduit, libelle: 'Vente caisse',
+            compteProduit, compteTvaCollectee: compteTva, libelle: 'Vente caisse',
           });
       const ecritureId = uid();
       this.sql.exec(
@@ -456,7 +472,7 @@ export class EntrepriseDO extends DurableObject {
    */
   async entrerStock(a: {
     produitId: string; quantite: number; coutUnitaire: number; modePaiement?: string | null;
-    aCredit?: boolean; tiersId?: string | null;
+    aCredit?: boolean; tiersId?: string | null; tauxTva?: number; regimeFiscal?: string | null;
   }, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }): Promise<{ nouveauStock: number; nouveauCmp: number }> {
     const prod = this.sql
       .exec('SELECT stock_actuel, cout_moyen_pondere FROM produit WHERE id = ?', a.produitId)
@@ -464,13 +480,17 @@ export class EntrepriseDO extends DurableObject {
     if (!prod) throw new Error('Produit introuvable');
     if (a.aCredit && !a.tiersId) throw new Error('Un fournisseur est requis pour un achat à crédit');
     if (!a.aCredit && !a.modePaiement) throw new Error('Mode de paiement requis');
+    this.verifierTvaAutorisee(a.regimeFiscal, [a.tauxTva]);
 
     return this.ctx.storage.transactionSync(() => {
       const etat = cmpApresEntree(
         { quantite: prod.stock_actuel, cmp: prod.cout_moyen_pondere },
         a.quantite, Math.floor(a.coutUnitaire),
       );
-      const montant = a.quantite * Math.floor(a.coutUnitaire);
+      // Le stock est valorisé HT (la TVA récupérable n'est pas un coût — 4452 la neutralise).
+      const montantHt = a.quantite * Math.floor(a.coutUnitaire);
+      const montantTva = Math.round(montantHt * (a.tauxTva ?? 0));
+      const montantRegle = montantHt + montantTva;
 
       this.sql.exec(
         'UPDATE produit SET stock_actuel = ?, cout_moyen_pondere = ? WHERE id = ?',
@@ -482,8 +502,8 @@ export class EntrepriseDO extends DurableObject {
         uid(), a.produitId, a.quantite, Math.floor(a.coutUnitaire),
       );
 
-      // Écriture : achat (601) réglé par trésorerie, ou par dette fournisseur (401) si à crédit,
-      // + entrée en stock (311/6031).
+      // Écriture : achat (601) [+ TVA récupérable 4452] réglé par trésorerie, ou par dette
+      // fournisseur (401) si à crédit, + entrée en stock (311/6031, valorisée HT).
       const exerciceId = this.exerciceOuvert();
       const ecritureId = uid();
       const compteContrepartie = a.aCredit
@@ -501,10 +521,11 @@ export class EntrepriseDO extends DurableObject {
           'INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?, ?, ?, ?, ?)',
           uid(), ecritureId, this.compteId(numero), sens, m,
         );
-      l('601', 'debit', montant);
-      l(compteContrepartie, 'credit', montant);
-      l('311', 'debit', montant);
-      l('6031', 'credit', montant);
+      l('601', 'debit', montantHt);
+      if (montantTva > 0) l('4452', 'debit', montantTva);
+      l(compteContrepartie, 'credit', montantRegle);
+      l('311', 'debit', montantHt);
+      l('6031', 'credit', montantHt);
       this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
 
       // Achat à crédit : trace la dette fournisseur (montant dû, suivi dans « ce que je dois »).
@@ -512,14 +533,14 @@ export class EntrepriseDO extends DurableObject {
       if (a.aCredit) {
         achatId = uid();
         this.sql.exec(
-          `INSERT INTO achat_fournisseur (id, exercice_id, tiers_id, total_ht, total_ttc, statut, ecriture_id)
-           VALUES (?, ?, ?, ?, ?, 'a_credit', ?)`,
-          achatId, exerciceId, a.tiersId, montant, montant, ecritureId,
+          `INSERT INTO achat_fournisseur (id, exercice_id, tiers_id, total_ht, total_tva, total_ttc, statut, ecriture_id)
+           VALUES (?, ?, ?, ?, ?, ?, 'a_credit', ?)`,
+          achatId, exerciceId, a.tiersId, montantHt, montantTva, montantRegle, ecritureId,
         );
         this.sql.exec(
           `INSERT INTO ligne_achat (id, achat_id, produit_id, quantite, cout_unitaire, montant_ht)
            VALUES (?, ?, ?, ?, ?, ?)`,
-          uid(), achatId, a.produitId, a.quantite, Math.floor(a.coutUnitaire), montant,
+          uid(), achatId, a.produitId, a.quantite, Math.floor(a.coutUnitaire), montantHt,
         );
       }
 
@@ -589,8 +610,10 @@ export class EntrepriseDO extends DurableObject {
   async creerFacture(f: {
     type: 'facture' | 'devis'; tiersId: string; dateEcheance?: string | null;
     lignes: { designation: string; quantite: number; prixUnitaire: number; tauxTva?: number }[];
+    regimeFiscal?: string | null;
   }): Promise<string> {
     if (!f.lignes.length) throw new Error('Facture sans ligne');
+    this.verifierTvaAutorisee(f.regimeFiscal, f.lignes.map((l) => l.tauxTva));
     const exerciceId = this.exerciceOuvert();
     let totalHt = 0, totalTva = 0;
     for (const l of f.lignes) {
@@ -662,7 +685,7 @@ export class EntrepriseDO extends DurableObject {
             uid(), ecritureId, this.compteId(numero2), sens, m);
         l('411', 'debit', f.total_ttc);
         l(compteProduit, 'credit', f.total_ht);
-        if (f.total_tva > 0) l('4431', 'credit', f.total_tva);
+        if (f.total_tva > 0) l(this.compteTvaCollectee(secteur), 'credit', f.total_tva);
         this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
       }
       this.journaliser({
@@ -709,6 +732,59 @@ export class EntrepriseDO extends DurableObject {
         apres: { montant, modePaiement, statut, regle },
       });
       return { statut, regle };
+    });
+  }
+
+  /**
+   * Émet une facture DOCUMENT pour une vente déjà réglée (comptant) — sans recréer d'écriture,
+   * pour éviter le double comptage du CA (la vente a déjà crédité 701/706). Le client demande
+   * parfois une facture formelle pour une vente déjà payée en caisse : ce n'est pas un second
+   * événement économique, juste un document numéroté qui réutilise l'écriture de la vente.
+   */
+  async creerFactureDepuisVente(
+    venteId: string, prefixe: string, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
+  ): Promise<{ factureId: string; numero: string }> {
+    const v = this.sql.exec(
+      'SELECT exercice_id, tiers_id, mode_paiement, total_ht, total_tva, total_ttc, statut, ecriture_id, facture_id FROM vente WHERE id = ?',
+      venteId,
+    ).toArray()[0] as {
+      exercice_id: string; tiers_id: string | null; total_ht: number; total_tva: number; total_ttc: number;
+      statut: string; ecriture_id: string; facture_id: string | null;
+    } | undefined;
+    if (!v) throw new Error('Vente introuvable');
+    if (v.statut !== 'payee') throw new Error('Seule une vente déjà réglée peut être facturée sans double comptage');
+    if (v.facture_id) throw new Error('Cette vente a déjà une facture');
+    if (!v.tiers_id) throw new Error('Un client est requis pour facturer cette vente');
+
+    return this.ctx.storage.transactionSync(() => {
+      const exerciceId = v.exercice_id;
+      const seq = this.sql
+        .exec("SELECT dernier_numero FROM sequence_numerotation WHERE exercice_id = ? AND type = 'facture'", exerciceId)
+        .toArray()[0] as { dernier_numero: number } | undefined;
+      const n = (seq?.dernier_numero ?? 0) + 1;
+      this.sql.exec(
+        `INSERT INTO sequence_numerotation (exercice_id, type, dernier_numero) VALUES (?, 'facture', ?)
+         ON CONFLICT(exercice_id, type) DO UPDATE SET dernier_numero = ?`,
+        exerciceId, n, n,
+      );
+      const annee = (this.sql.exec('SELECT annee FROM exercice WHERE id = ?', exerciceId).toArray()[0] as { annee: number }).annee;
+      const numero = `${prefixe}-FAC-${annee}-${String(n).padStart(4, '0')}`;
+
+      const factureId = uid();
+      this.sql.exec(
+        `INSERT INTO facture (id, exercice_id, type, numero, numero_seq, tiers_id, date_emission, statut,
+                              total_ht, total_tva, total_ttc)
+         VALUES (?, ?, 'facture', ?, ?, ?, date('now'), 'payee', ?, ?, ?)`,
+        factureId, exerciceId, numero, n, v.tiers_id, v.total_ht, v.total_tva, v.total_ttc,
+      );
+      // Relie la vente à sa facture-document (aucune écriture créée — l'écriture de la vente,
+      // déjà validée donc immuable, reste la SEULE trace comptable de ce chiffre d'affaires).
+      this.sql.exec('UPDATE vente SET facture_id = ? WHERE id = ?', factureId, venteId);
+      this.journaliser({
+        acteur, action: 'facture.depuis_vente', entite: 'facture', entiteId: factureId,
+        avant: { venteId }, apres: { numero, totalTtc: v.total_ttc },
+      });
+      return { factureId, numero };
     });
   }
 
@@ -794,6 +870,7 @@ export class EntrepriseDO extends DurableObject {
   async creerDepense(d: {
     categorie: string; compteNumero: string; libelle: string; montant: number;
     modePaiement: string; tiersId?: string | null; recurrente?: boolean; clientUuid?: string | null;
+    tauxTva?: number; regimeFiscal?: string | null;
   }, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }): Promise<{ depenseId: string; deja: boolean }> {
     if (d.clientUuid) {
       const ex = this.sql
@@ -803,12 +880,15 @@ export class EntrepriseDO extends DurableObject {
     }
     const montant = Math.floor(d.montant);
     if (montant <= 0) throw new Error('Montant de dépense invalide');
+    this.verifierTvaAutorisee(d.regimeFiscal, [d.tauxTva]);
 
     return this.ctx.storage.transactionSync(() => {
       const exerciceId = this.exerciceOuvert();
+      // `montant` = HT (le compte de charge est toujours débité hors-taxe) ; la TVA récupérable
+      // (4452), si applicable, s'ajoute au montant réellement décaissé (voir genererDepense).
       const ecr = genererDepense({
-        montantHT: montant, modePaiement: d.modePaiement as never,
-        compteCharge: d.compteNumero, libelle: d.libelle,
+        montantHT: montant, tvaRecuperable: Math.round(montant * (d.tauxTva ?? 0)),
+        modePaiement: d.modePaiement as never, compteCharge: d.compteNumero, libelle: d.libelle,
       });
       const ecritureId = uid();
       this.sql.exec(

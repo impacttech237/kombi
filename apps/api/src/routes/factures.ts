@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zModePaiement, zMontantPositif, zLigneMontant, zDateISO, messageErreurZod } from '@kombi/shared';
 import { requirePermission } from '../middleware/permission.js';
-import { stubEntreprise, type AppEnv } from '../types.js';
+import { stubEntreprise, regimeFiscalDe, type AppEnv } from '../types.js';
 import { genererFacturePDF, type DonneesFacture } from '../pdf/facture-pdf.js';
 
 const zCreationFacture = z.object({
@@ -51,8 +51,9 @@ factures.post('/', requirePermission('facture:manage'), async (c) => {
   const lignes = f.lignes.filter((l) => l.prixUnitaire > 0);
   if (!lignes.length) return c.json({ erreur: 'Ajoutez au moins une ligne' }, 400);
 
+  const regimeFiscal = await regimeFiscalDe(c.env, c.get('entrepriseId'));
   const id = await stubEntreprise(c.env, c.get('entrepriseId')).creerFacture({
-    type: f.type, tiersId: f.tiersId, dateEcheance: f.dateEcheance ?? null, lignes,
+    type: f.type, tiersId: f.tiersId, dateEcheance: f.dateEcheance ?? null, lignes, regimeFiscal,
   });
   return c.json({ factureId: id }, 201);
 });
@@ -63,6 +64,20 @@ factures.post('/:id/emettre', requirePermission('facture:manage'), async (c) => 
   const res = await stubEntreprise(c.env, c.get('entrepriseId'))
     .emettreFacture(c.req.param('id'), prefixe(ent.raison_sociale), { utilisateurId: c.get('utilisateurId'), role: c.get('role') });
   return c.json(res);
+});
+
+/**
+ * Facture-document pour une vente déjà réglée en caisse — réutilise l'écriture de la vente
+ * (pas de double comptage du CA). Voir creerFactureDepuisVente().
+ */
+factures.post('/depuis-vente/:venteId', requirePermission('facture:manage'), async (c) => {
+  const ent = await emetteur(c, c.get('entrepriseId'));
+  if (!ent) return c.json({ erreur: 'Entreprise introuvable' }, 404);
+  const res = await stubEntreprise(c.env, c.get('entrepriseId')).creerFactureDepuisVente(
+    c.req.param('venteId'), prefixe(ent.raison_sociale),
+    { utilisateurId: c.get('utilisateurId'), role: c.get('role') },
+  );
+  return c.json(res, 201);
 });
 
 factures.post('/:id/payer', requirePermission('facture:manage'), async (c) => {

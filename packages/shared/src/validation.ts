@@ -10,8 +10,12 @@ export const zMontantPositif = z.coerce.number().int().positive();
 /** Montant en FCFA pouvant être nul (ex. prix d'appel, coût initial). */
 export const zMontantPositifOuNul = z.coerce.number().int().min(0);
 
-/** Taux de TVA exprimé en fraction (0.1925 = 19,25 %), jamais négatif ni > 100 %. */
-export const zTauxTva = z.coerce.number().min(0).max(1);
+/** Les deux seuls taux de TVA légaux au Cameroun (CGI Art. 142) : exonéré ou 19,25 % effectif. */
+export const TAUX_TVA_VALIDES = [0, 0.1925] as const;
+export const zTauxTva = z.coerce.number().refine(
+  (v) => (TAUX_TVA_VALIDES as readonly number[]).includes(v),
+  { message: 'Taux de TVA invalide (doit être 0 ou 0,1925)' },
+);
 
 /** Date calendaire ISO stricte (YYYY-MM-DD) — rejette les horodatages et formats ambigus. */
 export const zDateISO = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date invalide (AAAA-MM-JJ attendu)');

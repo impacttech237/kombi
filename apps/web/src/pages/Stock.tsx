@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA } from '@kombi/shared';
+import { TAUX_TVA_EFFECTIF } from '@kombi/fiscal';
 import {
   listerProduits, creerProduit, approvisionner, listerTiers, creerTiers,
   type EntrepriseResume, type Produit, type Tiers,
@@ -103,11 +104,13 @@ function Approvisionner({ entreprise, produit, onFait }: {
   const [cout, setCout] = useState(String(produit.cout_moyen_pondere || ''));
   const [mode, setMode] = useState('especes');
   const [aCredit, setACredit] = useState(false);
+  const [avecTva, setAvecTva] = useState(false);
   const [fournisseurs, setFournisseurs] = useState<Tiers[]>([]);
   const [fournisseurId, setFournisseurId] = useState('');
   const [nouveauFournisseur, setNouveauFournisseur] = useState('');
   const [charge, setCharge] = useState(false);
   const [erreur, setErreur] = useState('');
+  const tvaEligible = entreprise.regime_fiscal !== 'igs' && entreprise.assujetti_tva === 1;
 
   useEffect(() => {
     listerTiers(entreprise.id)
@@ -126,6 +129,7 @@ function Approvisionner({ entreprise, produit, onFait }: {
       await approvisionner(entreprise.id, produit.id, {
         quantite: Number(qte), coutUnitaire: Number(cout),
         modePaiement: aCredit ? null : mode, aCredit, tiersId: aCredit ? tiersId : null,
+        tauxTva: avecTva ? TAUX_TVA_EFFECTIF : 0,
       });
       onFait();
     } catch (e) {
@@ -142,10 +146,16 @@ function Approvisionner({ entreprise, produit, onFait }: {
         <Champ label="Coût d'achat unitaire (FCFA)" type="text" value={cout}
           onChange={(v) => setCout(v.replace(/\D/g, ''))} placeholder="3000" />
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 14px', fontSize: 14 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px', fontSize: 14 }}>
           <input type="checkbox" checked={aCredit} onChange={(e) => setACredit(e.target.checked)} />
           Achat à crédit (fournisseur payé plus tard)
         </label>
+        {tvaEligible && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 14px', fontSize: 14 }}>
+            <input type="checkbox" checked={avecTva} onChange={(e) => setAvecTva(e.target.checked)} />
+            TVA récupérable sur cet achat (19,25 %)
+          </label>
+        )}
 
         {aCredit ? (
           <>
