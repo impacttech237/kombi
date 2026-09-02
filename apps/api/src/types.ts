@@ -58,6 +58,7 @@ export interface Variables {
   utilisateurId: string;
   entrepriseId: string;
   role: import('@kombi/shared').RoleMembre;
+  requestId: string;
 }
 
 export type AppEnv = { Bindings: Bindings; Variables: Variables };

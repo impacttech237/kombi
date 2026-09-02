@@ -30,6 +30,25 @@ app.use('*', (c, next) =>
   })(c, next),
 );
 
+// ID de corrélation par requête — posé avant tout, renvoyé au client, utilisé dans les logs
+// d'erreur (onError ci-dessous) pour relier un rapport utilisateur à une trace serveur précise.
+app.use('*', async (c, next) => {
+  const requestId = crypto.randomUUID();
+  c.set('requestId', requestId);
+  c.header('x-request-id', requestId);
+  await next();
+});
+
+// Logs structurés + réponse JSON uniforme pour toute erreur non gérée (throw dans un DO, bug de
+// route…) — auparavant : page texte brute Hono par défaut, sans ID de corrélation ni log exploitable.
+app.onError((err, c) => {
+  const requestId = c.get('requestId');
+  console.error(JSON.stringify({
+    requestId, methode: c.req.method, chemin: c.req.path, message: err.message,
+  }));
+  return c.json({ erreur: err.message || 'Erreur interne', requestId }, 500);
+});
+
 app.get('/health', (c) => c.json({ ok: true, service: 'kombi-api' }));
 
 // ── Auth better-auth : /api/auth/** (inscription, connexion, session…) ──

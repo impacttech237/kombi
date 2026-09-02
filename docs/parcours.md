@@ -359,8 +359,13 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   manifeste les référençait déjà mais les fichiers n'existaient pas → PWA non installable/icône
   cassée), reprenant le design du logo (carré émeraude arrondi + « K » — `Logo` dans `ui.tsx`) ;
   variante `purpose: maskable` ajoutée pour Android.
-- ⬜ 🟡 Vérification email + limiter l'auto-provisioning
-- ⬜ 🟡 Observabilité (onError Hono, logs structurés, ID de requête)
+- ⬜ 🟡 Vérification email + limiter l'auto-provisioning — nécessite de choisir un fournisseur
+  d'envoi d'e-mails (Resend, Mailgun…) et sa clé API, décision produit/infra qui revient à
+  l'utilisateur ; reporté en attendant ce choix plutôt que de câbler un fournisseur au hasard.
+- ✅ Observabilité (onError Hono, logs structurés, ID de requête) : middleware posant un
+  `x-request-id` (renvoyé au client) sur chaque requête, `app.onError` loggant en JSON structuré
+  (requestId/méthode/chemin/message) et renvoyant une réponse JSON uniforme au lieu de la page
+  texte brute par défaut de Hono — corrèle un rapport utilisateur à une trace serveur précise.
 - ⬜ ⚪ Backoff + plafond de tentatives sur la synchro offline
 - ⬜ ⚪ Export / sauvegarde / RGPD (les DO ne sont pas sauvegardés)
 - ⬜ ⚪ Tests : isolation tenant, permissions par rôle, offline, multi-exercices
