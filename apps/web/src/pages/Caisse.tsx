@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA } from '@kombi/shared';
-import {
-  enregistrerVente, listerProduits, type EntrepriseResume, type LigneCaisse, type Produit,
-} from '../lib/api.js';
+import { listerProduits, type EntrepriseResume, type LigneCaisse, type Produit } from '../lib/api.js';
+import { enfilerMutation, nouvelUuid } from '../offline/db.js';
+import { synchroniser } from '../offline/sync.js';
 import { Bouton, Icon } from '../components/ui.js';
 
 const MODES = [
@@ -45,10 +45,14 @@ export function Caisse({ entreprise, onVendu }: { entreprise: EntrepriseResume; 
     if (!panier.length) return;
     setCharge(true); setErreur('');
     try {
-      const r = await enregistrerVente(entreprise.id, {
-        lignes: panier, modePaiement: mode, clientUuid: crypto.randomUUID(),
+      // Offline-first : on enregistre localement (marche sans réseau), puis on tente la synchro.
+      const clientUuid = nouvelUuid();
+      await enfilerMutation({
+        clientUuid, entrepriseId: entreprise.id, type: 'vente',
+        payload: { lignes: panier, modePaiement: mode },
       });
-      setSucces(r.totalTtc); setPanier([]);
+      void synchroniser(); // rejeu immédiat si en ligne ; sinon au retour du réseau
+      setSucces(total); setPanier([]);
       onVendu?.();
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur');

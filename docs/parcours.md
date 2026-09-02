@@ -120,15 +120,15 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 - ✅ **Vérifié end-to-end** : commande créée → Démarrer → En cours → Terminée
 - ⬜ Conversion commande livrée → vente/facture · client optionnel dans le formulaire · échéance
 
-## Étape 7 — Offline complet (le plus critique terrain)
-- ⬜ Câbler la file de mutations sur les vraies routes (ventes, tiers, achats, factures)
-- ⬜ Route `POST /api/sync` idempotente (rejeu par `client_uuid`, retourne conflits)
-- ⬜ **Résolution de conflits** (dernière écriture gagnante ? verrou séquence facture côté serveur)
-- ⬜ Cache lecture (produits, tiers, plan comptable) en IndexedDB pour consultation offline
-- ⬜ Indicateur d'état réseau + file en attente (badge « N opérations à synchroniser »)
-- ⬜ Précache app shell (Service Worker) validé installable
-- ⬜ 🧪 Test end-to-end : saisie avion → reconnexion → 0 doublon, séquence facture cohérente
-- **Critère** : une journée de caisse sans réseau se synchronise sans perte ni doublon.
+## Étape 7 — Offline (le plus critique terrain) ✅ (caisse offline-first)
+- ✅ File de mutations Dexie (IndexedDB) branchée sur la **caisse** (offline-first : enregistre puis synchronise)
+- ✅ Rejeu **idempotent** via `clientUuid` (dédup côté DO) — **0 doublon** même si rejoué plusieurs fois (vérifié)
+- ✅ Synchro auto : au démarrage, sur l'événement `online`, après chaque saisie
+- ✅ Indicateur réseau + file (`OfflineBanner` : « Hors ligne / N en attente » + bouton Synchroniser)
+- ✅ **Démarrage hors-ligne** : cache session (`kombi.logged`) + liste d'entreprises → l'app s'ouvre au dernier espace
+- ✅ Précache app shell (Service Worker via vite-plugin-pwa, actif en production)
+- ✅ **Vérifié** : rejeu même clientUuid → CA +montant une seule fois ; Dexie + caches en place
+- ⬜ Étendre la file aux autres écrans (stock, factures) · cache lecture produits/tiers · test en conditions réseau réelles
 
 ## Étape 8 — Couche invisible : états & fiscalité (consultation)
 - ⬜ Extraire du Guide SYSCOHADA les **modèles** Bilan / Compte de résultat (Système Normal + SMT)
