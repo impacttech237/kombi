@@ -72,6 +72,9 @@ export const listerVentesACredit = (entrepriseId: string) =>
 export const statsJour = (entrepriseId: string) =>
   api<{ nbVentes: number; totalJour: number }>('/api/ventes/jour', { entrepriseId });
 
+export const tendance7Jours = (entrepriseId: string) =>
+  api<{ tendance: { jour: string; total: number }[] }>('/api/ventes/tendance', { entrepriseId }).then((r) => r.tendance);
+
 export interface Produit {
   id: string; nom: string; sku: string | null; unite: string;
   prix_vente: number; cout_moyen_pondere: number; stock_actuel: number;
@@ -119,6 +122,7 @@ export const creerTiers = (
 export interface FactureResume {
   id: string; type: string; numero: string | null; statut: string;
   total_ttc: number; date_emission: string | null; tiers_nom: string | null;
+  avoir_de_id: string | null; a_un_avoir: number;
 }
 export interface LigneFacture { designation: string; quantite: number; prixUnitaire: number; }
 
@@ -137,6 +141,8 @@ export const creerFacture = (
 ) => api<{ factureId: string }>('/api/factures', { method: 'POST', body: data, entrepriseId });
 export const emettreFacture = (entrepriseId: string, id: string) =>
   api<{ numero: string }>(`/api/factures/${id}/emettre`, { method: 'POST', entrepriseId });
+export const creerAvoir = (entrepriseId: string, id: string) =>
+  api<{ avoirId: string; numero: string }>(`/api/factures/${id}/avoir`, { method: 'POST', entrepriseId });
 export const payerFacture = (entrepriseId: string, id: string, data: { montant: number; modePaiement: string }) =>
   api<{ statut: string; regle: number }>(`/api/factures/${id}/payer`, { method: 'POST', body: data, entrepriseId });
 

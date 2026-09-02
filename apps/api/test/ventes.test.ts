@@ -22,6 +22,12 @@ describe('Ventes / caisse → comptabilité automatique', () => {
     const stats = await e.statsJour();
     expect(stats.nbVentes).toBe(1);
     expect(stats.totalJour).toBe(1000);
+
+    // Tendance 7 jours (vrai graphe du tableau de bord) : 7 points, le dernier = aujourd'hui.
+    const tendance = await e.tendance7Jours();
+    expect(tendance.length).toBe(7);
+    expect(tendance[6]!.total).toBe(1000);
+    expect(tendance.slice(0, 6).every((j) => j.total === 0)).toBe(true);
   });
 
   it('vente par mobile money (MTN MoMo)', async () => {

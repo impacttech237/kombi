@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA } from '@kombi/shared';
 import {
-  listerFactures, creerFacture, emettreFacture, payerFacture, urlPdfFacture,
+  listerFactures, creerFacture, emettreFacture, creerAvoir, payerFacture, urlPdfFacture,
   listerTiers, creerTiers, type EntrepriseResume, type FactureResume, type Tiers, type LigneFacture,
 } from '../lib/api.js';
 import { Bouton, Champ, Icon } from '../components/ui.js';
@@ -59,6 +59,11 @@ function CarteFacture({ entreprise, f, onMaj }: { entreprise: EntrepriseResume; 
     await payerFacture(entreprise.id, f.id, { montant: Number(montant), modePaiement: 'especes' });
     setPayMode(false); onMaj();
   }
+  async function avoir() {
+    if (!confirm(`Émettre un avoir pour ${f.numero} (${formaterFCFA(f.total_ttc)}) ?`)) return;
+    await creerAvoir(entreprise.id, f.id);
+    onMaj();
+  }
 
   return (
     <div className="carte" style={{ padding: 14 }}>
@@ -72,7 +77,9 @@ function CarteFacture({ entreprise, f, onMaj }: { entreprise: EntrepriseResume; 
         </div>
         <div style={{ textAlign: 'right' }}>
           <div className="chiffre" style={{ fontWeight: 700 }}>{formaterFCFA(f.total_ttc)}</div>
-          <span className={`chip ${paye ? 'chip-ok' : 'chip-bas'}`}>{STATUT_LIBELLE[f.statut]}</span>
+          {f.avoir_de_id
+            ? <span className="chip chip-bas">Avoir</span>
+            : <span className={`chip ${paye ? 'chip-ok' : 'chip-bas'}`}>{STATUT_LIBELLE[f.statut]}</span>}
         </div>
       </button>
 
@@ -80,8 +87,11 @@ function CarteFacture({ entreprise, f, onMaj }: { entreprise: EntrepriseResume; 
         <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-clair" onClick={voirPdf}><Icon name="graph" size={16} /> PDF</button>
           <button className="btn btn-clair" onClick={whatsapp}>WhatsApp</button>
-          {!paye && f.type === 'facture' && (
+          {!paye && f.type === 'facture' && !f.avoir_de_id && (
             <button className="btn btn-primaire" onClick={() => setPayMode(!payMode)}>Encaisser</button>
+          )}
+          {f.type === 'facture' && f.statut !== 'brouillon' && !f.avoir_de_id && !f.a_un_avoir && (
+            <button className="btn btn-clair" onClick={avoir} style={{ color: 'var(--danger)' }}>Avoir</button>
           )}
           {payMode && (
             <div style={{ display: 'flex', gap: 8, width: '100%', marginTop: 6 }}>

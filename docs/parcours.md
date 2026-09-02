@@ -188,7 +188,10 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 7. ✅ **Sécurité** : CORS restreint aux origines de confiance + rate-limiting auth (D1, 10 req/min/IP) + validation Zod (montants/taux/dates) sur ventes/dépenses/produits/factures.
 8. ✅ **Employés & rôles** : rôles comptable/employé, écran Équipe (ajout par email + changement de rôle + retrait), nav filtrée par rôle, route fiscalité protégée (`requirePermission('compta:read')`).
 9. ⬜ 🟠 **États & livres légaux** : livre-journal, grand-livre, balance + bilan/CR au format SYSCOHADA à rubriques + SIG ; date d'opération réelle (locale, pas UTC).
-10. ⬜ 🔴 **Décisions structurantes** : versioning du schéma DO, collecte d'agrégats (back-office + plans d'abonnement), mécanisme d'avoir, vrai tableau de bord (retirer le faux graphe).
+10. 🚧 🔴 **Décisions structurantes** : ✅ versioning du schéma DO ; ✅ mécanisme d'avoir (`creerAvoir`,
+    contre-passation intégrale, `caCumule` désormais net crédits−débits) ; ✅ vrai tableau de bord
+    (`tendance7Jours`, le faux graphe SVG statique a disparu) ; ⬜ collecte d'agrégats back-office +
+    plans d'abonnement (décisions produit hors du périmètre technique, voir note ci-dessous).
 
 ## Caisse & ventes
 - ✅ Vente à crédit (411) : `enregistrerVente({ aCredit: true, tiersId })` débite la créance client
@@ -242,7 +245,8 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ⬜ ⚪ Code-barres · multi-entrepôts
 
 ## Facturation & devis
-- ⬜ 🟠 Mécanisme d'avoir (`avoir_de_id` inutilisé) — correction sans suppression
+- ✅ Mécanisme d'avoir (`creerAvoir`) — contre-passation intégrale, partage la numérotation des
+  factures (préfixe AVO), bouton dans `Factures.tsx`
 - ⬜ 🟠 Conversion devis → facture
 - ⬜ 🟠 WhatsApp envoie réellement le PDF (destinataire + lien)
 - ⬜ 🟡 Acompte (facture / commande)
@@ -255,7 +259,7 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ⬜ 🟠 Fiche tiers (historique, solde dû, NIU, téléphone)
 
 ## Pilotage / tableau de bord
-- ⬜ 🟠 Retirer le faux graphe (`FauxGraphe`) → vraies données
+- ✅ Retirer le faux graphe (`FauxGraphe`) → vraies données (`tendance7Jours`, 7 derniers jours)
 - ⬜ 🟠 Trésorerie du jour (espèces + MoMo/Orange)
 - ✅ Impayés / créances en tête d'accueil : cartes « On me doit » / « Ce que je dois » sur le dashboard
 - ⬜ 🟡 Marge, meilleures ventes, dépenses du jour, alertes stock

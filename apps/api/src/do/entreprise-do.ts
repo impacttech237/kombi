@@ -441,6 +441,28 @@ export class EntrepriseDO extends DurableObject {
     return { nbVentes: row.n, totalJour: row.total };
   }
 
+  /**
+   * Tendance des 7 derniers jours (ventes payées, comptant + soldé à crédit ce jour-là) — pour un
+   * vrai graphe de tableau de bord, plus une donnée décorative statique.
+   */
+  async tendance7Jours(): Promise<{ jour: string; total: number }[]> {
+    const auj = new Date(Date.parse(this.dateCourante()) || Date.now());
+    const jours: string[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(auj);
+      d.setUTCDate(d.getUTCDate() - i);
+      jours.push(d.toISOString().slice(0, 10));
+    }
+    const rows = this.sql.exec(
+      `SELECT date(date) AS jour, COALESCE(SUM(total_ttc), 0) AS total
+         FROM vente WHERE statut = 'payee' AND date(date) >= ?
+        GROUP BY date(date)`,
+      jours[0],
+    ).toArray() as { jour: string; total: number }[];
+    const parJour = new Map(rows.map((r) => [r.jour, r.total]));
+    return jours.map((j) => ({ jour: j, total: parJour.get(j) ?? 0 }));
+  }
+
   // ══════════════ Stock (module optionnel) ══════════════
   async creerProduit(p: {
     nom: string; sku?: string | null; prixVente: number; seuilAlerte?: number; unite?: string;
@@ -696,6 +718,72 @@ export class EntrepriseDO extends DurableObject {
     });
   }
 
+  /**
+   * Avoir : corrige une facture émise SANS la supprimer (immuabilité) — contre-passation complète
+   * (débit produit / crédit créance client, l'inverse exact de l'émission). Un seul avoir par
+   * facture. Partage la numérotation des factures (`sequence_numerotation` ne connaît que
+   * 'devis'/'facture') avec un préfixe "AVO" pour le distinguer visuellement.
+   */
+  async creerAvoir(
+    factureId: string, prefixe: string, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
+  ): Promise<{ avoirId: string; numero: string }> {
+    const f = this.sql.exec(
+      'SELECT type, exercice_id, tiers_id, total_ht, total_tva, total_ttc, statut FROM facture WHERE id = ?', factureId,
+    ).toArray()[0] as {
+      type: string; exercice_id: string; tiers_id: string; total_ht: number; total_tva: number;
+      total_ttc: number; statut: string;
+    } | undefined;
+    if (!f) throw new Error('Facture introuvable');
+    if (f.type !== 'facture') throw new Error('Seule une facture (pas un devis) peut faire l\'objet d\'un avoir');
+    if (f.statut === 'brouillon') throw new Error('Cette facture n\'a pas encore été émise');
+    const dejaAvoir = this.sql.exec('SELECT 1 FROM facture WHERE avoir_de_id = ?', factureId).toArray()[0];
+    if (dejaAvoir) throw new Error('Un avoir existe déjà pour cette facture');
+    const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
+
+    return this.ctx.storage.transactionSync(() => {
+      const seq = this.sql
+        .exec("SELECT dernier_numero FROM sequence_numerotation WHERE exercice_id = ? AND type = 'facture'", f.exercice_id)
+        .toArray()[0] as { dernier_numero: number } | undefined;
+      const n = (seq?.dernier_numero ?? 0) + 1;
+      this.sql.exec(
+        `INSERT INTO sequence_numerotation (exercice_id, type, dernier_numero) VALUES (?, 'facture', ?)
+         ON CONFLICT(exercice_id, type) DO UPDATE SET dernier_numero = ?`,
+        f.exercice_id, n, n,
+      );
+      const annee = (this.sql.exec('SELECT annee FROM exercice WHERE id = ?', f.exercice_id).toArray()[0] as { annee: number }).annee;
+      const numero = `${prefixe}-AVO-${annee}-${String(n).padStart(4, '0')}`;
+
+      // Contre-passation : l'inverse exact de l'écriture d'émission (débit produit / crédit 411).
+      const compteProduit = secteur === 'service' ? '706' : '701';
+      const ecritureId = uid();
+      this.sql.exec(
+        `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, source, statut, facture_id)
+         VALUES (?, ?, date('now'), ?, 'facture', 'brouillon', ?)`,
+        ecritureId, f.exercice_id, `Avoir ${numero}`, factureId,
+      );
+      const l = (numero2: string, sens: string, m: number) =>
+        this.sql.exec('INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?, ?, ?, ?, ?)',
+          uid(), ecritureId, this.compteId(numero2), sens, m);
+      l(compteProduit, 'debit', f.total_ht);
+      if (f.total_tva > 0) l(this.compteTvaCollectee(secteur), 'debit', f.total_tva);
+      l('411', 'credit', f.total_ttc);
+      this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
+
+      const avoirId = uid();
+      this.sql.exec(
+        `INSERT INTO facture (id, exercice_id, type, numero, numero_seq, tiers_id, date_emission, statut,
+                              total_ht, total_tva, total_ttc, avoir_de_id)
+         VALUES (?, ?, 'facture', ?, ?, ?, date('now'), 'payee', ?, ?, ?, ?)`,
+        avoirId, f.exercice_id, numero, n, f.tiers_id, f.total_ht, f.total_tva, f.total_ttc, factureId,
+      );
+      this.journaliser({
+        acteur, action: 'facture.avoir', entite: 'facture', entiteId: avoirId,
+        avant: { factureId }, apres: { numero, totalTtc: f.total_ttc },
+      });
+      return { avoirId, numero };
+    });
+  }
+
   /** Encaisse (total ou partiel) une facture : trésorerie / créance client 411, met à jour le statut. */
   async payerFacture(
     factureId: string, montant: number, modePaiement: string,
@@ -790,7 +878,8 @@ export class EntrepriseDO extends DurableObject {
 
   async listerFactures(): Promise<Record<string, unknown>[]> {
     return this.sql.exec(
-      `SELECT f.id, f.type, f.numero, f.statut, f.total_ttc, f.date_emission, f.date_echeance, t.nom AS tiers_nom
+      `SELECT f.id, f.type, f.numero, f.statut, f.total_ttc, f.date_emission, f.date_echeance, f.avoir_de_id,
+              t.nom AS tiers_nom, EXISTS (SELECT 1 FROM facture av WHERE av.avoir_de_id = f.id) AS a_un_avoir
          FROM facture f LEFT JOIN tiers t ON t.id = f.tiers_id
         ORDER BY f.created_at DESC`,
     ).toArray() as never;
@@ -806,6 +895,7 @@ export class EntrepriseDO extends DurableObject {
               COALESCE((SELECT SUM(montant) FROM paiement_facture WHERE facture_id = f.id), 0) AS regle
          FROM facture f LEFT JOIN tiers t ON t.id = f.tiers_id
         WHERE f.type = 'facture' AND f.statut IN ('envoyee', 'payee_partiellement', 'en_retard')
+          AND NOT EXISTS (SELECT 1 FROM facture av WHERE av.avoir_de_id = f.id)
         ORDER BY f.date_echeance ASC`,
     ).toArray() as { id: string; numero: string; total_ttc: number; date_emission: string | null; date_echeance: string | null; tiers_nom: string | null; regle: number }[];
     const aujourdhui = this.dateCourante();
@@ -986,13 +1076,15 @@ export class EntrepriseDO extends DurableObject {
 
   /** Chiffre d'affaires cumulé de l'exercice (crédits classe 7, écritures validées) — pour l'IGS. */
   async caCumule(): Promise<number> {
+    // Net (crédits − débits) : un avoir débite le compte de produit pour contre-passer une vente
+    // sans la supprimer (immuabilité) — le CA doit refléter ce net, pas le seul brut crédité.
     const row = this.sql
       .exec(
-        `SELECT COALESCE(SUM(l.montant), 0) AS ca
+        `SELECT COALESCE(SUM(CASE WHEN l.sens = 'credit' THEN l.montant ELSE -l.montant END), 0) AS ca
            FROM ligne_ecriture l
            JOIN compte_comptable c ON c.id = l.compte_id
            JOIN ecriture e ON e.id = l.ecriture_id
-          WHERE c.classe = 7 AND l.sens = 'credit' AND e.statut = 'validee' AND e.exercice_id = ?`,
+          WHERE c.classe = 7 AND e.statut = 'validee' AND e.exercice_id = ?`,
         this.exerciceOuvert(),
       )
       .toArray()[0] as { ca: number };

@@ -80,6 +80,16 @@ factures.post('/depuis-vente/:venteId', requirePermission('facture:manage'), asy
   return c.json(res, 201);
 });
 
+/** Avoir : corrige une facture émise sans la supprimer (contre-passation complète). */
+factures.post('/:id/avoir', requirePermission('facture:manage'), async (c) => {
+  const ent = await emetteur(c, c.get('entrepriseId'));
+  if (!ent) return c.json({ erreur: 'Entreprise introuvable' }, 404);
+  const res = await stubEntreprise(c.env, c.get('entrepriseId')).creerAvoir(
+    c.req.param('id'), prefixe(ent.raison_sociale), { utilisateurId: c.get('utilisateurId'), role: c.get('role') },
+  );
+  return c.json(res, 201);
+});
+
 factures.post('/:id/payer', requirePermission('facture:manage'), async (c) => {
   const corps = zPaiementFacture.safeParse(await c.req.json().catch(() => null));
   if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);

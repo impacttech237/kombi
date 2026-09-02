@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA, TERMINOLOGIE, peut, type Secteur, type RoleMembre } from '@kombi/shared';
 import {
-  api, statsJour, listerCommandes, listerDepenses, listerVentesACredit, listerFacturesImpayees,
-  listerDettesFournisseurs, type EntrepriseResume,
+  api, statsJour, tendance7Jours, listerCommandes, listerDepenses, listerVentesACredit,
+  listerFacturesImpayees, listerDettesFournisseurs, type EntrepriseResume,
 } from '../lib/api.js';
 import { Bouton, CarteStat, Icon } from '../components/ui.js';
 
@@ -23,6 +23,7 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses, onCre
   const [totalDepenses, setTotalDepenses] = useState<number | null>(null);
   const [totalCreances, setTotalCreances] = useState<number | null>(null);
   const [totalDettes, setTotalDettes] = useState<number | null>(null);
+  const [tendance, setTendance] = useState<{ jour: string; total: number }[] | null>(null);
   const [erreur, setErreur] = useState('');
   const role = entreprise.role as RoleMembre;
   const voitCompta = peut(role, 'compta:read');
@@ -37,6 +38,7 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses, onCre
         .catch((e) => setErreur(e instanceof Error ? e.message : 'Erreur'));
     }
     statsJour(entreprise.id).then(setJour).catch(() => {});
+    tendance7Jours(entreprise.id).then(setTendance).catch(() => {});
     listerCommandes(entreprise.id)
       .then((cs) => setNbCmd(cs.filter((c) => c.statut === 'en_attente' || c.statut === 'en_cours').length))
       .catch(() => {});
@@ -112,13 +114,15 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses, onCre
 
       <div className="carte" style={{ marginTop: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <strong>Activité</strong>
+          <strong>Ventes des 7 derniers jours</strong>
           <span className="chip chip-ok">{entreprise.regime_fiscal === 'igs' ? 'Régime IGS' : 'Régime réel'}</span>
         </div>
-        <FauxGraphe />
-        <p className="muet" style={{ fontSize: 13, marginBottom: 0 }}>
-          Enregistrez votre première vente pour voir vos statistiques s'animer.
-        </p>
+        {tendance === null ? <p className="muet" style={{ fontSize: 13 }}>Chargement…</p>
+          : tendance.every((t) => t.total === 0) ? (
+            <p className="muet" style={{ fontSize: 13, marginBottom: 0 }}>
+              Enregistrez votre première vente pour voir vos statistiques s'animer.
+            </p>
+          ) : <GrapheTendance donnees={tendance} />}
       </div>
 
       {erreur && <p style={{ color: 'var(--danger)', fontSize: 13, marginTop: 10 }}>{erreur}</p>}
@@ -126,13 +130,24 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses, onCre
   );
 }
 
-function FauxGraphe() {
+/** Vrai graphe (données réelles des 7 derniers jours), plus de décor statique. */
+function GrapheTendance({ donnees }: { donnees: { jour: string; total: number }[] }) {
+  const largeur = 300, hauteur = 110, pas = largeur / (donnees.length - 1 || 1);
+  const max = Math.max(...donnees.map((d) => d.total), 1);
+  const y = (v: number) => hauteur - 10 - (v / max) * (hauteur - 20);
+  const points = donnees.map((d, i) => `${i * pas},${y(d.total)}`).join(' ');
+  const libelleJour = (iso: string) =>
+    new Date(iso + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '');
+
   return (
-    <svg viewBox="0 0 300 110" style={{ width: '100%', height: 110 }} aria-hidden>
-      <polyline fill="none" stroke="var(--vert)" strokeWidth="3" strokeLinecap="round"
-        points="0,80 40,72 80,78 120,55 160,60 200,38 240,44 300,20" />
-      <polygon fill="var(--vert-clair)" opacity="0.6"
-        points="0,80 40,72 80,78 120,55 160,60 200,38 240,44 300,20 300,110 0,110" />
-    </svg>
+    <div>
+      <svg viewBox={`0 0 ${largeur} ${hauteur}`} style={{ width: '100%', height: hauteur }} aria-hidden>
+        <polyline fill="none" stroke="var(--vert)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={points} />
+        <polygon fill="var(--vert-clair)" opacity="0.6" points={`${points} ${largeur},${hauteur} 0,${hauteur}`} />
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--muet)', marginTop: 4 }}>
+        {donnees.map((d) => <span key={d.jour}>{libelleJour(d.jour)}</span>)}
+      </div>
+    </div>
   );
 }

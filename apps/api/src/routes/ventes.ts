@@ -60,3 +60,9 @@ ventes.get('/jour', requirePermission('vente:read'), async (c) => {
   const stats = await stubEntreprise(c.env, entrepriseId).statsJour();
   return c.json(stats);
 });
+
+/** Tendance des 7 derniers jours (vrai graphe du tableau de bord). */
+ventes.get('/tendance', requirePermission('vente:read'), async (c) => {
+  const tendance = await stubEntreprise(c.env, c.get('entrepriseId')).tendance7Jours();
+  return c.json({ tendance });
+});
