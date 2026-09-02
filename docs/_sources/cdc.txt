@@ -1,0 +1,236 @@
+CAHIER DES CHARGES FONCTIONNEL
+SaaS Comptable CEMAC
+Spécifications détaillées des fonctionnalités, règles métier et critères d'acceptation
+Impact Tech — Douala, Cameroun
+Version 1.0 — Septembre 2026
+Document technique destiné à l'équipe de développement
+1. Introduction
+1.1 Objectif du document
+Ce cahier des charges détaille les fonctionnalités du SaaS comptable CEMAC au niveau nécessaire pour qu'une équipe de développement puisse construire sans avoir à deviner une règle métier. Il complète le plan d'affaires (positionnement, marché, modèle économique) et le document d'architecture technique (choix d'infrastructure), disponibles séparément.
+1.2 Principe directeur
+Chaque fonctionnalité est spécifiée avec sa règle métier exacte, ses cas limites, et son critère d'acceptation. Lorsqu'une règle dépend d'un texte réglementaire (barème fiscal, taux de cotisation sociale), la source et la date de validité sont indiquées — ces règles doivent être revues à chaque loi de finances annuelle.
+Toute fonctionnalité touchant au calcul fiscal ou social doit être validée par l'expert-comptable agréé ONECCA avant mise en production, conformément à la recommandation de l'étude de validation initiale. Une erreur de calcul ici a un coût de confiance disproportionné par rapport à un bug d'interface.
+1.3 Portée
+Ce document couvre le périmètre du MVP (mois 1-3) jusqu'à la V3 (année 2-3), en indiquant la phase de chaque fonctionnalité. Le détail du séquencement se trouve à la section 11.
+2. Personas
+Persona
+Profil
+Besoin principal
+La commerçante TPE
+Régime IGS, peu de littératie financière, usage mobile exclusif, connectivité 3G intermittente
+Enregistrer ses ventes en quelques secondes, savoir combien elle doit à l'impôt sans calcul
+Le gérant de PME structurée
+Régime du Réel, gère plusieurs employés, a besoin de TVA et de DSF complète
+États financiers fiables, conformité multi-obligations, vision de trésorerie
+L'expert-comptable / CGA partenaire
+Valide les comptes de plusieurs clients, prescripteur du logiciel
+Vue consolidée multi-clients, export des données pour son propre contrôle
+L'administrateur Impact Tech
+Équipe support et produit interne
+Back-office de gestion des comptes, suivi des mises à jour réglementaires
+3. Module Comptabilité & Facturation
+3.1 Facturation et devis
+Création illimitée de factures et devis, gratuite sur tous les plans
+Chaque facture porte obligatoirement : NIU de l'émetteur, numéro séquentiel unique et non réutilisable, date, désignation, montants HT/TVA/TTC le cas échéant
+Génération PDF conforme aux exigences DGI, envoi par WhatsApp ou email
+Statuts de facture : brouillon, envoyée, payée partiellement, payée, en retard, annulée
+Règle métier — numérotation : la numérotation des factures doit être strictement séquentielle et non modifiable a posteriori, par anticipation de l'exigence de traçabilité de la facturation électronique 2026 (voir section 6.4). Toute correction se fait par avoir, jamais par suppression.
+3.2 Enregistrement des recettes et dépenses
+Saisie manuelle rapide (montant, catégorie, tiers, mode de paiement) en moins de 3 champs obligatoires
+Import depuis le scan de reçu (voir module IA, section 7.1)
+Catégorisation dans le plan comptable OHADA (classes 1 à 8), avec suggestion automatique (voir 7.2)
+3.3 États financiers
+Génération automatique du bilan et du compte de résultat, adaptée au système applicable : minimal (CA < 30M commerce / 20M services), allégé, ou normal
+Le système de rattachement est déterminé automatiquement à partir du chiffre d'affaires annuel cumulé, avec possibilité de forçage manuel par un expert-comptable
+Critère d'acceptation : un changement de système (ex. minimal → allégé) déclenché par le franchissement d'un seuil de CA doit notifier l'utilisateur et ne jamais s'appliquer rétroactivement sur l'exercice en cours sans confirmation explicite.
+3.4 Rapprochement bancaire et mobile money
+Phase MVP : import structuré CSV/Excel des relevés bancaires et mobile money
+Phase V2 : parsing OCR des relevés PDF, développé banque par banque (Afriland, SGBC, UBA, Ecobank, CCA) en raison de l'absence de format standard
+Moteur de matching automatique par montant, date et référence, avec validation en un clic
+Génération automatique des écritures d'ajustement pour les agios, frais de tenue de compte et chèques impayés
+4. Module Fiscalité & Conformité
+4.1 Régime IGS — calcul automatique
+L'IGS (Impôt Général Synthétique) s'applique aux entreprises dont le chiffre d'affaires annuel est inférieur ou égal à 50 000 000 FCFA. Le barème ci-dessous doit être codé exactement — c'est la fonctionnalité gratuite phare du produit.
+Classe
+Chiffre d'affaires annuel
+IGS annuel
+IGS trimestriel
+1
+< 500 000 FCFA
+20 000 FCFA
+5 000 FCFA
+2
+500 000 – < 1 000 000
+30 000 FCFA
+7 500 FCFA
+3
+1 000 000 – < 1 500 000
+40 000 FCFA
+10 000 FCFA
+4
+1 500 000 – < 2 000 000
+50 000 FCFA
+12 500 FCFA
+5
+2 000 000 – < 2 500 000
+60 000 FCFA
+15 000 FCFA
+6
+2 500 000 – < 5 000 000
+150 000 FCFA
+37 500 FCFA
+7
+5 000 000 – < 10 000 000
+300 000 FCFA
+75 000 FCFA
+8
+10 000 000 – < 20 000 000
+500 000 FCFA
+125 000 FCFA
+9
+20 000 000 – < 30 000 000
+1 000 000 FCFA
+250 000 FCFA
+10
+30 000 000 – 50 000 000
+2 000 000 FCFA
+500 000 FCFA
+Majoration de 10 % au titre des Centimes Additionnels Communaux (CAC), appliquée systématiquement sur le montant de la classe
+Abattement de 50 % sur la base avant application du CAC pour les entreprises adhérentes à un Centre de Gestion Agréé (statut à déclarer dans le profil entreprise)
+Alerte automatique lorsque le chiffre d'affaires cumulé de l'exercice, projeté linéairement sur les mois écoulés, atteint 85 % du plafond de 50 000 000 FCFA — recommandation d'anticiper la transition vers le Régime du Réel
+Critère d'acceptation : le calcul de l'IGS doit être revérifié à chaque loi de finances annuelle (le barème 2026 a déjà remplacé un système à 12 classes par un système à 10 classes suite à la fusion de l'ex-Impôt Libératoire et du régime simplifié — ce type de changement structurel peut se reproduire).
+4.2 Régime du Réel — TVA et Impôt sur les Sociétés
+Calcul automatique de la TVA collectée (19,25 %) sur les ventes taxables et suivi de la TVA déductible sur achats
+Calcul de l'acompte mensuel d'IS (2,2 % du chiffre d'affaires) et de l'IS annuel (33 % du bénéfice, soit 30 % + 10 % CAC)
+Module de suivi des retenues à la source (TSR/AIB) : identification des tiers concernés, calcul de la retenue selon la nature du paiement, génération de l'attestation
+4.3 Déclaration Statistique et Fiscale (DSF)
+Génération automatique, à partir des données comptables de l'exercice, des tableaux d'informations générales, des états financiers avec notes annexes, et des tableaux fiscaux requis par la DGI
+Le rappel d'échéance s'adapte au centre de gestion déclaré par l'utilisateur lors de l'onboarding : DGE (15 mars), CIME/CSI-EPA/CSIPLI (15 avril), CDI (15 mai)
+Export dans un format compatible avec la saisie sur le portail DGI (l'automatisation complète de la télétransmission dépend de la disponibilité d'une API DGI, non garantie à ce jour)
+4.4 Facturation électronique — anticipation de l'obligation 2026
+La loi de finances prévoit un système de facturation électronique obligatoire à partir de 2026 pour les opérations B2B soumises à la TVA, sur un modèle de contrôle continu des transactions (CTC). Les spécifications techniques précises n'étaient pas encore publiées au moment de la rédaction de ce document.
+Le modèle de données de facturation (section 3.1) doit dès le MVP capturer tous les champs prévisibles pour une conformité CTC : numérotation séquentielle non modifiable, horodatage, NIU des deux parties, empreinte d'intégrité du document
+Le module doit être conçu avec un point d'extension clair pour brancher un connecteur de transmission à la plateforme DGI dès que ses spécifications seront publiées, sans refonte du modèle de données existant
+Cette fonctionnalité est la fenêtre de différenciation réglementaire la plus importante identifiée dans l'étude de marché. Un suivi actif des publications DGI doit être assigné à un responsable produit.
+5. Module Paie & Charges sociales
+5.1 Configuration
+Classification de l'entreprise par classe de risque professionnel (A, B ou C) lors de l'onboarding — détermine le taux de cotisation accidents du travail
+Fiche employé : salaire brut, date d'embauche, statut
+5.2 Calcul des cotisations CNPS
+Cotisation
+Part employeur
+Part salarié
+Plafond
+Prestations familiales
+7 %
+0 %
+300 000 FCFA/mois
+Pension vieillesse / invalidité / décès
+2,8 %
+1,4 %
+300 000 FCFA/mois
+Accidents du travail
+1,75 % à 5 % (classe A/B/C)
+0 %
+Aucun plafond
+Critère d'acceptation : le plafond de 300 000 FCFA/mois s'applique uniquement aux prestations familiales et à la pension — jamais aux accidents du travail. Une erreur fréquente serait de plafonner l'ensemble des cotisations.
+5.3 Déclarations
+Génération du bulletin de paie mensuel par employé
+Génération de la déclaration DIPE mensuelle, avec rappel avant le 15 (date limite de déclaration) et avant le 20 (date limite de paiement)
+Génération de la déclaration annuelle des salaires, avec rappel avant le 31 janvier
+6. Module Intelligence Artificielle
+Fonctionnalité
+Règle / comportement attendu
+Phase
+Scan de reçus (OCR)
+Extraction du montant, de la date et du fournisseur depuis une photo ; en cas d'échec d'extraction, présenter les champs vides pour saisie manuelle plutôt que bloquer l'utilisateur
+MVP
+Catégorisation automatique
+Suggestion de catégorie comptable OHADA avec score de confiance ; toute correction de l'utilisateur doit être utilisée pour améliorer les suggestions futures de ce compte spécifique
+MVP
+Assistant comptable conversationnel
+Répond en français simple à des questions sur les données propres à l'entreprise (RAG sur les données comptables de l'utilisateur uniquement — jamais d'accès cross-comptes)
+V1
+Alertes intelligentes
+Détection d'anomalies (dépense inhabituelle, doublon fournisseur) et rappel proactif des échéances fiscales/sociales à venir (J-10, J-5, J-1)
+V1
+Prévisions de trésorerie
+Projection à 30/60/90 jours à partir de l'historique ; afficher un intervalle de confiance plutôt qu'un chiffre unique, et se désactiver automatiquement si l'historique disponible est inférieur à 3 mois
+V2
+Scoring de crédit alternatif
+Score interne basé sur la régularité des revenus, la gestion des dépenses et le respect des échéances ; partageable avec un partenaire bancaire uniquement avec consentement explicite de l'entreprise
+V3
+Le consentement explicite avant tout partage de données avec un tiers (banque, CGA) n'est pas une option de confort — c'est une exigence non négociable, en particulier pour le scoring de crédit qui touche à des données financières sensibles.
+7. Module Marketplace de partenaires
+7.1 Référencement CGA
+Le système identifie automatiquement les entreprises éligibles à un Centre de Gestion Agréé (chiffre d'affaires ≤ 100 000 000 FCFA)
+Calcul et affichage de l'économie potentielle liée à l'abattement de 50 % sur la base IGS en cas d'adhésion
+Bouton de mise en relation avec un CGA partenaire, traçant la commission d'apport d'affaires
+7.2 Marketplace d'experts-comptables ONECCA
+Annuaire d'experts-comptables partenaires, filtrable par ville et spécialité
+Demande de mise en relation payante ou par commission, sur le modèle de Wave Advisors identifié dans l'étude complémentaire
+8. Module Paiement & Notifications
+8.1 Paiement des abonnements
+Paiement de l'abonnement Essentiel/Pro par MTN Mobile Money et Orange Money
+Aucune commission propre prélevée sur les flux de paiement au lancement — voir la réserve réglementaire détaillée dans le document d'architecture, section sécurité et conformité
+8.2 Paiement des factures clients
+Lien de paiement mobile money intégré à chaque facture envoyée par un client du logiciel à son propre client final, sur le modèle du bouton « Payer maintenant » de Wave Accounting
+8.3 Notifications
+Rappels d'échéances fiscales et sociales par SMS et WhatsApp Business API, cumulables avec les notifications in-app
+Fréquence de rappel configurable, avec des valeurs par défaut à J-10, J-5 et J-1 avant chaque échéance
+9. Exigences non fonctionnelles
+Catégorie
+Exigence
+Performance
+Temps de chargement inférieur à 3 secondes sur une connexion 3G ; interactions courantes (saisie d'une transaction) en moins de 2 secondes
+Disponibilité
+Cible de disponibilité de 99,5 % ; dégradation gracieuse en mode hors-ligne plutôt que blocage complet
+Connectivité intermittente
+Mode hors-ligne avec file d'attente de synchronisation ; aucune perte de donnée saisie localement en cas de coupure réseau
+Sécurité des données
+Chiffrement en transit (TLS) et au repos ; authentification renforcée pour les comptes multi-utilisateurs (Pro)
+Conformité données personnelles
+Respect de la loi camerounaise sur la protection des données à caractère personnel ; consentement explicite pour tout partage avec un tiers
+Traçabilité
+Journal d'audit horodaté de toute modification comptable ou fiscale, non modifiable a posteriori
+Langue
+Français au MVP ; anglais à prévoir pour les régions anglophones du Cameroun et l'expansion régionale
+Accessibilité économique
+Consommation de données mobiles minimisée (assets légers, mode texte pour les connexions les plus faibles)
+10. Priorisation et phasage
+Phase
+Période
+Fonctionnalités incluses
+MVP
+Mois 1-3
+Facturation, enregistrement recettes/dépenses, scan de reçus OCR, catégorisation IA, calcul IGS gratuit, plan comptable OHADA
+V1
+Mois 4-6
+États financiers automatiques, chatbot comptable, alertes intelligentes, DSF automatique, paiement mobile money, import bancaire CSV/Excel
+V2
+Mois 7-12
+Prévisions de trésorerie, module Paie/CNPS complet, rapprochement bancaire OCR, marketplace CGA/ONECCA, multi-utilisateurs
+V3
+Année 2-3
+Scoring de crédit IA, connecteur facturation électronique DGI (dès publication des spécifications), TSR/AIB, expansion multi-pays
+11. Glossaire
+Terme
+Définition
+SYSCOHADA
+Système comptable OHADA révisé, référentiel comptable obligatoire dans l'espace OHADA depuis 2018
+IGS
+Impôt Général Synthétique — régime fiscal forfaitaire pour les entreprises dont le CA est ≤ 50 M FCFA
+DSF
+Déclaration Statistique et Fiscale — déclaration annuelle obligatoire incluant les états financiers
+DIPE
+Déclaration mensuelle des salaires à la CNPS
+CGA
+Centre de Gestion Agréé — structure d'accompagnement offrant des avantages fiscaux aux PME adhérentes
+ONECCA
+Ordre National des Experts-Comptables du Cameroun
+TSR / AIB
+Retenues à la source appliquées à certains paiements à des fournisseurs
+CTC
+Contrôle Continu des Transactions — modèle de facturation électronique en temps réel
+RAG
+Retrieval-Augmented Generation — technique permettant à un assistant IA de répondre à partir de données spécifiques à l'utilisateur

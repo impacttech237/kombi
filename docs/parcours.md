@@ -165,3 +165,159 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 - Scoring de crédit · connecteur facturation électronique DGI
 - Mobile money comme moyen d'encaissement de l'abonnement (sous réserve réglementaire)
 - Marketplace experts-comptables / CGA · prévisions de trésorerie (Prophet)
+
+---
+
+# 🔧 Backlog post-audit (revue 360° — 2026-09-01)
+
+Consolidé à partir de 3 audits (chef de dev, dirigeant PME, expert-comptable). Rapport complet :
+artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé · 🟡 Moyen · ⚪ Détail.
+
+## ⭐ Ordre d'attaque recommandé (Top 10)
+1. ⬜ 🔴 **Cycle de vie des exercices** : création auto de l'exercice N+1 + clôture / report à nouveau (sinon l'app casse au 1er janvier).
+2. ⬜ 🔴 **Écritures immuables + atomiques** : triggers interdisant UPDATE/DELETE d'une écriture validée + transactions (`ctx.storage.transactionSync`) autour de chaque opération.
+3. ⬜ 🔴 **Écran Dépenses** (charges 60-67) : loyer, transport, salaires, élec, frais bancaires → résultat sincère + charges pour les prestataires.
+4. ⬜ 🔴 **Crédit clients & dettes fournisseurs** : vente/achat à crédit (411/401) + écrans « on me doit » / « ce que je dois ».
+5. ⬜ 🔴 **Chaîne TVA** : enregistrer 4452 (déductible), imputer services en 4432, contraindre le taux 0/19,25 %, interdire TVA aux IGS, supprimer le double comptage vente↔facture.
+6. ⬜ 🟠 **Caisse comptoir** : quantités (bug figé à 1), remises, client rattaché, paiement partiel + rendu-monnaie, reçu client.
+7. ⬜ 🔴 **Sécurité** : restreindre le CORS aux origines de confiance + rate-limiting auth + validation Zod (montants/taux/dates).
+8. ⬜ 🟠 **Employés & rôles** : écran d'invitation caissier, nav filtrée par rôle, protéger la route fiscalité (`requirePermission('compta:read')`).
+9. ⬜ 🟠 **États & livres légaux** : livre-journal, grand-livre, balance + bilan/CR au format SYSCOHADA à rubriques + SIG ; date d'opération réelle (locale, pas UTC).
+10. ⬜ 🔴 **Décisions structurantes** : versioning du schéma DO, collecte d'agrégats (back-office + plans d'abonnement), mécanisme d'avoir, vrai tableau de bord (retirer le faux graphe).
+
+## Caisse & ventes
+- ⬜ 🔴 Vente à crédit impossible (`statut='payee'` forcé) → passer par 411
+- ⬜ 🔴 Quantité figée à 1 dans `Caisse.tsx`
+- ⬜ 🟠 Client jamais rattaché à la vente (`tiersId` non envoyé)
+- ⬜ 🟠 Paiement partiel / montant reçu / rendu-monnaie absents
+- ⬜ 🟠 Aucun reçu remis au client (impression / partage WhatsApp)
+- ⬜ 🟡 Remise (ligne/globale) absente
+- ⬜ 🟡 Retour / annulation de vente (`vente:annuler` sans route ni UI)
+- ⬜ 🟡 TVA jamais appliquée en caisse (`tauxTva=0`, `assujetti_tva` non lu)
+- ⬜ 🟡 Fond de caisse + clôture journalière (Z de caisse)
+- ⬜ ⚪ Sélecteur d'article : recherche + code-barres
+
+## Créances & dettes
+- ⬜ 🔴 Écran créances clients (« on me doit », par ancienneté)
+- ⬜ 🔴 Dettes fournisseurs (401) + écran « ce que je dois »
+- ⬜ 🟠 Échéancier + statut « en retard » auto + relance
+- ⬜ 🟡 Encaissement facture bridé (montant/mode en dur) → partiel + mode réel
+- ⬜ 🟡 Lettrage 411/401 + rapprochement bancaire
+
+## Dépenses & achats
+- ⬜ 🔴 Écran de dépense courante générique (catégorie → compte OHADA)
+- ⬜ 🟠 Charges saisissables même sans stock (prestataires)
+- ⬜ 🟡 Achat à crédit fournisseur (401) + TVA déductible (4452)
+
+## Stock
+- ⬜ 🟠 Sur-vente silencieuse (CMV tronqué + stock plancher 0) → bloquer ou tracer
+- ⬜ 🟠 Coût d'achat / CMP / marge visibles sur la fiche produit
+- ⬜ 🟡 « Rupture » vs « Stock bas » (distinguer ≤ seuil de = 0)
+- ⬜ 🟡 Inventaire / ajustement (casse, vol) + valorisation du stock
+- ⬜ 🟡 Unités réelles (sac/carton/kg) + variantes
+- ⬜ ⚪ Code-barres · multi-entrepôts
+
+## Facturation & devis
+- ⬜ 🟠 Mécanisme d'avoir (`avoir_de_id` inutilisé) — correction sans suppression
+- ⬜ 🟠 Conversion devis → facture
+- ⬜ 🟠 WhatsApp envoie réellement le PDF (destinataire + lien)
+- ⬜ 🟡 Acompte (facture / commande)
+- ⬜ 🟡 Contrôle des mentions Art. 150 (NIU client) avant émission
+- ⬜ ⚪ Vrai brouillon modifiable (émission non forcée)
+
+## Tiers (clients / fournisseurs)
+- ⬜ 🟠 Écran Tiers dédié + création de fournisseur (`creerTiers` force `type:'client'`)
+- ⬜ 🟠 Fiche tiers (historique, solde dû, NIU, téléphone)
+
+## Pilotage / tableau de bord
+- ⬜ 🟠 Retirer le faux graphe (`FauxGraphe`) → vraies données
+- ⬜ 🟠 Trésorerie du jour (espèces + MoMo/Orange)
+- ⬜ 🟠 Impayés / créances en tête d'accueil
+- ⬜ 🟡 Marge, meilleures ventes, dépenses du jour, alertes stock
+
+## Multi-utilisateurs & rôles
+- ⬜ 🟠 Écran d'invitation d'employés + changement de rôle
+- ⬜ 🟠 Navigation filtrée par permissions + protéger la route fiscalité
+- ⬜ 🟡 Journal d'audit consultable (exigence NFR)
+
+## Comptabilité — écritures
+- ⬜ 🔴 Écritures immuables (triggers UPDATE/DELETE) + atomicité (transactions)
+- ⬜ 🔴 Supprimer le double comptage CA vente ↔ facture
+- ⬜ 🔴 Date d'opération réelle (paramètre + heure locale Africa/Douala)
+- ⬜ 🟠 TVA déductible 4452 à l'achat · TVA services en 4432 · taux contraint
+- ⬜ 🟡 Régularisations (agios/frais 631/671, RRR, escomptes, écarts inventaire)
+- ⬜ 🟡 Amortissements & provisions (immobilisations)
+- ⬜ 🟡 Étendre le plan comptable par défaut + mapping catégorie → compte
+
+## Fiscalité
+- ⬜ 🔴 Cycle des exercices (voir Top 10 #1) ; `caCumule` filtré par exercice
+- ⬜ 🟠 Liquidation TVA déclarative (collectée − déductible, mensuelle, crédit reportable)
+- ⬜ 🟠 Alerte de seuil à **85 %** du plafond 50M (règle CDC) — aujourd'hui 100 %
+- ⬜ 🟡 Assiette IGS précise (produits accessoires ? dé-doublonnage)
+- ⬜ 🟡 IS / DSF : passage résultat comptable → fiscal, acomptes/AIR
+- ⬜ 🟡 Bascule IGS↔Réel câblée (persister `ansSousSeuil`, exécuter à la clôture)
+- ⬜ 🟡 Séparer `regimeFiscal {igs,reel}` et `systemeOhada {smt,normal}`
+
+## États financiers
+- ⬜ 🟠 Bilan/CR au format SYSCOHADA à rubriques (table postes ↔ comptes)
+- ⬜ 🟠 Livre-journal, grand-livre, balance (obligatoires Art. 19)
+- ⬜ 🟡 Soldes intermédiaires de gestion (marge, VA, EBE…)
+- ⬜ 🟡 Système Minimal de Trésorerie (bilan/CR simplifié TPE)
+- ⬜ 🟡 Clôture d'exercice + à-nouveaux
+
+## Technique · archi · sécurité
+- ⬜ 🔴 CORS restreint aux origines de confiance
+- ⬜ 🔴 Versioning du schéma des Durable Objects (`schema_version` + runner)
+- ⬜ 🟠 Validation Zod sur tous les bodies
+- ⬜ 🟠 Rate limiting (auth au minimum)
+- ⬜ 🟠 Offline étendu (factures/tiers/produits/encaissements) + cache lecture
+- ⬜ 🟡 Cache session (rôle + entreprises) pour soulager D1 à l'échelle
+- ⬜ 🟡 Icônes PWA (installabilité)
+- ⬜ 🟡 Vérification email + limiter l'auto-provisioning
+- ⬜ 🟡 Observabilité (onError Hono, logs structurés, ID de requête)
+- ⬜ ⚪ Backoff + plafond de tentatives sur la synchro offline
+- ⬜ ⚪ Export / sauvegarde / RGPD (les DO ne sont pas sauvegardés)
+- ⬜ ⚪ Tests : isolation tenant, permissions par rôle, offline, multi-exercices
+
+## Produit & modèle économique
+- ⬜ 🔴 Back-office admin « Impact Tech » + collecte d'agrégats cross-entreprises
+- ⬜ 🔴 Gestion d'abonnements / plans (Gratuit/Essentiel/Pro) + feature-gating par offre
+- ⬜ 🟠 Notifications d'échéances (SMS + WhatsApp, J-10/J-5/J-1)
+- ⬜ 🟡 Couche IA (OCR reçus, catégorisation, chatbot) — replanifier
+- ⬜ 🟡 Import bancaire / mobile money — réintégrer
+- ⬜ ⚪ Version anglaise (Cameroun anglophone)
+
+## ⚖️ À valider ONECCA avant « la compta est juste »
+Base du CAC sur l'IGS · base du minimum de perception IS · assiette exacte du CA IGS ·
+réintégrations/déductions IS · CMP vs PEPS pour SMT · écarts d'inventaire · mentions minimales
+reçu vs facture · liste des secteurs « toujours au Réel ».
+
+---
+
+# 🔭 Veille outils de gestion — ce à quoi on passe à côté (2026-09-01)
+
+Benchmark concurrents (Cameroun : Omamori, Nkap Control, Velko POS, GestionsPro, Alivaon, KiboERP,
+SmartERP/WEBGRAM) + standards SaaS (Wave, Zoho Books, QuickBooks, Square). Fonctionnalités
+attendues du marché **absentes** de Kombi (au-delà de l'audit) :
+
+- ⬜ **« Payer maintenant » sur la facture** : lien de paiement Mobile Money intégré (le client paie en 1 clic). *Wave/Zoho + prévu au CDC.*
+- ⬜ **Factures récurrentes / abonnements clients** (loyers, contrats mensuels). *Wave/Zoho/QuickBooks.*
+- ⬜ **Relances de paiement automatiques** (rappels programmés aux clients en retard).
+- ⬜ **Rapprochement bancaire (auto)** + import relevés — *tous les concurrents l'ont ; on l'a retiré.*
+- ⬜ **Portail client** : le client consulte/paie ses factures, accepte un devis en ligne, télécharge ses relevés. *Zoho/QuickBooks.*
+- ⬜ **Multi-établissements + transfert de stock entre boutiques**, un seul login. *Velko POS.*
+- ⬜ **Gestion des shifts caissier** (ouverture/clôture de tiroir, pay-in/pay-out, écart) — recoupe le « Z de caisse ». *Standard POS.*
+- ⬜ **Fidélité client + historique d'achat au checkout** (CRM léger, segments, promos ciblées). *Standard POS.*
+- ⬜ **Wave** comme moyen de paiement (en plus de MTN/Orange). *Velko POS.*
+- ⬜ **Paie / DSF** — les concurrents OHADA (Omamori, GestionsPro) l'ont ; fort argument d'adoption. *CDC V2.*
+- ⬜ **Time tracking / facturation au temps par projet** (prestataires de services). *Standard services.*
+- ⬜ **Catégorisation IA des transactions** + saisie assistée. *Standard 2026 (Wave/Zoho).*
+- ⬜ **Rapports & analytics** : meilleures ventes, tendances, marge par produit, comparatifs. *Standard.*
+- ⬜ **Intégrations / export** (CRM, e-commerce, export comptable FEC). *Standard.*
+
+Sources : alivaon.com (comparatif Cameroun), omamori.cm, nkapcontrol.com, velko-pos.com,
+capterra/getapp (Wave vs Zoho vs QuickBooks), theretailexec.com (POS), squareup.com.
+
+> Lecture stratégique : nos **différenciateurs** (compta auto invisible, offline réel, 1 base/entreprise,
+> IGS gratuit) sont solides et rares. Nos **retards de parité** : paiement en ligne sur facture,
+> récurrent/relances, rapprochement bancaire, portail client, multi-boutiques, fidélité, paie/DSF.

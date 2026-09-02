@@ -1,0 +1,128 @@
+DOCUMENT D'ARCHITECTURE TECHNIQUE
+SaaS Comptable CEMAC
+Stack technique, modèle de données, sécurité et infrastructure
+Impact Tech — Douala, Cameroun
+Version 1.0 — Septembre 2026
+1. Principes directeurs
+L'architecture est conçue autour de quatre contraintes propres au contexte CEMAC, plus déterminantes ici que dans un marché occidental : la connectivité mobile intermittente, le coût des données pour l'utilisateur final, la nécessité d'une fiabilité réglementaire absolue sur les calculs fiscaux et sociaux, et une structure de coûts d'infrastructure compatible avec un prix d'abonnement de 5 000 à 15 000 FCFA/mois.
+Mobile-first et résilient à la connectivité : Progressive Web App avec mode hors-ligne, plutôt qu'une application native lourde
+API-first pour l'intelligence artificielle : consommer des APIs existantes (Claude, Google Vision) plutôt que d'entraîner des modèles propriétaires au stade actuel — le coût et le délai de mise sur le marché priment sur la souveraineté technologique tant que le volume de données ne justifie pas l'inverse
+Séparation stricte entre les données comptables/fiscales de chaque entreprise cliente — aucune requête ne doit pouvoir croiser les données de deux entreprises différentes, y compris pour l'entraînement de modèles
+Coût d'infrastructure variable maîtrisé : le modèle financier budgète environ 680 FCFA de coût IA par utilisateur Pro par mois — l'architecture doit rester sous ce plafond à l'échelle
+2. Vue d'ensemble de l'architecture
+Le système est structuré en cinq couches : le client (PWA), la couche d'accès (CDN + API Gateway), les services applicatifs métier, la base de données, et les intégrations externes. Chaque service applicatif est conçu comme un module indépendant pouvant évoluer et être déployé séparément, sans être nécessairement des microservices distincts dès le MVP — le découpage logique prime sur le découpage physique au démarrage.
+3. Stack technique par couche
+Couche
+Choix technique
+Justification
+Frontend
+Progressive Web App (React ou Vue.js) + Service Workers
+Une seule base de code pour mobile et desktop, installation sans passer par un store d'application, mode hors-ligne natif au web moderne
+Backend
+Node.js (NestJS) — API REST
+Écosystème mature, cohérence de langage avec le frontend, rapidité de mise en œuvre pour une équipe réduite
+Base de données
+PostgreSQL, avec l'extension pgvector
+Robustesse pour des données financières transactionnelles ; pgvector permet le stockage des embeddings nécessaires au RAG du chatbot sans base vectorielle séparée
+Hébergement du MVP
+Plateforme managée type Supabase ou équivalent, migration vers une infrastructure cloud dédiée (AWS/GCP) à l'échelle
+Réduit le délai de mise sur le marché du MVP ; migration prévue une fois le volume de clients justifiant une infrastructure dédiée
+IA — chatbot conversationnel
+Claude API (Anthropic) en mode RAG sur les données de l'entreprise
+Qualité de compréhension du français et du raisonnement financier, sans avoir à héberger de modèle propriétaire
+IA — OCR des reçus
+Google Cloud Vision API, avec repli sur Tesseract en mode dégradé/hors-ligne
+Précision élevée sur des photos de qualité variable ; Tesseract comme solution de secours locale en cas de connectivité insuffisante
+IA — catégorisation et scoring
+scikit-learn / LightGBM, entraînés et affinés progressivement sur les données agrégées et anonymisées
+Modèles légers, peu coûteux à faire tourner, explicables — important pour justifier un score de crédit auprès d'un partenaire bancaire
+IA — prévisions de trésorerie
+Prophet (Meta) sur les séries temporelles de trésorerie
+Bibliothèque robuste aux séries courtes et bruitées, adaptée à des historiques de quelques mois seulement
+Paiement
+Intégration directe aux APIs MTN Mobile Money et Orange Money
+Pas de commission propre prélevée au lancement — voir réserve à la section 6.2
+Notifications
+API SMS locale + WhatsApp Business API
+Canaux à plus fort taux d'ouverture que l'email dans ce contexte
+CI/CD
+GitHub Actions, environnements dev / staging / production distincts
+Déploiements automatisés et tests avant toute mise en production, en particulier pour les modules fiscaux
+4. Modèle de données — entités principales
+Entité
+Description
+Relations clés
+Entreprise
+Compte client : NIU, régime fiscal, système SYSCOHADA, statut CGA, classe de risque CNPS
+1 Entreprise → N Utilisateurs, N Transactions, N Employés
+Utilisateur
+Compte d'accès, rôle (propriétaire, comptable, support)
+Rattaché à une ou plusieurs Entreprises (multi-utilisateurs Pro)
+Compte comptable
+Ligne du plan comptable OHADA rattachée à l'Entreprise
+Référencé par chaque Écriture
+Écriture comptable
+Transaction datée, montant, compte, tiers, justificatif (photo/OCR)
+Alimente les états financiers et le calcul fiscal
+Facture
+Numéro séquentiel, tiers, lignes, statut, lien de paiement
+Génère une ou plusieurs Écritures à l'encaissement
+Tiers
+Client ou fournisseur de l'Entreprise
+Référencé par Factures et Écritures
+Employé
+Salarié rattaché à une Entreprise, salaire, date d'embauche
+Génère des Bulletins de paie mensuels
+Déclaration fiscale/sociale
+IGS, DSF, DIPE — période, montant, statut, échéance
+Calculée à partir des Écritures et des Employés de la période
+Abonnement
+Plan (Gratuit/Essentiel/Pro), statut de paiement, historique
+Rattaché à l'Entreprise
+Partenaire
+CGA ou expert-comptable ONECCA référencé dans la marketplace
+Lié aux demandes de mise en relation des Entreprises
+5. Sécurité et conformité
+5.1 Protection des données
+Chiffrement en transit (TLS 1.3) sur l'ensemble des échanges client-serveur et serveur-intégrations
+Chiffrement au repos des données comptables et fiscales dans la base de données
+Authentification renforcée (MFA) obligatoire pour les comptes multi-utilisateurs du plan Pro
+Contrôle d'accès par rôle (RBAC) : un comptable partenaire ne voit que les entreprises qui lui ont explicitement donné accès
+Sauvegardes quotidiennes chiffrées, avec test de restauration périodique
+5.2 Réserve réglementaire sur les flux de paiement
+Comme détaillé dans l'étude complémentaire sur Wave, prélever une commission sur les flux mobile money transitant par le logiciel nécessite un statut réglementaire (licence d'établissement de monnaie électronique ou partenariat avec un établissement agréé) — pas seulement une intégration API. L'architecture doit permettre d'intégrer un tel partenariat ultérieurement sans refonte, mais aucune commission propre ne doit être prélevée avant sécurisation de ce statut.
+5.3 Conformité des données personnelles
+Le traitement des données personnelles (employés, tiers, dirigeants) doit respecter le cadre camerounais de protection des données à caractère personnel. Le consentement explicite est requis avant tout partage de données avec un tiers, en particulier pour le scoring de crédit destiné à des partenaires bancaires.
+6. Gestion de la connectivité intermittente
+La connectivité 3G intermittente étant la norme plutôt que l'exception pour une partie significative des utilisateurs cibles, le mode hors-ligne n'est pas une fonctionnalité secondaire mais une exigence de conception dès le MVP.
+Cache local (IndexedDB) des données récentes de l'entreprise pour consultation hors-ligne
+File d'attente de synchronisation : toute saisie effectuée hors-ligne est horodatée localement et synchronisée dès le retour de la connexion
+Résolution de conflits par horodatage, avec notification à l'utilisateur en cas de modification concurrente (pertinent pour les comptes multi-utilisateurs)
+Compression et allègement des assets pour limiter la consommation de données mobiles, elle-même un coût réel pour l'utilisateur cible
+7. Scalabilité et coûts d'infrastructure
+L'architecture modulaire permet une montée en charge horizontale des services applicatifs indépendamment les uns des autres. Le coût d'infrastructure variable (hébergement, IA, notifications) est directement corrélé au nombre d'utilisateurs actifs et doit rester compatible avec les marges du modèle financier.
+Palier de clients actifs
+Recommandation d'infrastructure
+0 – 1 000
+Plateforme managée (Supabase ou équivalent), un seul environnement de production
+1 000 – 10 000
+Migration vers infrastructure cloud dédiée (AWS/GCP), séparation des services de calcul intensif (IA, génération de rapports)
+10 000+
+Mise en cache renforcée, réplication de base de données en lecture, réévaluation du coût unitaire des APIs IA (négociation de volume ou modèles auto-hébergés pour les tâches les plus fréquentes comme la catégorisation)
+8. Feuille de route technique
+Alignée sur la feuille de route produit détaillée dans le plan d'affaires et le cahier des charges fonctionnel.
+Phase
+Période
+Chantiers techniques prioritaires
+MVP
+Mois 1-3
+PWA de base, API de facturation/comptabilité, intégration OCR, moteur de calcul IGS, base de données PostgreSQL
+V1
+Mois 4-6
+Intégration Claude API (RAG), intégration paiement mobile money, moteur de génération DSF, mode hors-ligne
+V2
+Mois 7-12
+Module Paie/CNPS, parsing bancaire par banque, migration vers infrastructure dédiée si le volume l'exige
+V3
+Année 2-3
+Modèle de scoring de crédit, connecteur DGI (facturation électronique), architecture multi-pays (paramétrage par pays OHADA)
