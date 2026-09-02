@@ -69,6 +69,16 @@ export interface VenteACredit {
 export const listerVentesACredit = (entrepriseId: string) =>
   api<{ ventes: VenteACredit[] }>('/api/ventes/credit', { entrepriseId }).then((r) => r.ventes);
 
+export interface VenteRecente {
+  id: string; date: string; total_ttc: number; statut: string; mode_paiement: string | null;
+  facture_id: string | null; tiers_nom: string | null;
+}
+export const listerVentesRecentes = (entrepriseId: string) =>
+  api<{ ventes: VenteRecente[] }>('/api/ventes/recentes', { entrepriseId }).then((r) => r.ventes);
+
+export const annulerVente = (entrepriseId: string, venteId: string) =>
+  api<{ statut: string }>(`/api/ventes/${venteId}/annuler`, { method: 'POST', entrepriseId });
+
 export const statsJour = (entrepriseId: string) =>
   api<{ nbVentes: number; totalJour: number }>('/api/ventes/jour', { entrepriseId });
 

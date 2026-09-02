@@ -429,6 +429,89 @@ export class EntrepriseDO extends DurableObject {
     ).toArray() as never;
   }
 
+  /** Historique des ventes récentes (écran caisse — pour retrouver une vente à annuler). */
+  async listerVentesRecentes(limite = 50): Promise<Record<string, unknown>[]> {
+    return this.sql.exec(
+      `SELECT v.id, v.date, v.total_ttc, v.statut, v.mode_paiement, v.facture_id, t.nom AS tiers_nom
+         FROM vente v LEFT JOIN tiers t ON t.id = v.tiers_id
+        ORDER BY v.created_at DESC LIMIT ?`,
+      limite,
+    ).toArray() as never;
+  }
+
+  /**
+   * Annule une vente déjà enregistrée (erreur de caisse, retour client) SANS supprimer l'écriture
+   * (immuabilité) — contre-passation intégrale de toutes les lignes de l'écriture d'origine
+   * (produit, TVA, créance/trésorerie, CMV/stock), symétrique de `creerAvoir()`. Remet la
+   * marchandise en stock au coût auquel elle en était sortie. Impossible si une facture a déjà été
+   * émise pour cette vente (il faut d'abord annuler la facture via un avoir).
+   */
+  async annulerVente(
+    venteId: string, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
+  ): Promise<{ statut: string }> {
+    const v = this.sql.exec(
+      'SELECT statut, exercice_id, ecriture_id, facture_id FROM vente WHERE id = ?', venteId,
+    ).toArray()[0] as { statut: string; exercice_id: string; ecriture_id: string | null; facture_id: string | null } | undefined;
+    if (!v) throw new Error('Vente introuvable');
+    if (v.statut === 'annulee') throw new Error('Cette vente est déjà annulée');
+    if (v.facture_id) throw new Error('Une facture a été émise pour cette vente : annulez-la (avoir) d\'abord');
+    if (!v.ecriture_id) throw new Error('Aucune écriture associée à cette vente');
+
+    const lignesOrigine = this.sql.exec(
+      `SELECT le.compte_id, le.sens, le.montant FROM ligne_ecriture le WHERE le.ecriture_id = ?`,
+      v.ecriture_id,
+    ).toArray() as { compte_id: string; sens: string; montant: number }[];
+    if (!lignesOrigine.length) throw new Error('Écriture d\'origine sans ligne');
+
+    const lignesVente = this.sql.exec(
+      'SELECT produit_id, quantite, cout_unitaire FROM ligne_vente WHERE vente_id = ?', venteId,
+    ).toArray() as { produit_id: string | null; quantite: number; cout_unitaire: number }[];
+
+    return this.ctx.storage.transactionSync(() => {
+      const ecritureId = uid();
+      this.sql.exec(
+        `INSERT INTO ecriture (id, exercice_id, date_operation, libelle, source, statut)
+         VALUES (?, ?, date('now'), 'Annulation vente', 'vente', 'brouillon')`,
+        ecritureId, v.exercice_id,
+      );
+      for (const l of lignesOrigine) {
+        this.sql.exec(
+          'INSERT INTO ligne_ecriture (id, ecriture_id, compte_id, sens, montant) VALUES (?, ?, ?, ?, ?)',
+          uid(), ecritureId, l.compte_id, l.sens === 'debit' ? 'credit' : 'debit', l.montant,
+        );
+      }
+      this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
+
+      // Remise en stock au coût de sortie d'origine (recalcule le CMP comme une entrée normale).
+      for (const l of lignesVente) {
+        if (!l.produit_id) continue;
+        const prod = this.sql.exec(
+          'SELECT stock_actuel, cout_moyen_pondere FROM produit WHERE id = ?', l.produit_id,
+        ).toArray()[0] as { stock_actuel: number; cout_moyen_pondere: number } | undefined;
+        if (!prod) continue;
+        const etat = cmpApresEntree(
+          { quantite: prod.stock_actuel, cmp: prod.cout_moyen_pondere }, l.quantite, l.cout_unitaire,
+        );
+        this.sql.exec(
+          'UPDATE produit SET stock_actuel = ?, cout_moyen_pondere = ? WHERE id = ?',
+          etat.quantite, etat.cmp, l.produit_id,
+        );
+        this.sql.exec(
+          `INSERT INTO mouvement_stock (id, produit_id, type, quantite, cout_unitaire, motif, vente_id)
+           VALUES (?, ?, 'entree', ?, ?, 'Annulation vente', ?)`,
+          uid(), l.produit_id, l.quantite, l.cout_unitaire, venteId,
+        );
+      }
+
+      this.sql.exec("UPDATE vente SET statut = 'annulee' WHERE id = ?", venteId);
+      this.journaliser({
+        acteur, action: 'vente.annuler', entite: 'vente', entiteId: venteId,
+        avant: { statut: v.statut }, apres: { statut: 'annulee' },
+      });
+      return { statut: 'annulee' };
+    });
+  }
+
   /** Statistiques d'accueil : ventes du jour + nombre. */
   async statsJour(): Promise<{ nbVentes: number; totalJour: number }> {
     const row = this.sql

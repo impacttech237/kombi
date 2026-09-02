@@ -220,7 +220,12 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ✅ TVA conditionnée par `assujetti_tva` **et** interdite au régime IGS (Art. 142) — taux 19,25 %
   appliqué automatiquement en caisse seulement si l'entreprise y est éligible, sinon 0 %
 - ✅ Partage du reçu par WhatsApp (`wa.me`, comme les factures) en plus de l'impression
-- ⬜ 🟡 Retour / annulation de vente (`vente:annuler` sans route ni UI)
+- ✅ Retour / annulation de vente : `annulerVente()` contre-passe intégralement l'écriture d'origine
+  (immuabilité respectée, comme `creerAvoir()`) et remet la marchandise en stock au coût de sortie
+  (recalcule le CMP comme un approvisionnement) ; refusée si une facture a déjà été émise pour la
+  vente (l'avoir sur facture prend le relais) ou si déjà annulée. Écran « Historique des ventes »
+  (`Ventes.tsx`, accessible depuis la Caisse) : bouton Annuler visible seulement pour les rôles
+  ayant `vente:annuler` (admin/gérant — pas caissier, contrôle anti-fraude volontaire).
 - ⬜ 🟡 Fond de caisse + clôture journalière (Z de caisse)
 - ⬜ ⚪ Sélecteur d'article : recherche + code-barres
 

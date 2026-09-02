@@ -29,7 +29,9 @@ function prixApresRemises(l: LignePanier, remiseGlobalePct: number): number {
   return Math.max(0, Math.round(l.prixUnitaire * facteurLigne * facteurGlobal));
 }
 
-export function Caisse({ entreprise, onVendu }: { entreprise: EntrepriseResume; onVendu?: () => void }) {
+export function Caisse({ entreprise, onVendu, onHistorique }: {
+  entreprise: EntrepriseResume; onVendu?: () => void; onHistorique?: () => void;
+}) {
   const [panier, setPanier] = useState<LignePanier[]>([]);
   const [design, setDesign] = useState('');
   const [prix, setPrix] = useState('');
@@ -207,7 +209,14 @@ export function Caisse({ entreprise, onVendu }: { entreprise: EntrepriseResume; 
 
   return (
     <div>
-      <h1 className="titre-page" style={{ marginBottom: 10 }}>Caisse</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <h1 className="titre-page" style={{ margin: 0 }}>Caisse</h1>
+        {onHistorique && (
+          <button onClick={onHistorique} className="btn btn-clair" style={{ padding: '6px 12px', fontSize: 13 }}>
+            Historique
+          </button>
+        )}
+      </div>
 
       <div className="carte" style={{ marginBottom: 14 }}>
         <div style={{ textAlign: 'center', padding: '6px 0 12px' }}>

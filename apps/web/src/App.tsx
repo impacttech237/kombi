@@ -7,6 +7,7 @@ import { Login } from './pages/Login.js';
 import { Onboarding } from './pages/Onboarding.js';
 import { Dashboard } from './pages/Dashboard.js';
 import { Caisse } from './pages/Caisse.js';
+import { Ventes } from './pages/Ventes.js';
 import { Stock } from './pages/Stock.js';
 import { Factures } from './pages/Factures.js';
 import { Commandes } from './pages/Commandes.js';
@@ -75,7 +76,8 @@ function Espace() {
       <div style={{ marginTop: 14 }}>
         <OfflineBanner />
         {onglet === 'dashboard' ? <Dashboard entreprise={active} onCaisse={() => setOnglet('caisse')} onCommandes={() => setOnglet('commandes')} onDepenses={() => setOnglet('depenses')} onCreances={() => setOnglet('creances')} onDettes={() => setOnglet('dettes')} />
-          : onglet === 'caisse' ? <Caisse entreprise={active} />
+          : onglet === 'caisse' ? <Caisse entreprise={active} onHistorique={() => setOnglet('ventes')} />
+          : onglet === 'ventes' ? <Ventes entreprise={active} role={role} onRetour={() => setOnglet('caisse')} />
           : onglet === 'stock' ? <Stock entreprise={active} />
           : onglet === 'factures' ? <Factures entreprise={active} />
           : onglet === 'commandes' ? <Commandes entreprise={active} onRetour={() => setOnglet('dashboard')} />

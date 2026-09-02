@@ -54,6 +54,20 @@ ventes.get('/credit', requirePermission('vente:read'), async (c) => {
   return c.json({ ventes: liste });
 });
 
+/** Historique des ventes récentes (pour retrouver une vente à annuler). */
+ventes.get('/recentes', requirePermission('vente:read'), async (c) => {
+  const liste = await stubEntreprise(c.env, c.get('entrepriseId')).listerVentesRecentes();
+  return c.json({ ventes: liste });
+});
+
+/** Annule une vente (erreur de caisse, retour client) — contre-passation + remise en stock. */
+ventes.post('/:id/annuler', requirePermission('vente:annuler'), async (c) => {
+  const res = await stubEntreprise(c.env, c.get('entrepriseId')).annulerVente(
+    c.req.param('id'), { utilisateurId: c.get('utilisateurId'), role: c.get('role') },
+  );
+  return c.json(res);
+});
+
 /** Statistiques du jour (pour le tableau de bord). */
 ventes.get('/jour', requirePermission('vente:read'), async (c) => {
   const entrepriseId = c.get('entrepriseId');
