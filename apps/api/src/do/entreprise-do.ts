@@ -563,7 +563,7 @@ export class EntrepriseDO extends DurableObject {
     return this.sql
       .exec(
         `SELECT id, nom, sku, unite, prix_vente, cout_moyen_pondere, stock_actuel, seuil_alerte,
-                (stock_actuel <= seuil_alerte) AS en_alerte
+                (stock_actuel <= seuil_alerte) AS en_alerte, (stock_actuel <= 0) AS en_rupture
            FROM produit WHERE actif = 1 ORDER BY nom`,
       )
       .toArray() as never;

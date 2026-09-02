@@ -49,8 +49,10 @@ export function Stock({ entreprise }: { entreprise: EntrepriseResume }) {
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div className="chiffre" style={{ fontWeight: 700 }}>{p.stock_actuel}</div>
-                  {p.en_alerte === 1
+                  {p.en_rupture === 1
                     ? <span className="chip chip-bas">Rupture</span>
+                    : p.en_alerte === 1
+                    ? <span className="chip chip-bas">Stock bas</span>
                     : <span className="muet" style={{ fontSize: 12 }}>en stock</span>}
                 </div>
                 <button onClick={() => setAppro(p)} className="btn btn-clair" style={{ padding: '8px 12px' }}>

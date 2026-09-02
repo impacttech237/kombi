@@ -88,7 +88,7 @@ export const tendance7Jours = (entrepriseId: string) =>
 export interface Produit {
   id: string; nom: string; sku: string | null; unite: string;
   prix_vente: number; cout_moyen_pondere: number; stock_actuel: number;
-  seuil_alerte: number; en_alerte: number;
+  seuil_alerte: number; en_alerte: number; en_rupture: number;
 }
 
 export const listerProduits = (entrepriseId: string) =>

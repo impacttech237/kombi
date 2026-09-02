@@ -45,4 +45,23 @@ describe('Stock — inventaire permanent + CMP', () => {
     const p = (await e.listerProduits()).find((x) => x.id === pid)!;
     expect(p.en_alerte).toBe(1); // 4 <= 5
   });
+
+  it('distingue « stock bas » (≤ seuil, > 0) de « rupture » (= 0)', async () => {
+    const e = doE('stock-4');
+    await e.initialiser('stock-4', 'commerce', 2026);
+    const pid = await e.creerProduit({ nom: 'Farine', prixVente: 1200, seuilAlerte: 5 });
+    await e.entrerStock({ produitId: pid, quantite: 3, coutUnitaire: 700, modePaiement: 'especes' });
+
+    let p = (await e.listerProduits()).find((x) => x.id === pid)!;
+    expect(p.en_alerte).toBe(1);
+    expect(p.en_rupture).toBe(0); // stock bas (3) mais pas en rupture
+
+    await e.enregistrerVente({
+      lignes: [{ designation: 'Farine', quantite: 3, prixUnitaire: 1500, produitId: pid }],
+      modePaiement: 'especes',
+    });
+    p = (await e.listerProduits()).find((x) => x.id === pid)!;
+    expect(p.en_alerte).toBe(1);
+    expect(p.en_rupture).toBe(1); // stock = 0 → vraie rupture
+  });
 });
