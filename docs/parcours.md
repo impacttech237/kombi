@@ -307,8 +307,10 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ✅ Double comptage CA vente ↔ facture supprimé (`creerFactureDepuisVente` — facture-document
   réutilisant l'écriture de la vente, sans écran « historique des ventes » pour le déclencher
   pour l'instant : l'API existe, reste à l'exposer dans l'UI)
-- ⬜ 🔴 Date d'opération réelle (paramètre + heure locale Africa/Douala) — fait pour `enregistrerVente`
-  uniquement ; dépenses/achats/factures utilisent encore `date('now')` (UTC serveur)
+- ✅ 🔴 Date d'opération réelle (paramètre + heure locale Africa/Douala) : `enregistrerVente`,
+  `entrerStock` et `creerDepense` acceptent tous `dateOperation` et sélectionnent le bon exercice
+  au lieu d'écrire `date('now')`. Les factures gardent volontairement `date('now')` à l'émission
+  (numérotation gap-less = instant réel d'émission, pas une date arbitraire).
 - ✅ TVA déductible 4452 à l'achat · TVA services en 4432 · taux contraint à {0 ; 0,1925}
 - ⬜ 🟡 Régularisations (agios/frais 631/671, RRR, escomptes, écarts inventaire)
 - ⬜ 🟡 Amortissements & provisions (immobilisations)
@@ -346,8 +348,12 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ⬜ ⚪ Tests : isolation tenant, permissions par rôle, offline, multi-exercices
 
 ## Produit & modèle économique
-- ⬜ 🔴 Back-office admin « Impact Tech » + collecte d'agrégats cross-entreprises
-- ⬜ 🔴 Gestion d'abonnements / plans (Gratuit/Essentiel/Pro) + feature-gating par offre
+- ⬜ 🔴 Back-office admin « Impact Tech » + collecte d'agrégats cross-entreprises — **Phase P2
+  explicite dans la spec** (§6 : pipeline Cloudflare Queue → D1), reporté délibérément (voir
+  section « Décisions structurantes »)
+- ✅ 🔴 Gestion d'abonnements / plans (Gratuit/Essentiel/Pro) + feature-gating par offre : tables
+  D1 `plan`/`abonnement`, essai gratuit 30j à la création, quota 50 factures/mois sur Gratuit
+  (402 à l'émission au-delà), changement de plan par l'admin (`POST /api/abonnement/plan`)
 - ⬜ 🟠 Notifications d'échéances (SMS + WhatsApp, J-10/J-5/J-1)
 - ⬜ 🟡 Couche IA (OCR reçus, catégorisation, chatbot) — replanifier
 - ⬜ 🟡 Import bancaire / mobile money — réintégrer
