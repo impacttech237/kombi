@@ -66,16 +66,19 @@ function Espace() {
   }
 
   const role = active.role as RoleMembre;
-  // Codes du nouveau shell (docs/Interface application gestion PME/ — voir Shell.tsx) : le
-  // prototype cible n'a que 5+2 emplacements de nav, pas de place dédiée pour Commandes/
-  // Dépenses/Équipe/Paramètres — la rangée « Autres » ci-dessous reste temporairement le seul
-  // accès à ces écrans tant qu'on n'a pas décidé où ils vont dans la nouvelle IA.
+  // Architecture de nav validée le 2026-09-03 (voir docs/parcours.md « Refonte design system ») :
+  // 4 onglets fixes + feuille Menu (Modules/Administration). Dépenses/Créances/Dettes n'ont pas
+  // encore d'entrée — elles rejoindront le flux de transactions de Trésorerie lors de son
+  // portage ; en attendant, la rangée sous le contenu reste leur seul accès.
   const masquer = [
     ...(active.secteur === 'service' || !peut(role, 'stock:read') ? ['stock'] : []),
     ...(peut(role, 'compta:read') ? [] : ['compta', 'tresorerie']),
     ...(peut(role, 'vente:create') ? [] : ['caisse']),
     ...(peut(role, 'facture:read') ? [] : ['factures']),
     ...(peut(role, 'tiers:read') ? [] : ['tiers']),
+    ...(peut(role, 'commande:read') ? [] : ['commandes']),
+    ...(peut(role, 'membre:manage') ? [] : ['equipe']),
+    ...(peut(role, 'entreprise:manage') ? [] : ['parametres']),
   ];
   const nomUtilisateur = session?.user?.name?.trim() || active.raison_sociale;
 
@@ -96,13 +99,13 @@ function Espace() {
           : onglet === 'equipe' ? <Equipe entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'parametres' ? <Parametres entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'tiers' ? <Tiers entreprise={active} onRetour={() => setOnglet('dashboard')} />
-          : onglet === 'tresorerie' ? <Comptabilite entreprise={active} />
+          // 'tresorerie' et 'compta' pointent temporairement vers le même écran : Trésorerie
+          // n'est pas encore portée (voir docs/parcours.md « Refonte design system »).
           : <Comptabilite entreprise={active} />}
 
+        {/* Temporaire : Dépenses/Créances/Dettes rejoindront Trésorerie (voir commentaire plus
+            haut). Se déconnecter n'a pas encore de nouvel emplacement (profil ?). */}
         <div className="flex justify-center flex-wrap gap-2 mt-6 mb-24 md:mb-6">
-          {peut(role, 'commande:read') && (
-            <Bouton variante="ghost" onClick={() => setOnglet('commandes')}>Commandes</Bouton>
-          )}
           {peut(role, 'depense:read') && (
             <Bouton variante="ghost" onClick={() => setOnglet('depenses')}>Dépenses</Bouton>
           )}
@@ -111,12 +114,6 @@ function Espace() {
           )}
           {peut(role, 'achat:read') && (
             <Bouton variante="ghost" onClick={() => setOnglet('dettes')}>Dettes</Bouton>
-          )}
-          {peut(role, 'membre:manage') && (
-            <Bouton variante="ghost" onClick={() => setOnglet('equipe')}>Équipe</Bouton>
-          )}
-          {peut(role, 'entreprise:manage') && (
-            <Bouton variante="ghost" onClick={() => setOnglet('parametres')}>Paramètres fiscaux</Bouton>
           )}
           <Bouton variante="ghost" onClick={deconnexion}>Se déconnecter</Bouton>
         </div>

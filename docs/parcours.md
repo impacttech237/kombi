@@ -22,10 +22,19 @@ design ni de son parcours utilisateur.
   nouvelle palette) pour que les écrans pas encore portés restent lisibles pendant la migration.
 - ⬜ **Écrans à porter un par un** depuis le prototype : Dashboard, Ventes/Caisse, Factures,
   Stock, Trésorerie, Clients, Comptabilité, onboarding (CompanySetup).
-- ⚠️ **Écart de couverture non résolu** : le prototype n'a pas d'emplacement de navigation pour
-  Commandes/Dépenses/Équipe/Paramètres fiscaux (5 primaires + 2 secondaires seulement). En
-  attendant une décision, ces écrans restent accessibles via une rangée de boutons sous le
-  contenu principal (`App.tsx`) — à intégrer proprement à la nouvelle IA au fil du portage.
+- ✅ **Architecture de navigation validée** (2026-09-03) — mobile-first, pas de surcharge de la
+  barre principale : **4 onglets fixes** (Accueil, Ventes, Stock, Trésorerie) + bouton **Menu**
+  ouvrant une feuille à 2 groupes, même traitement que la section « Administration » de la
+  Sidebar desktop du prototype :
+  - **Modules** : Factures & Devis, Commandes/Missions, Clients & Fournisseurs
+  - **Administration** : Comptabilité (OHADA), Équipe, Paramètres fiscaux
+  - **Dépenses n'a délibérément aucune entrée** : elle rejoindra le flux de transactions de
+    l'écran Trésorerie (argent qui sort), au même titre que Créances/Dettes (argent pas encore
+    encaissé/payé) — lors du portage de cet écran. En attendant, ces 3 restent accessibles via
+    une rangée de boutons temporaire sous le contenu principal (`App.tsx`), avec « Se
+    déconnecter » (pas encore de nouvel emplacement, probablement sous un profil futur).
+  - Implémenté dans `components/Shell.tsx` (icônes ajoutées hors prototype, même style trait
+    fin : `IcoClipboard`, `IcoUsers`, `IcoSettings`).
 - ⬜ Supprimer le pont de compatibilité une fois tous les écrans portés.
 
 ---
