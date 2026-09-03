@@ -35,3 +35,9 @@ run_worker_first = true
 
 [observability]
 enabled = true
+
+# Sauvegarde quotidienne de toutes les entreprises vers R2 (voir services/sauvegarde.ts et
+# docs/AUDIT_2026-09-03.md point 1 : les Durable Objects n'ont pas de réplique Cloudflare native).
+# 02:00 UTC ≈ 03:00/04:00 Afrique de l'Ouest/Centrale selon la saison — creux d'activité attendu.
+[triggers]
+crons = ["0 2 * * *"]

@@ -20,6 +20,7 @@ import { depenses } from './routes/depenses.js';
 import { abonnement } from './routes/abonnement.js';
 import { notifications } from './routes/notifications.js';
 import { etats } from './routes/etats.js';
+import { sauvegarderToutesLesEntreprises } from './services/sauvegarde.js';
 
 const app = new Hono<AppEnv>();
 
@@ -103,7 +104,16 @@ app.route('/api/notifications', notifications);
 // Tout le reste (hors /api) = la PWA servie depuis le même Worker (même origine → cookies OK).
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
-export default app;
+export default {
+  fetch: app.fetch,
+  // Sauvegarde quotidienne de toutes les entreprises (voir wrangler.toml `[triggers]`) — les
+  // Durable Objects n'ont pas de réplique Cloudflare native (docs/AUDIT_2026-09-03.md point 1).
+  async scheduled(_event: ScheduledEvent, env: import('./types.js').Bindings): Promise<void> {
+    const { reussies, echecs } = await sauvegarderToutesLesEntreprises(env);
+    console.log(JSON.stringify({ tache: 'sauvegarde_quotidienne', reussies, echecs: echecs.length }));
+    for (const e of echecs) console.error(JSON.stringify({ tache: 'sauvegarde_quotidienne', ...e }));
+  },
+};
 
 // Durable Object : 1 base par entreprise (D13).
 export { EntrepriseDO } from './do/entreprise-do.js';

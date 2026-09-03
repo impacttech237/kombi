@@ -468,7 +468,22 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   (requestId/méthode/chemin/message) et renvoyant une réponse JSON uniforme au lieu de la page
   texte brute par défaut de Hono — corrèle un rapport utilisateur à une trace serveur précise.
 - ⬜ ⚪ Backoff + plafond de tentatives sur la synchro offline
-- ⬜ ⚪ Export / sauvegarde / RGPD (les DO ne sont pas sauvegardés)
+- ✅ 🔴 **Sauvegarde des Durable Objects** (audit infra 2026-09-03, point 1 — risque n°1 identifié :
+  aucune réplique Cloudflare native, une entreprise = un seul DO). `EntrepriseDO.exporterDonnees()`
+  exporte un instantané logique complet (toutes les tables SQL + l'état clé/valeur secteur/
+  schema_version) ; `importerDonnees()` restaure dans un DO neuf (refuse si une table métier n'est
+  pas vide — jamais utilisé pour écraser une entreprise vivante). Cron quotidien
+  (`wrangler.toml [triggers]`, 02:00 UTC) sauvegarde toutes les entreprises vers R2 avec rétention
+  glissante de 30 jours (`services/sauvegarde.ts`). Déclenchement à la demande + consultation de
+  l'historique exposés à l'admin de sa propre entreprise (`POST`/`GET /api/entreprises/:id/
+  sauvegardes`). **Restauration volontairement non exposée en self-service** (pas de rôle
+  super-admin dans ce MVP — le « back-office admin » est explicitement Phase P2) : à déclencher
+  manuellement par le porteur du projet en cas d'incident réel, via `importerDonnees()`.
+  Round-trip export→import testé (`test/sauvegarde.test.ts`) : écritures, tiers, trésorerie
+  identiques après restauration dans un DO neuf ; garde-fou anti-écrasement vérifié.
+- ⬜ ⚪ Export / sauvegarde RGPD à la demande de l'utilisateur (droit à la portabilité) — distinct
+  du point ci-dessus (sauvegarde technique interne) ; nécessite un format d'export utilisateur et
+  un parcours dédié, hors scope de ce correctif.
 - ⬜ ⚪ Tests : isolation tenant, permissions par rôle, offline, multi-exercices
 - ✅ Rate limiting rendu atomique (`middleware/rate-limit.ts`) : lecture-puis-écriture D1 en deux
   requêtes séparées remplacée par un UPSERT SQLite unique avec `RETURNING` — fermait une fenêtre

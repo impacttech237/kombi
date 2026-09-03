@@ -5,6 +5,7 @@ import {
   type Secteur, type NatureActivite, type RoleMembre,
 } from '@kombi/shared';
 import { planCreationEntreprise } from '../services/onboarding.js';
+import { sauvegarderEntreprise, listerSauvegardes } from '../services/sauvegarde.js';
 import { stubEntreprise, type AppEnv } from '../types.js';
 
 /**
@@ -99,6 +100,31 @@ entreprises.get('/:id/parametres', async (c) => {
   ).bind(entrepriseId).first();
   if (!ent) return c.json({ erreur: 'Entreprise introuvable' }, 404);
   return c.json(ent);
+});
+
+/**
+ * Sauvegardes : une tâche planifiée (cron, `wrangler.toml`) exporte déjà chaque entreprise
+ * quotidiennement vers R2. Ces routes exposent un déclenchement à la demande et la consultation
+ * de l'historique — réservées à l'admin de SA PROPRE entreprise. La restauration n'est
+ * volontairement PAS exposée ici (pas de rôle super-admin dans ce MVP) : voir
+ * `EntrepriseDO.importerDonnees()` et le commentaire de `services/sauvegarde.ts`.
+ */
+entreprises.post('/:id/sauvegardes', async (c) => {
+  const entrepriseId = c.req.param('id');
+  const role = await rolePourEntreprise(c.env.DB, c.get('utilisateurId'), entrepriseId);
+  if (!role || !peut(role, 'entreprise:manage')) return c.json({ erreur: 'Accès refusé' }, 403);
+
+  const cle = await sauvegarderEntreprise(c.env, entrepriseId);
+  return c.json({ cle }, 201);
+});
+
+entreprises.get('/:id/sauvegardes', async (c) => {
+  const entrepriseId = c.req.param('id');
+  const role = await rolePourEntreprise(c.env.DB, c.get('utilisateurId'), entrepriseId);
+  if (!role || !peut(role, 'entreprise:manage')) return c.json({ erreur: 'Accès refusé' }, 403);
+
+  const sauvegardes = await listerSauvegardes(c.env, entrepriseId);
+  return c.json({ sauvegardes });
 });
 
 /** Modules actifs de l'entreprise (lus dans sa base dédiée). */

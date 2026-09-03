@@ -23,6 +23,21 @@ export interface Acteur {
   role: string;
 }
 
+/** Valeur SQLite : les colonnes ne portent jamais que ces types (pas de BLOB dans ce schéma). */
+export type ValeurSql = string | number | boolean | null;
+/** Instantané complet d'un DO (voir `exporterDonnees`/`importerDonnees` — sauvegarde/restauration). */
+export interface SauvegardeTable {
+  nom: string;
+  lignes: Record<string, ValeurSql>[];
+}
+export interface SauvegardeDump {
+  version: number;
+  exporteLe: string;
+  schemaVersion: number;
+  etat: { entrepriseId: string | null; secteur: string | null; initialise: boolean | null };
+  tables: SauvegardeTable[];
+}
+
 export interface LigneVenteEntree {
   designation: string;
   quantite: number;
@@ -206,6 +221,102 @@ export class EntrepriseDO extends DurableObject {
 
   async modules(): Promise<{ code: string; actif: number }[]> {
     return this.sql.exec('SELECT code, actif FROM module ORDER BY code').toArray() as never;
+  }
+
+  // ── Sauvegarde / restauration (chaque entreprise n'a QU'UNE instance DO, sans réplique native
+  // Cloudflare — voir docs/AUDIT_2026-09-03.md point 1). Snapshot logique complet : toutes les
+  // tables SQL + l'état clé/valeur (secteur, schema_version…) posé hors des tables via
+  // ctx.storage. Restauration destinée à un DO NEUF (vide), jamais à écraser une entreprise
+  // vivante — voir importerDonnees().
+
+  private nomsTables(): string[] {
+    return (this.sql
+      .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND name NOT LIKE '\\_cf\\_%' ESCAPE '\\'")
+      .toArray() as { name: string }[])
+      .map((r) => r.name);
+  }
+
+  /** Exporte un instantané complet : toutes les tables + l'état clé/valeur du DO. */
+  async exporterDonnees(): Promise<SauvegardeDump> {
+    const tables: SauvegardeTable[] = this.nomsTables().map((nom) => ({
+      nom,
+      lignes: this.sql.exec(`SELECT * FROM ${nom}`).toArray() as Record<string, ValeurSql>[],
+    }));
+    return {
+      version: 1,
+      exporteLe: new Date().toISOString(),
+      schemaVersion: (await this.ctx.storage.get<number>('schema_version')) ?? 0,
+      etat: {
+        entrepriseId: (await this.ctx.storage.get<string>('entrepriseId')) ?? null,
+        secteur: (await this.ctx.storage.get<string>('secteur')) ?? null,
+        initialise: (await this.ctx.storage.get<boolean>('initialise')) ?? null,
+      },
+      tables,
+    };
+  }
+
+  /**
+   * Restaure un instantané dans CE DO — refuse si une seule table métier cible contient déjà des
+   * données (garde-fou : jamais utilisé pour écraser une entreprise vivante, seulement pour
+   * recréer une entreprise dont le DO d'origine a été perdu). Exceptions : `compte_comptable`
+   * (migration v9, comptes Mobile Money) et `module` (migration v3, module « depenses » actif par
+   * défaut) sont pré-semées par des migrations de schéma dès la construction d'un DO, même neuf —
+   * `INSERT OR IGNORE` y absorbe ce chevauchement sans le traiter comme une preuve de données
+   * vivantes. Les triggers d'immuabilité n'interfèrent pas : on insère uniquement, jamais de
+   * DELETE/UPDATE sur une table déjà remplie.
+   */
+  private static readonly TABLES_PRE_SEMEES = new Set(['compte_comptable', 'module']);
+
+  async importerDonnees(dump: SauvegardeDump): Promise<{ tablesRestaurees: number; lignesRestaurees: number }> {
+    // `await` avant toute vérification synchrone (même motif que dans enregistrerVente/
+    // emettreFacture) — un throw synchrone sans await préalable dans une méthode DO appelée par
+    // RPC perturbe le suivi du stockage isolé de l'environnement de test (voir la doc Cloudflare
+    // sur les « known issues » de vitest-pool-workers, « isolated storage »).
+    await this.ctx.storage.get('schema_version');
+    const nomsValides = new Set(this.nomsTables());
+    for (const { nom } of dump.tables) {
+      if (!nomsValides.has(nom)) throw new Error(`Table inconnue dans ce schéma : ${nom}`);
+      if (EntrepriseDO.TABLES_PRE_SEMEES.has(nom)) continue;
+      const dejaPresent = this.sql.exec(`SELECT 1 FROM ${nom} LIMIT 1`).toArray()[0];
+      if (dejaPresent) throw new Error(`Restauration refusée : la table « ${nom} » n'est pas vide`);
+    }
+
+    let lignesRestaurees = 0;
+    this.ctx.storage.transactionSync(() => {
+      // `sqlite_master` ne garantit pas un ordre stable entre tables (les migrations v5/v6 ont
+      // recréé `vente`/`achat_fournisseur` sous un nom temporaire avant de les renommer, ce qui
+      // les déplace en fin d'ordre naturel) — `defer_foreign_keys` reporte la vérification des FK
+      // à la fin de la transaction plutôt que d'exiger un ordre d'insertion topologique exact.
+      this.sql.exec('PRAGMA defer_foreign_keys = ON');
+      // `ecriture` validée bloque l'insertion de ses `ligne_ecriture` (trg_ligne_verrou, comme en
+      // usage normal) : on insère donc les écritures déjà validées en statut 'brouillon', on
+      // insère les lignes (qui recalculent les totaux via trg_ligne_ins), puis on re-valide —
+      // exactement le même parcours brouillon→lignes→validée que le reste de l'application.
+      const aRevalider: string[] = [];
+      for (const { nom, lignes } of dump.tables) {
+        for (const ligne of lignes) {
+          const valeurs: Record<string, ValeurSql> = nom === 'ecriture' && ligne.statut === 'validee'
+            ? (() => { aRevalider.push(ligne.id as string); return { ...ligne, statut: 'brouillon' }; })()
+            : ligne;
+          const colonnes = Object.keys(valeurs);
+          if (!colonnes.length) continue;
+          const placeholders = colonnes.map(() => '?').join(', ');
+          this.sql.exec(
+            `INSERT OR IGNORE INTO ${nom} (${colonnes.join(', ')}) VALUES (${placeholders})`,
+            ...colonnes.map((col) => valeurs[col]),
+          );
+          lignesRestaurees++;
+        }
+      }
+      for (const id of aRevalider) this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", id);
+    });
+
+    await this.ctx.storage.put('schema_version', dump.schemaVersion);
+    if (dump.etat.entrepriseId) await this.ctx.storage.put('entrepriseId', dump.etat.entrepriseId);
+    if (dump.etat.secteur) await this.ctx.storage.put('secteur', dump.etat.secteur);
+    if (dump.etat.initialise) await this.ctx.storage.put('initialise', dump.etat.initialise);
+
+    return { tablesRestaurees: dump.tables.length, lignesRestaurees };
   }
 
   async moduleActif(code: string): Promise<boolean> {

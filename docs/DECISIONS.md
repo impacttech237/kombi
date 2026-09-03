@@ -96,5 +96,34 @@ Résumé des actions :
   609/709, escomptes 673/773, frais Mobile Money 6312, écarts 658/758/47, compte 890 pour
   l'écriture d'à-nouveau à la clôture.
 
+## D15 — Sauvegarde des Durable Objects : snapshot logique, restauration manuelle non self-service (2026-09-03)
+Risque n°1 identifié par l'audit du 2026-09-03 (`docs/AUDIT_2026-09-03.md`) : une entreprise = un
+seul Durable Object, sans réplique Cloudflare native. Décisions de conception :
+- **Snapshot logique (JSON), pas byte-à-byte** : `EntrepriseDO.exporterDonnees()` lit toutes les
+  tables SQL + l'état clé/valeur (secteur, schema_version) et les sérialise. Plus portable qu'un
+  dump binaire SQLite, et permet de restaurer même après un changement de schéma mineur.
+- **Cron quotidien vers R2, rétention 30 jours glissants** (`services/sauvegarde.ts`,
+  `wrangler.toml [triggers]`) — suffisant pour un incident détecté sous un mois ; pas de politique
+  de rétention longue durée (archivage légal) pour l'instant, à revoir si la DGI l'exige.
+- **Restauration volontairement non exposée en API self-service.** Ce MVP n'a pas de rôle
+  super-admin (le « back-office admin Impact Tech » est explicitement Phase P2 — voir section
+  « Décisions structurantes »), donc aucun rôle n'a l'autorité légitime pour restaurer une
+  entreprise sans supervision. `importerDonnees()` existe et est testé (`test/sauvegarde.test.ts`,
+  round-trip complet), mais reste un outil pour le porteur du projet, pas un bouton produit.
+- **Garde-fou anti-écrasement avec deux exceptions documentées** : `importerDonnees()` refuse si
+  une table métier de la cible n'est pas vide, sauf `compte_comptable` (pré-semée par la migration
+  v9 — comptes Mobile Money) et `module` (pré-semée par la migration v3 — module « dépenses » actif
+  par défaut), qui existent déjà dans tout DO neuf avant même `initialiser()`. `INSERT OR IGNORE`
+  y absorbe le chevauchement sans le traiter comme une preuve de données vivantes.
+- **`PRAGMA defer_foreign_keys = ON`** pendant la restauration : l'ordre des tables retourné par
+  `sqlite_master` n'est pas garanti stable (les migrations v5/v6 ont recréé `vente`/
+  `achat_fournisseur` sous un nom temporaire avant renommage, ce qui les repousse en fin d'ordre
+  naturel) — reporter la vérification des clés étrangères à la fin de la transaction évite un tri
+  topologique manuel des 20+ tables.
+- **Écritures déjà validées réinsérées via le parcours normal** : `ecriture.statut = 'validee'`
+  bloquerait l'insertion de ses `ligne_ecriture` (`trg_ligne_verrou`, même règle qu'en usage
+  normal) — la restauration insère donc en `'brouillon'`, insère les lignes, puis revalide,
+  exactement comme le reste de l'application.
+
 ## Décisions ouvertes (restantes)
 - Décompte exact des « 2 ans » de maintien de régime (exercices civils vs glissants).
