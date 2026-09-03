@@ -1,7 +1,19 @@
 import { Hono } from 'hono';
-import { STATUT_COMMANDE, TYPE_COMMANDE, type StatutCommande, type TypeCommande } from '@kombi/shared';
+import { z } from 'zod';
+import {
+  STATUT_COMMANDE, TYPE_COMMANDE, zDateISO, messageErreurZod, type StatutCommande,
+} from '@kombi/shared';
 import { requirePermission } from '../middleware/permission.js';
 import { stubEntreprise, type AppEnv } from '../types.js';
+
+const zCommande = z.object({
+  type: z.enum(TYPE_COMMANDE).optional().default('commande'),
+  libelle: z.string().trim().min(1, 'Libellé requis').max(160),
+  montant: z.coerce.number().int().nonnegative().nullish(),
+  tiersId: z.string().nullish(),
+  datePrevue: zDateISO.nullish(),
+  clientUuid: z.string().nullish(),
+});
 
 export const commandes = new Hono<AppEnv>();
 
@@ -11,15 +23,13 @@ commandes.get('/', requirePermission('commande:read'), async (c) => {
 });
 
 commandes.post('/', requirePermission('commande:manage'), async (c) => {
-  const body = await c.req.json().catch(() => null);
-  const libelle = String(body?.libelle ?? '').trim();
-  if (!libelle) return c.json({ erreur: 'Libellé requis' }, 400);
-  const type = TYPE_COMMANDE.includes(body?.type) ? (body.type as TypeCommande) : 'commande';
-  const montant = body?.montant != null ? Math.floor(Number(body.montant)) : null;
+  const parsed = zCommande.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ erreur: messageErreurZod(parsed.error) }, 400);
+  const { type, libelle, montant, tiersId, datePrevue, clientUuid } = parsed.data;
 
   const id = await stubEntreprise(c.env, c.get('entrepriseId')).creerCommande({
-    type, libelle, tiersId: body?.tiersId ?? null, montant,
-    datePrevue: body?.datePrevue ?? null,
+    type, libelle, tiersId: tiersId ?? null, montant: montant ?? null, datePrevue: datePrevue ?? null,
+    clientUuid: clientUuid ?? null,
   });
   return c.json({ commandeId: id }, 201);
 });

@@ -54,6 +54,7 @@ const PERMS_CAISSIER: readonly Permission[] = [
   'vente:create',
   'vente:read',
   'tiers:read',
+  'tiers:manage', // créer un client à la volée pour une vente à crédit (pas d'édition/suppression : routes inexistantes)
   'commande:read',
   'commande:manage',
   'facture:read',

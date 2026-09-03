@@ -107,10 +107,9 @@ future, référencés ici pour ne pas être réinventés au moment venu.
 - **DSF** (Déclaration Statistique et Fiscale) : Normal, Allégé ou SMT selon le régime, dépôt
   électronique avant le **15 mars**. Pas encore construite (Phase V1).
 - **Reçu de caisse** (mentions minimales) : nom/raison sociale **et NIU du vendeur**, date,
-  montant TTC, nature de l'opération, signature/cachet. **Écart identifié** : le reçu généré par
-  `Caisse.tsx` n'inclut aujourd'hui pas le NIU de l'entreprise (le champ n'est même pas chargé
-  dans `EntrepriseResume` côté front) — à corriger, c'est désormais une mention minimale
-  confirmée, pas une option.
+  montant TTC, nature de l'opération, signature/cachet. **Corrigé** (2026-09-03) : `niu` ajouté à
+  `EntrepriseResume` et affiché dans le reçu imprimé et WhatsApp de `Caisse.tsx`. Voir
+  `docs/parcours.md` § Facturation & devis.
 - **Facture normalisée** : en plus du reçu → NIU du client (si assujetti), détail HT/TVA/TTC,
   taux de TVA, numéro unique séquentiel, mentions légales DGI. Déjà conforme côté
   `facture-pdf.ts` (numéro gap-less, NIU émetteur+client, HT/TVA/TTC) — confirmé, aucun correctif.

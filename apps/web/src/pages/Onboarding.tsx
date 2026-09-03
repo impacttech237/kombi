@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { creerEntreprise } from '../lib/api.js';
+import { creerEntreprise, majParametresEntreprise } from '../lib/api.js';
 import { Bouton, Champ, Icon } from '../components/ui.js';
 
 const SECTEURS = [
@@ -21,13 +21,18 @@ export function Onboarding({ onCree }: { onCree: () => void }) {
   const [raisonSociale, setRaison] = useState('');
   const [niu, setNiu] = useState('');
   const [natureActivite, setNature] = useState('negoce');
+  const [adherentCga, setAdherentCga] = useState(false);
   const [erreur, setErreur] = useState('');
   const [charge, setCharge] = useState(false);
 
   async function creer() {
     setErreur(''); setCharge(true);
     try {
-      await creerEntreprise({ raisonSociale, secteur, natureActivite, niu: niu || undefined });
+      const { entrepriseId } = await creerEntreprise({ raisonSociale, secteur, natureActivite, niu: niu || undefined });
+      if (adherentCga) {
+        // Best-effort : la réduction IGS CGA (÷2) est un avantage, pas une condition de création.
+        await majParametresEntreprise(entrepriseId, { adherentCga: true }).catch(() => {});
+      }
       onCree();
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur');
@@ -79,6 +84,16 @@ export function Onboarding({ onCree }: { onCree: () => void }) {
               placeholder="Ex. Boutique Awa" />
             <Champ label="Nature de l'activité" value={natureActivite} onChange={setNature} options={NATURES} />
             <Champ label="NIU (facultatif)" value={niu} onChange={setNiu} placeholder="Numéro d'identifiant unique" />
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '4px 0 14px', fontSize: 14 }}>
+              <input type="checkbox" checked={adherentCga} onChange={(e) => setAdherentCga(e.target.checked)}
+                style={{ marginTop: 2 }} />
+              <span>
+                J'adhère à un Centre de Gestion Agréé (CGA)
+                <span className="muet" style={{ display: 'block', fontSize: 12 }}>
+                  Réduit de moitié l'IGS si vous êtes au régime IGS — modifiable plus tard dans Paramètres fiscaux.
+                </span>
+              </span>
+            </label>
             {erreur && <p style={{ color: 'var(--danger)', fontSize: 14 }}>{erreur}</p>}
             <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
               <Bouton variante="clair" onClick={() => setEtape(1)}>Retour</Bouton>

@@ -308,6 +308,13 @@ export class EntrepriseDO extends DurableObject {
   async enregistrerVente(
     v: VenteEntree, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
   ): Promise<{ venteId: string; totalTtc: number; deja: boolean; enSurvente: boolean }> {
+    // Lecture async D'ABORD, avant toute vérification synchrone : aucun `await` ne doit séparer
+    // la vérification d'idempotence (client_uuid) de la transaction, sinon deux requêtes
+    // concurrentes avec le même client_uuid peuvent toutes deux franchir la vérification avant
+    // qu'aucune n'ait écrit (fenêtre de course). Une fois l'await passé, tout le reste s'exécute
+    // en un seul bloc synchrone ininterruptible.
+    const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
+
     if (v.clientUuid) {
       const ex = this.sql
         .exec('SELECT id, total_ttc FROM vente WHERE client_uuid = ?', v.clientUuid)
@@ -318,8 +325,6 @@ export class EntrepriseDO extends DurableObject {
     if (v.aCredit && !v.tiersId) throw new Error('Un client est requis pour une vente à crédit');
     if (!v.aCredit && !v.modePaiement) throw new Error('Mode de paiement requis');
     this.verifierTvaAutorisee(v.regimeFiscal, v.lignes.map((l) => l.tauxTva));
-    // Lecture async AVANT la transaction (transactionSync exige un callback 100% synchrone).
-    const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
 
     // Toutes les écritures multi-tables (écriture + vente + lignes + mouvements de stock)
     // sont atomiques : en cas d'erreur, tout est annulé (aucune écriture partielle).
@@ -853,8 +858,12 @@ export class EntrepriseDO extends DurableObject {
   async creerFacture(f: {
     type: 'facture' | 'devis'; tiersId: string; dateEcheance?: string | null;
     lignes: { designation: string; quantite: number; prixUnitaire: number; tauxTva?: number }[];
-    regimeFiscal?: string | null;
+    regimeFiscal?: string | null; clientUuid?: string | null;
   }): Promise<string> {
+    if (f.clientUuid) {
+      const ex = this.sql.exec('SELECT id FROM facture WHERE client_uuid = ?', f.clientUuid).toArray()[0] as { id: string } | undefined;
+      if (ex) return ex.id;
+    }
     if (!f.lignes.length) throw new Error('Facture sans ligne');
     this.verifierTvaAutorisee(f.regimeFiscal, f.lignes.map((l) => l.tauxTva));
     const exerciceId = this.exerciceOuvert();
@@ -866,9 +875,9 @@ export class EntrepriseDO extends DurableObject {
     }
     const id = uid();
     this.sql.exec(
-      `INSERT INTO facture (id, exercice_id, type, tiers_id, date_echeance, statut, total_ht, total_tva, total_ttc)
-       VALUES (?, ?, ?, ?, ?, 'brouillon', ?, ?, ?)`,
-      id, exerciceId, f.type, f.tiersId, f.dateEcheance ?? null, totalHt, totalTva, totalHt + totalTva,
+      `INSERT INTO facture (id, exercice_id, type, tiers_id, date_echeance, statut, total_ht, total_tva, total_ttc, client_uuid)
+       VALUES (?, ?, ?, ?, ?, 'brouillon', ?, ?, ?, ?)`,
+      id, exerciceId, f.type, f.tiersId, f.dateEcheance ?? null, totalHt, totalTva, totalHt + totalTva, f.clientUuid ?? null,
     );
     let ordre = 0;
     for (const l of f.lignes) {
@@ -895,8 +904,10 @@ export class EntrepriseDO extends DurableObject {
     ).toArray()[0] as { type: string; exercice_id: string; tiers_id: string; date_echeance: string | null } | undefined;
     if (!devis) throw new Error('Devis introuvable');
     if (devis.type !== 'devis') throw new Error('Seul un devis peut être converti en facture');
-    const dejaConverti = this.sql.exec('SELECT 1 FROM facture WHERE devis_id = ?', devisId).toArray()[0];
-    if (dejaConverti) throw new Error('Ce devis a déjà été converti en facture');
+    // Idempotent : un rejeu (retry réseau, double-clic) retourne la facture déjà créée au lieu
+    // d'échouer, exactement comme le dédoublonnage par client_uuid ailleurs dans ce fichier.
+    const dejaConverti = this.sql.exec('SELECT id FROM facture WHERE devis_id = ?', devisId).toArray()[0] as { id: string } | undefined;
+    if (dejaConverti) return dejaConverti.id;
 
     const lignes = this.sql.exec(
       'SELECT designation, quantite, prix_unitaire, taux_tva FROM ligne_facture WHERE facture_id = ? ORDER BY ordre',
@@ -933,6 +944,10 @@ export class EntrepriseDO extends DurableObject {
     factureId: string, prefixe: string, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
     assujettiTva = false,
   ): Promise<{ numero: string }> {
+    // Lecture async D'ABORD (voir commentaire équivalent dans enregistrerVente) : aucun `await`
+    // ne doit séparer la vérification d'idempotence (statut brouillon) de la transaction.
+    const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
+
     const f = this.sql
       .exec('SELECT type, exercice_id, statut, numero, total_ht, total_tva, total_ttc, tiers_id FROM facture WHERE id = ?', factureId)
       .toArray()[0] as
@@ -945,8 +960,6 @@ export class EntrepriseDO extends DurableObject {
       const tiers = this.sql.exec('SELECT niu FROM tiers WHERE id = ?', f.tiers_id).toArray()[0] as { niu: string | null } | undefined;
       if (!tiers?.niu?.trim()) throw new Error('Le NIU du client est requis pour émettre une facture (Art. 150 CGI)');
     }
-    // Lecture async AVANT la transaction (transactionSync exige un callback 100% synchrone).
-    const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
 
     return this.ctx.storage.transactionSync(() => {
       // Séquence gap-less (sérialisée par le DO — pas de verrou global).
@@ -1000,6 +1013,10 @@ export class EntrepriseDO extends DurableObject {
   async creerAvoir(
     factureId: string, prefixe: string, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
   ): Promise<{ avoirId: string; numero: string }> {
+    // Lecture async D'ABORD (voir commentaire équivalent dans enregistrerVente) : aucun `await`
+    // ne doit séparer la vérification « avoir déjà existant » de la transaction.
+    const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
+
     const f = this.sql.exec(
       'SELECT type, exercice_id, tiers_id, total_ht, total_tva, total_ttc, statut FROM facture WHERE id = ?', factureId,
     ).toArray()[0] as {
@@ -1011,7 +1028,6 @@ export class EntrepriseDO extends DurableObject {
     if (f.statut === 'brouillon') throw new Error('Cette facture n\'a pas encore été émise');
     const dejaAvoir = this.sql.exec('SELECT 1 FROM facture WHERE avoir_de_id = ?', factureId).toArray()[0];
     if (dejaAvoir) throw new Error('Un avoir existe déjà pour cette facture');
-    const secteur = (await this.ctx.storage.get<string>('secteur')) ?? 'commerce';
 
     return this.ctx.storage.transactionSync(() => {
       const seq = this.sql
@@ -1260,14 +1276,18 @@ export class EntrepriseDO extends DurableObject {
   // ══════════════ Commandes / missions ══════════════
   async creerCommande(cmd: {
     type?: 'commande' | 'mission'; tiersId?: string | null; libelle: string;
-    montant?: number | null; datePrevue?: string | null;
+    montant?: number | null; datePrevue?: string | null; clientUuid?: string | null;
   }): Promise<string> {
+    if (cmd.clientUuid) {
+      const ex = this.sql.exec('SELECT id FROM commande WHERE client_uuid = ?', cmd.clientUuid).toArray()[0] as { id: string } | undefined;
+      if (ex) return ex.id;
+    }
     const id = uid();
     this.sql.exec(
-      `INSERT INTO commande (id, type, tiers_id, libelle, montant, date_prevue)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO commande (id, type, tiers_id, libelle, montant, date_prevue, client_uuid)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       id, cmd.type ?? 'commande', cmd.tiersId ?? null, cmd.libelle,
-      cmd.montant ?? null, cmd.datePrevue ?? null,
+      cmd.montant ?? null, cmd.datePrevue ?? null, cmd.clientUuid ?? null,
     );
     return id;
   }

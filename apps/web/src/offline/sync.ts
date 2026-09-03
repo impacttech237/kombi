@@ -28,7 +28,7 @@ async function rejouer(m: Mutation): Promise<void> {
       await creerDepense(m.entrepriseId, {
         categorie: p.categorie as string, libelle: p.libelle as string, montant: p.montant as number,
         modePaiement: p.modePaiement as string, recurrente: p.recurrente as boolean | undefined,
-        clientUuid: m.clientUuid,
+        clientUuid: m.clientUuid, dateOperation: (p.dateOperation as string | undefined) ?? null,
       });
       return;
     case 'tiers':
@@ -43,7 +43,7 @@ async function rejouer(m: Mutation): Promise<void> {
         quantite: p.quantite as number, coutUnitaire: p.coutUnitaire as number,
         modePaiement: (p.modePaiement as string | undefined) ?? null, aCredit: p.aCredit as boolean | undefined,
         tiersId: (p.tiersId as string | undefined) ?? null, tauxTva: p.tauxTva as number | undefined,
-        clientUuid: m.clientUuid,
+        clientUuid: m.clientUuid, dateOperation: (p.dateOperation as string | undefined) ?? null,
       });
       return;
     case 'paiement_vente':

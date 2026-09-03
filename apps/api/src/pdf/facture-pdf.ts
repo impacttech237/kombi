@@ -14,6 +14,17 @@ export interface Emetteur { raisonSociale: string; niu?: string | null; }
 const fmt = (n: number) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' FCFA';
 const VERT = rgb(0.063, 0.471, 0.31); // #10784f approx accent
 
+/**
+ * pdf-lib plante (throw) sur tout caractère hors du jeu WinAnsi de la police Helvetica standard
+ * (emoji, script non-latin) — un utilisateur peut saisir n'importe quoi dans une désignation ou
+ * un nom de client. On dégrade proprement (remplace par « ? ») plutôt que de faire échouer toute
+ * la génération du PDF.
+ */
+function safe(s: string | undefined | null): string {
+  if (!s) return '';
+  return Array.from(s).map((ch) => (ch.codePointAt(0)! > 255 ? '?' : ch)).join('');
+}
+
 /** Génère le PDF d'une facture conforme aux mentions DGI (CGI Art. 150). */
 export async function genererFacturePDF(f: DonneesFacture, e: Emetteur): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
@@ -25,7 +36,7 @@ export async function genererFacturePDF(f: DonneesFacture, e: Emetteur): Promise
   let y = 800;
 
   const txt = (s: string, x: number, yy: number, size = 10, b = false, color = rgb(0, 0.14, 0.01)) =>
-    page.drawText(s ?? '', { x, y: yy, size, font: b ? bold : font, color });
+    page.drawText(safe(s), { x, y: yy, size, font: b ? bold : font, color });
 
   // En-tête émetteur
   txt(e.raisonSociale, M, y, 18, true, VERT);

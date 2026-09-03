@@ -27,24 +27,23 @@ entreprises.get('/', async (c) => {
   return c.json({ entreprises: res.results ?? [] });
 });
 
+const zCreationEntreprise = z.object({
+  raisonSociale: z.string().trim().min(1, 'raisonSociale requise').max(160),
+  secteur: z.enum(SECTEURS as unknown as [Secteur, ...Secteur[]]),
+  natureActivite: z.enum(NATURE_ACTIVITE as unknown as [NatureActivite, ...NatureActivite[]]),
+  niu: z.string().trim().max(32).nullish(),
+});
+
 /** Crée une entreprise : control plane (D1) puis initialisation de sa base dédiée (DO). */
 entreprises.post('/', async (c) => {
   const utilisateurId = c.get('utilisateurId');
-  const body = await c.req.json().catch(() => null);
-
-  const raisonSociale = String(body?.raisonSociale ?? '').trim();
-  const secteur = body?.secteur as Secteur;
-  const natureActivite = body?.natureActivite as NatureActivite;
-  const niu = body?.niu ? String(body.niu).trim() : undefined;
-
-  if (!raisonSociale) return c.json({ erreur: 'raisonSociale requise' }, 400);
-  if (!SECTEURS.includes(secteur)) return c.json({ erreur: 'secteur invalide' }, 400);
-  if (!NATURE_ACTIVITE.includes(natureActivite))
-    return c.json({ erreur: 'natureActivite invalide' }, 400);
+  const corps = zCreationEntreprise.safeParse(await c.req.json().catch(() => null));
+  if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);
+  const { raisonSociale, secteur, natureActivite, niu } = corps.data;
 
   const annee = new Date().getUTCFullYear();
   const { entrepriseId, stmts } = planCreationEntreprise(c.env.DB, {
-    raisonSociale, secteur, natureActivite, niu, utilisateurId, annee,
+    raisonSociale, secteur, natureActivite, niu: niu ?? undefined, utilisateurId, annee,
   });
 
   await c.env.DB.batch(stmts); // control plane, atomique

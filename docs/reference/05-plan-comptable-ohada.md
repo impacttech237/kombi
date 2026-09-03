@@ -67,14 +67,15 @@ vérifiés ci-dessus.
 |---|---|
 | 701 | Ventes de marchandises |
 | 702 | Ventes de produits finis |
+| 706 | Services vendus (secteur « service ») |
 | 707 | Produits accessoires |
 
-## ⚠️ Mobile Money — décision de modélisation (à valider ONECCA)
-Le plan SYSCOHADA **ne prévoit pas de compte dédié au mobile money**. Choix retenu :
-sous-comptes de trésorerie dédiés (ex. **551 / 552 — Mobile Money MTN MoMo**,
-**553 — Orange Money**) traités comme des comptes de type « banque/caisse électronique »,
-avec le **585 (virements de fonds)** comme compte de transit lors des transferts
-espèces↔mobile↔banque. À confirmer avec l'expert-comptable.
+## Mobile Money — validé ONECCA (voir `09-validations-onecca.md` §1)
+Le plan SYSCOHADA ne prévoit pas de compte dédié au mobile money : **552 « Téléphone
+portable »** est le compte racine, subdivisé par opérateur. Sous-comptes retenus :
+**5521 — Orange Money**, **5522 — MTN MoMo**. Le **553** est un compte sans rapport (carte
+péage), retiré de la modélisation trésorerie. Le **585 (virements de fonds)** reste le compte
+de transit lors des transferts espèces↔mobile↔banque.
 
 ## Génération d'écritures — exemples (partie double)
 Interface simple → écriture double automatique (le mode de paiement détermine le compte de trésorerie) :
@@ -82,7 +83,7 @@ Interface simple → écriture double automatique (le mode de paiement détermin
 | Saisie utilisateur | Débit | Crédit |
 |---|---|---|
 | Recette 10 000 espèces (vente marchandise, IGS) | 571 Caisse 10 000 | 701 Ventes 10 000 |
-| Recette 10 000 par MTN MoMo | 552 MoMo 10 000 | 701 Ventes 10 000 |
+| Recette 10 000 par MTN MoMo | 5522 MoMo 10 000 | 701 Ventes 10 000 |
 | Dépense 5 000 virement (achat marchandise) | 601 Achats 5 000 | 521 Banque 5 000 |
 | Vente 11 925 TTC (Réel, TVA 19,25%) | 411 Client 11 925 | 701 Ventes 10 000 + 4431 TVA 1 925 |
 

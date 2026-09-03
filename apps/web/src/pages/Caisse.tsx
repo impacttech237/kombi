@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { formaterFCFA } from '@kombi/shared';
 import { TAUX_TVA_EFFECTIF } from '@kombi/fiscal';
 import {
-  listerProduits, listerTiers, type EntrepriseResume, type LigneCaisse, type Produit, type Tiers,
+  listerProduits, listerTiers, creerTiers, type EntrepriseResume, type LigneCaisse, type Produit, type Tiers,
 } from '../lib/api.js';
 import { enfilerMutation, nouvelUuid } from '../offline/db.js';
 import { synchroniser } from '../offline/sync.js';
@@ -44,12 +44,31 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
   const [erreur, setErreur] = useState('');
   const [produits, setProduits] = useState<Produit[]>([]);
   const [tiers, setTiers] = useState<Tiers[]>([]);
+  const [nouveauClient, setNouveauClient] = useState<string | null>(null);
+  const [creationClient, setCreationClient] = useState(false);
 
+  function rechargerTiers() {
+    listerTiers(entreprise.id).then(setTiers).catch(() => {});
+  }
   useEffect(() => {
     if (entreprise.secteur !== 'service')
       listerProduits(entreprise.id).then(setProduits).catch(() => {});
-    listerTiers(entreprise.id).then(setTiers).catch(() => {});
+    rechargerTiers();
   }, [entreprise.id, entreprise.secteur]);
+
+  async function creerClientRapide() {
+    const nom = nouveauClient?.trim();
+    if (!nom) return;
+    setCreationClient(true); setErreur('');
+    try {
+      const { tiersId } = await creerTiers(entreprise.id, { nom });
+      rechargerTiers();
+      setTiersId(tiersId);
+      setNouveauClient(null);
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Erreur');
+    } finally { setCreationClient(false); }
+  }
 
   // TVA jamais applicable au régime IGS (Art. 142) ; sinon seulement si l'entreprise y est assujettie.
   const tvaApplicable = entreprise.regime_fiscal !== 'igs' && entreprise.assujetti_tva === 1;
@@ -242,13 +261,13 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
                   background: 'var(--fond)', borderRadius: 12, padding: '10px 12px' }}>
                   <span style={{ flex: 1, minWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.designation}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <button onClick={() => changerQuantite(i, -1)} className="btn btn-clair" style={{ width: 28, height: 28, padding: 0 }}>−</button>
+                    <button onClick={() => changerQuantite(i, -1)} className="btn btn-clair" style={{ width: 44, height: 44, padding: 0, fontSize: 18 }}>−</button>
                     <span className="chiffre" style={{ minWidth: 18, textAlign: 'center' }}>{l.quantite}</span>
-                    <button onClick={() => changerQuantite(i, 1)} className="btn btn-clair" style={{ width: 28, height: 28, padding: 0 }}>+</button>
+                    <button onClick={() => changerQuantite(i, 1)} className="btn btn-clair" style={{ width: 44, height: 44, padding: 0, fontSize: 18 }}>+</button>
                   </div>
                   <input value={l.remisePct ?? ''} onChange={(e) => changerRemiseLigne(i, e.target.value.replace(/\D/g, ''))}
                     placeholder="0%" title="Remise sur cette ligne"
-                    style={{ width: 44, padding: '4px 6px', border: '1px solid var(--bord)', borderRadius: 8, fontSize: 12, textAlign: 'center' }} />
+                    style={{ width: 52, height: 40, padding: '4px 6px', border: '1px solid var(--bord)', borderRadius: 8, fontSize: 13, textAlign: 'center' }} />
                   <span className="chiffre" style={{ fontWeight: 600, minWidth: 70, textAlign: 'right' }}>
                     {formaterFCFA(l.quantite * prixApresRemises(l, remiseGlobalePct))}
                   </span>
@@ -300,13 +319,34 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
         </div>
       )}
 
-      {tiers.length > 0 && (
+      {(tiers.length > 0 || aCredit) && (
         <div className="champ" style={{ marginBottom: 4 }}>
           <label>Client {aCredit ? '(requis pour une vente à crédit)' : '(optionnel)'}</label>
-          <select value={tiersId} onChange={(e) => setTiersId(e.target.value)}>
-            <option value="">Aucun client</option>
-            {tiers.map((t) => <option key={t.id} value={t.id}>{t.nom}</option>)}
-          </select>
+          {nouveauClient === null ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select value={tiersId} onChange={(e) => setTiersId(e.target.value)} style={{ flex: 1 }}>
+                <option value="">Aucun client</option>
+                {tiers.map((t) => <option key={t.id} value={t.id}>{t.nom}</option>)}
+              </select>
+              <button onClick={() => setNouveauClient('')} className="btn btn-clair" style={{ padding: '0 14px' }}>
+                <Icon name="plus" size={18} /> Nouveau
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input autoFocus placeholder="Nom du client" value={nouveauClient}
+                onChange={(e) => setNouveauClient(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && creerClientRapide()}
+                style={{ flex: 1, padding: '12px 14px', border: '1px solid var(--bord)', borderRadius: 12 }} />
+              <button onClick={creerClientRapide} disabled={creationClient || !nouveauClient.trim()}
+                className="btn btn-clair" style={{ padding: '0 14px' }}>
+                {creationClient ? '…' : 'Créer'}
+              </button>
+              <button onClick={() => setNouveauClient(null)} style={{ border: 0, background: 'transparent', color: 'var(--danger)' }} aria-label="annuler">
+                <Icon name="baisse" size={18} />
+              </button>
+            </div>
+          )}
         </div>
       )}
 

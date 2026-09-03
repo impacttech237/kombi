@@ -118,7 +118,12 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 - ✅ Compteur de commandes actives sur le dashboard
 - ✅ 🧪 Tests : création, changement de statut, compteur d'actives, type mission (service)
 - ✅ **Vérifié end-to-end** : commande créée → Démarrer → En cours → Terminée
-- ⬜ Conversion commande livrée → vente/facture · client optionnel dans le formulaire · échéance
+- ✅ Client optionnel + date prévue dans le formulaire de création (audit UX 2026-09-03 — le
+  backend (`creerCommande`) les acceptait déjà, aucun champ ne les exposait ; toute commande créée
+  affichait donc systématiquement « Sans client »). Confirmation ajoutée avant « Annuler » (seule
+  action destructive de l'app qui n'en avait pas). Idempotence `client_uuid` ajoutée (migration DO
+  v10) en prévision d'un futur rattachement à la file offline.
+- ⬜ Conversion commande livrée → vente/facture
 
 ## Étape 7 — Offline (le plus critique terrain) ✅ (caisse offline-first)
 - ✅ File de mutations Dexie (IndexedDB) branchée sur la **caisse** (offline-first : enregistre puis synchronise)
@@ -226,6 +231,16 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   vente (l'avoir sur facture prend le relais) ou si déjà annulée. Écran « Historique des ventes »
   (`Ventes.tsx`, accessible depuis la Caisse) : bouton Annuler visible seulement pour les rôles
   ayant `vente:annuler` (admin/gérant — pas caissier, contrôle anti-fraude volontaire).
+- ✅ **Un caissier peut créer un client à la volée depuis la caisse** (audit UX 2026-09-03) :
+  bouton « Nouveau » à côté du sélecteur client dans `Caisse.tsx` (nom seul, création rapide) ;
+  `tiers:manage` accordé au rôle caissier (route `POST /api/tiers` ne permettait que la lecture),
+  sans risque d'édition/suppression puisqu'aucune route de ce type n'existe encore.
+- ✅ **Facturer a posteriori une vente déjà encaissée** (audit UX 2026-09-03) : le moteur
+  (`creerFactureDepuisVente`) existait et était testé côté API mais n'avait aucun déclencheur
+  côté UI. Bouton « Facturer » dans `Ventes.tsx` (visible si vente payée, sans facture, avec un
+  client associé).
+- ✅ Steppers de quantité et champ de remise agrandis (28px → 44px/40px) pour un usage tactile
+  fiable en caisse (audit UX 2026-09-03, sous le seuil recommandé de 44px auparavant).
 - ⬜ 🟡 Fond de caisse + clôture journalière (Z de caisse) — **Phase V2 dans la spec elle-même**
   (§9.3), reporté délibérément : nécessite une nouvelle table `session_caisse` + notion de session
   active par caissier rattachée à chaque vente, changement de modèle plus large qu'un correctif
@@ -258,6 +273,11 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ✅ Charges saisissables même sans stock (prestataires) — le module `depenses` est cœur, actif quel
   que soit le secteur (commerce/service/mixte).
 - ✅ Achat à crédit fournisseur (401) + TVA déductible (4452)
+- ✅ **Champ « date de la dépense »/« date de réception » exposé dans l'UI** (`Depenses.tsx`,
+  `Stock.tsx` → Approvisionner) : `dateOperation` était déjà accepté et testé côté API depuis
+  l'étape 11 mais aucun champ ne permettait de le saisir — le correctif restait inutilisable en
+  pratique (audit UX 2026-09-03). Filet aussi côté offline (`sync.ts` transmettait déjà le reste
+  du payload mais pas `dateOperation`).
 
 ## Stock
 - ✅ Sur-vente **tracée, pas bloquée** (spec §4 : « bloquer ou tracer » — le terrain ne doit jamais
@@ -267,7 +287,11 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   `enSurvente`, et la caisse affiche un avertissement non bloquant par ligne quand la quantité
   demandée dépasse le stock affiché.
 - ✅ Coût d'achat / CMP / marge visibles sur la fiche produit (`Stock.tsx`, écran réservé aux rôles
-  avec `stock:read` — jamais le caissier).
+  avec `stock:read`). **Corrigé** (audit sécurité 2026-09-03) : le filtre de navigation
+  (`App.tsx`) ne masquait l'onglet Stock que si `secteur === 'service'`, sans jamais vérifier la
+  permission — un caissier d'une entreprise commerce/mixte voyait donc l'onglet (l'API le
+  bloquait bien en 403, mais l'écran affichait silencieusement « aucun produit », trompeur).
+  Filtre désormais `secteur === 'service' || !peut(role, 'stock:read')`.
 - ✅ « Rupture » vs « Stock bas » (distinguer ≤ seuil de = 0) : `listerProduits()` expose
   désormais `en_rupture` (stock = 0) en plus de `en_alerte` (stock ≤ seuil) ; `Stock.tsx` affiche
   la puce « Rupture » seulement à 0, « Stock bas » entre 1 et le seuil.
@@ -290,6 +314,10 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   `facture.devis_id` (migration DO v7, simple `ALTER TABLE ADD COLUMN`) — le devis d'origine n'est
   jamais modifié ni comptabilisé (il garde son éventuel DEV-xxx). Un seul devis ne peut être
   converti qu'une fois. Bouton « Convertir en facture » dans `Factures.tsx`, badge « Convertie ».
+- ✅ **Facture restée en brouillon récupérable** (audit UX 2026-09-03) : `creer()` enchaînait
+  création + émission sans étape intermédiaire — si `emettreFacture()` échouait (ex. NIU client
+  manquant), la facture existait en base au statut `brouillon` sans aucun moyen de la reprendre.
+  Bouton « Émettre » ajouté dans `CarteFacture` pour toute facture au statut `brouillon`.
 - ✅ WhatsApp envoie réellement le PDF (destinataire + fichier) : partage natif (`navigator.share`
   avec le PDF en pièce jointe réelle — pas un lien vers un endpoint authentifié que le
   destinataire ne pourrait pas ouvrir) sur mobile, avec repli sur un lien `wa.me` pré-rempli avec
@@ -320,6 +348,12 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   à côté d'Équipe). `regime_fiscal` reste volontairement hors de cet écran : un changement de
   régime ne doit jamais s'appliquer rétroactivement sans un vrai parcours de confirmation (spec
   §1.1), pas un simple interrupteur.
+- ✅ **CGA proposé dès l'onboarding** (audit UX 2026-09-03) : même une fois modifiable après coup
+  (item précédent), rien ne signalait à un dirigeant fraîchement inscrit et déjà adhérent d'un
+  CGA qu'il devait aller chercher l'écran Paramètres fiscaux pour diviser son IGS par deux —
+  risque financier silencieux. Case à cocher ajoutée à l'étape 2 de `Onboarding.tsx`, appliquée
+  via `PATCH /api/entreprises/:id` juste après la création (best-effort, n'empêche pas la
+  création si l'appel échoue).
 - ⬜ 🟠 Coordonnées entreprise (adresse, ville, téléphone, email, RCCM) + logo — aucune colonne
   D1 pour l'instant (`entreprise` ne porte que l'identité fiscale), nécessite une migration.
   Alimente aussi la personnalisation des documents PDF (logo, couleur, mentions — spec §2).
@@ -355,9 +389,14 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 ## Multi-utilisateurs & rôles
 - ✅ Écran Équipe : ajout d'un membre par email + changement de rôle + retrait (`membre:manage`,
   admin uniquement) ; rôles étendus `comptable` (lecture financière seule) et `employe`
-  (commandes/tiers, hors caisse/finance).
+  (commandes/tiers, hors caisse/finance). **Corrigé** (audit UX 2026-09-03) : le retrait d'un
+  membre se faisait en un clic sans confirmation (action irréversible, coupe l'accès d'un
+  collègue) — `confirm()` ajouté, alignée sur les autres actions destructives de l'app.
 - ✅ Navigation filtrée par permissions (onglets Compta/Caisse/Factures masqués si non autorisés)
-  + route fiscalité protégée (`requirePermission('compta:read')`).
+  + route fiscalité protégée (`requirePermission('compta:read')`). Accès direct à
+  Commandes/Dépenses/Créances/Dettes ajouté à la rangée de raccourcis (audit UX 2026-09-03) :
+  auparavant seulement atteignables depuis les cartes du tableau de bord, aucun raccourci
+  n'existait depuis les autres écrans.
 - ✅ Journal d'audit consultable (exigence NFR) : `audit_log` append-only, chaîné par hash SHA-256
   (`hash = sha256(hash_precedent + payload)`), écrit dans la même transaction que l'opération
   qu'il trace (vente, dépense, entrée stock, émission/paiement facture). Consultable dans
@@ -431,6 +470,21 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ⬜ ⚪ Backoff + plafond de tentatives sur la synchro offline
 - ⬜ ⚪ Export / sauvegarde / RGPD (les DO ne sont pas sauvegardés)
 - ⬜ ⚪ Tests : isolation tenant, permissions par rôle, offline, multi-exercices
+- ✅ Rate limiting rendu atomique (`middleware/rate-limit.ts`) : lecture-puis-écriture D1 en deux
+  requêtes séparées remplacée par un UPSERT SQLite unique avec `RETURNING` — fermait une fenêtre
+  de course exploitable par des requêtes concurrentes sur `/api/auth/*` (audit sécurité 2026-09-03).
+- ✅ Fenêtre de course fermée dans `enregistrerVente`/`emettreFacture`/`creerAvoir`
+  (`entreprise-do.ts`) : la lecture async de `secteur` (seul point de suspension avant la
+  transaction) est désormais faite AVANT la vérification d'idempotence/statut, pas après — aucun
+  `await` ne sépare plus la vérification de la transaction synchrone.
+- ✅ Idempotence `client_uuid` étendue à `creerFacture` et `creerCommande` (migration DO v10 pour
+  `commande`) ; `convertirDevisEnFacture` rendu idempotent nativement (retourne la facture déjà
+  créée au lieu d'échouer sur un rejeu).
+- ✅ Validation Zod généralisée à `POST /api/entreprises` et `POST /api/commandes` (jusqu'ici
+  validation manuelle, incohérente avec le reste des routes — `Number(x)` silencieusement `NaN`).
+- ✅ PDF facture (`facture-pdf.ts`) : sanitisation de tout texte utilisateur avant `drawText` — la
+  police standard Helvetica de pdf-lib plantait (500) sur tout caractère hors WinAnsi (emoji,
+  script non-latin saisi dans une désignation ou un nom de client).
 
 ## Produit & modèle économique
 - ⬜ 🔴 Back-office admin « Impact Tech » + collecte d'agrégats cross-entreprises — **Phase P2

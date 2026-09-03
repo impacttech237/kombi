@@ -66,7 +66,7 @@ function Espace() {
 
   const role = active.role as RoleMembre;
   const masquer = [
-    ...(active.secteur === 'service' ? ['stock'] : []),
+    ...(active.secteur === 'service' || !peut(role, 'stock:read') ? ['stock'] : []),
     ...(peut(role, 'compta:read') ? [] : ['compta']),
     ...(peut(role, 'vente:create') ? [] : ['caisse']),
     ...(peut(role, 'facture:read') ? [] : ['factures']),
@@ -92,6 +92,18 @@ function Espace() {
           : <Comptabilite entreprise={active} />}
       </div>
       <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
+        {peut(role, 'commande:read') && (
+          <Bouton variante="ghost" onClick={() => setOnglet('commandes')}>Commandes</Bouton>
+        )}
+        {peut(role, 'depense:read') && (
+          <Bouton variante="ghost" onClick={() => setOnglet('depenses')}>Dépenses</Bouton>
+        )}
+        {peut(role, 'vente:read') && (
+          <Bouton variante="ghost" onClick={() => setOnglet('creances')}>Créances</Bouton>
+        )}
+        {peut(role, 'achat:read') && (
+          <Bouton variante="ghost" onClick={() => setOnglet('dettes')}>Dettes</Bouton>
+        )}
         {peut(role, 'tiers:read') && (
           <Bouton variante="ghost" onClick={() => setOnglet('tiers')}>Clients &amp; fournisseurs</Bouton>
         )}

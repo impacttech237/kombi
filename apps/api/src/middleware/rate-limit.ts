@@ -12,26 +12,24 @@ export function limiterDebit(opts: { limite: number; fenetreSecondes: number; pr
     const cle = `${opts.prefixe}:${ip}`;
     const maintenant = Date.now();
 
-    const row = await c.env.DB.prepare('SELECT compteur, fenetre_debut FROM rate_limit WHERE cle = ?')
-      .bind(cle)
-      .first<{ compteur: number; fenetre_debut: string }>();
+    // UPSERT atomique en un seul statement SQLite : lecture + incrément dans la même opération,
+    // pas de fenêtre lecture-puis-écriture exploitable par des requêtes concurrentes (contrairement
+    // à un SELECT suivi d'un UPDATE séparés).
+    const { results } = await c.env.DB.prepare(
+      `INSERT INTO rate_limit (cle, compteur, fenetre_debut) VALUES (?, 1, ?)
+       ON CONFLICT(cle) DO UPDATE SET
+         compteur = CASE WHEN (unixepoch() - unixepoch(fenetre_debut)) > ? THEN 1 ELSE compteur + 1 END,
+         fenetre_debut = CASE WHEN (unixepoch() - unixepoch(fenetre_debut)) > ? THEN excluded.fenetre_debut ELSE fenetre_debut END
+       RETURNING compteur`,
+    )
+      .bind(cle, new Date(maintenant).toISOString(), opts.fenetreSecondes, opts.fenetreSecondes)
+      .all<{ compteur: number }>();
 
-    const fenetreExpiree = !row || maintenant - Date.parse(row.fenetre_debut) > opts.fenetreSecondes * 1000;
-    if (fenetreExpiree) {
-      await c.env.DB.prepare(
-        `INSERT INTO rate_limit (cle, compteur, fenetre_debut) VALUES (?, 1, ?)
-         ON CONFLICT(cle) DO UPDATE SET compteur = 1, fenetre_debut = excluded.fenetre_debut`,
-      )
-        .bind(cle, new Date(maintenant).toISOString())
-        .run();
-      return next();
-    }
-
-    if (row.compteur >= opts.limite) {
+    const compteur = results[0]?.compteur ?? 1;
+    if (compteur > opts.limite) {
       return c.json({ erreur: 'Trop de tentatives, réessayez dans quelques minutes' }, 429);
     }
 
-    await c.env.DB.prepare('UPDATE rate_limit SET compteur = compteur + 1 WHERE cle = ?').bind(cle).run();
     await next();
   });
 }

@@ -10,6 +10,7 @@ const zCreationFacture = z.object({
   tiersId: z.string().min(1, 'Client requis'),
   dateEcheance: zDateISO.nullish(),
   lignes: z.array(zLigneMontant).min(1, 'Ajoutez au moins une ligne'),
+  clientUuid: z.string().nullish(),
 });
 
 const zPaiementFacture = z.object({
@@ -55,6 +56,7 @@ factures.post('/', requirePermission('facture:manage'), async (c) => {
   const regimeFiscal = await regimeFiscalDe(c.env, c.get('entrepriseId'));
   const id = await stubEntreprise(c.env, c.get('entrepriseId')).creerFacture({
     type: f.type, tiersId: f.tiersId, dateEcheance: f.dateEcheance ?? null, lignes, regimeFiscal,
+    clientUuid: f.clientUuid ?? null,
   });
   return c.json({ factureId: id }, 201);
 });

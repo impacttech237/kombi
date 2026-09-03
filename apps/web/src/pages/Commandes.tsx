@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA, TERMINOLOGIE, type Secteur } from '@kombi/shared';
 import {
-  listerCommandes, creerCommande, changerStatutCommande, type EntrepriseResume, type Commande,
+  listerCommandes, creerCommande, changerStatutCommande, listerTiers,
+  type EntrepriseResume, type Commande, type Tiers,
 } from '../lib/api.js';
+import { nouvelUuid } from '../offline/db.js';
 import { Bouton, Champ, Icon } from '../components/ui.js';
 
 const STATUT: Record<string, { label: string; classe: string }> = {
@@ -21,6 +23,7 @@ export function Commandes({ entreprise, onRetour }: { entreprise: EntrepriseResu
   useEffect(recharger, [entreprise.id]);
 
   async function avancer(c: Commande, statut: string) {
+    if (statut === 'annulee' && !confirm(`Annuler « ${c.libelle} » ?`)) return;
     await changerStatutCommande(entreprise.id, c.id, statut);
     recharger();
   }
@@ -82,14 +85,20 @@ function NouvelleCommande({ entreprise, term, onFait, onRetour }: {
 }) {
   const [libelle, setLibelle] = useState('');
   const [montant, setMontant] = useState('');
+  const [tiersId, setTiersId] = useState('');
+  const [datePrevue, setDatePrevue] = useState('');
+  const [tiers, setTiers] = useState<Tiers[]>([]);
   const [charge, setCharge] = useState(false);
   const type = entreprise.secteur === 'service' ? 'mission' : 'commande';
+
+  useEffect(() => { listerTiers(entreprise.id).then(setTiers).catch(() => {}); }, [entreprise.id]);
 
   async function creer() {
     setCharge(true);
     try {
       await creerCommande(entreprise.id, {
         type, libelle, montant: montant ? Number(montant) : undefined,
+        tiersId: tiersId || undefined, datePrevue: datePrevue || undefined, clientUuid: nouvelUuid(),
       });
       onFait();
     } finally { setCharge(false); }
@@ -100,8 +109,15 @@ function NouvelleCommande({ entreprise, term, onFait, onRetour }: {
       <div className="carte">
         <Champ label={`Objet de la ${term.commande}`} value={libelle} onChange={setLibelle}
           placeholder="Ex. Livraison 10 sacs de riz" />
+        {tiers.length > 0 && (
+          <Champ label="Client (optionnel)" value={tiersId} onChange={setTiersId} options={[
+            { value: '', label: 'Sans client' },
+            ...tiers.map((t) => ({ value: t.id, label: t.nom })),
+          ]} />
+        )}
         <Champ label="Montant estimé (optionnel)" type="text" value={montant}
           onChange={(v) => setMontant(v.replace(/\D/g, ''))} placeholder="40000" />
+        <Champ label="Date prévue (optionnel)" type="date" value={datePrevue} onChange={setDatePrevue} />
         <div style={{ display: 'flex', gap: 10 }}>
           <Bouton variante="clair" onClick={onRetour}>Annuler</Bouton>
           <Bouton bloc onClick={creer} disabled={charge || !libelle}>

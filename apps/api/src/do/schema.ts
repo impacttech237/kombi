@@ -382,6 +382,17 @@ INSERT OR IGNORE INTO compte_comptable (id, numero, libelle, classe, type)
 VALUES (lower(hex(randomblob(16))), '5522', 'Mobile Money — MTN MoMo', 5, 'actif')
 `;
 
+/**
+ * v10 — Idempotence offline pour les commandes/missions (même motif que v8 pour les paiements) :
+ * `commande` n'avait pas de `client_uuid`, donc une création rejouée par la file offline
+ * créerait un doublon dès que les commandes rejoindraient la synchro (audit sécurité 2026-09-03).
+ */
+const MIGRATION_V10_IDEMPOTENCE_COMMANDE = `
+ALTER TABLE commande ADD COLUMN client_uuid TEXT
+--##
+CREATE UNIQUE INDEX idx_commande_client_uuid ON commande(client_uuid) WHERE client_uuid IS NOT NULL
+`;
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -433,7 +444,9 @@ export const MIGRATIONS_DO: readonly MigrationDO[] = [
   { v: 8, statements: statementsDe(MIGRATION_V8_IDEMPOTENCE_PAIEMENTS) },
   // v9 — comptes Mobile Money corrigés (5521/5522 au lieu de 552/553, validation ONECCA).
   { v: 9, statements: statementsDe(MIGRATION_V9_COMPTES_MOMO) },
-  // v10… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v10 — idempotence offline des commandes/missions (client_uuid).
+  { v: 10, statements: statementsDe(MIGRATION_V10_IDEMPOTENCE_COMMANDE) },
+  // v11… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */

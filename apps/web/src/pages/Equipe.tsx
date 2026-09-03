@@ -29,6 +29,7 @@ export function Equipe({ entreprise, onRetour }: { entreprise: EntrepriseResume;
     recharger();
   }
   async function retirer(m: Membre) {
+    if (!confirm(`Retirer ${m.nom} de l'équipe ? Cette personne perdra immédiatement l'accès.`)) return;
     await retirerMembre(entreprise.id, m.id);
     recharger();
   }

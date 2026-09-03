@@ -92,6 +92,10 @@ export const listerVentesRecentes = (entrepriseId: string) =>
 export const annulerVente = (entrepriseId: string, venteId: string) =>
   api<{ statut: string }>(`/api/ventes/${venteId}/annuler`, { method: 'POST', entrepriseId });
 
+/** Facture-document pour une vente déjà réglée (réutilise son écriture, pas de double comptage). */
+export const creerFactureDepuisVente = (entrepriseId: string, venteId: string) =>
+  api<{ factureId: string; numero: string }>(`/api/factures/depuis-vente/${venteId}`, { method: 'POST', entrepriseId });
+
 export const statsJour = (entrepriseId: string) =>
   api<{ nbVentes: number; totalJour: number }>('/api/ventes/jour', { entrepriseId });
 
@@ -138,7 +142,7 @@ export const approvisionner = (
   produitId: string,
   data: {
     quantite: number; coutUnitaire: number; modePaiement?: string | null; aCredit?: boolean;
-    tiersId?: string | null; tauxTva?: number; clientUuid?: string;
+    tiersId?: string | null; tauxTva?: number; clientUuid?: string; dateOperation?: string | null;
   },
 ) => api<{ nouveauStock: number; nouveauCmp: number }>(
   `/api/produits/${produitId}/entree`, { method: 'POST', body: data, entrepriseId },
@@ -197,7 +201,7 @@ export const listerFacturesImpayees = (entrepriseId: string) =>
   api<{ factures: FactureImpayee[] }>('/api/factures/impayees', { entrepriseId }).then((r) => r.factures);
 export const creerFacture = (
   entrepriseId: string,
-  data: { type: string; tiersId: string; lignes: LigneFacture[]; dateEcheance?: string },
+  data: { type: string; tiersId: string; lignes: LigneFacture[]; dateEcheance?: string; clientUuid?: string },
 ) => api<{ factureId: string }>('/api/factures', { method: 'POST', body: data, entrepriseId });
 export const emettreFacture = (entrepriseId: string, id: string) =>
   api<{ numero: string }>(`/api/factures/${id}/emettre`, { method: 'POST', entrepriseId });
@@ -239,7 +243,10 @@ export const listerCommandes = (entrepriseId: string) =>
   api<{ commandes: Commande[] }>('/api/commandes', { entrepriseId }).then((r) => r.commandes);
 export const creerCommande = (
   entrepriseId: string,
-  data: { type: string; libelle: string; montant?: number; tiersId?: string },
+  data: {
+    type: string; libelle: string; montant?: number; tiersId?: string; datePrevue?: string;
+    clientUuid?: string;
+  },
 ) => api<{ commandeId: string }>('/api/commandes', { method: 'POST', body: data, entrepriseId });
 export const changerStatutCommande = (entrepriseId: string, id: string, statut: string) =>
   api<{ ok: boolean }>(`/api/commandes/${id}/statut`, { method: 'POST', body: { statut }, entrepriseId });
@@ -255,7 +262,7 @@ export const creerDepense = (
   entrepriseId: string,
   data: {
     categorie: string; libelle: string; montant: number; modePaiement: string; recurrente?: boolean;
-    clientUuid?: string;
+    clientUuid?: string; dateOperation?: string | null;
   },
 ) => api<{ depenseId: string; deja: boolean }>('/api/depenses', { method: 'POST', body: data, entrepriseId });
 

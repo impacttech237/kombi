@@ -62,6 +62,8 @@ function CarteFacture({ entreprise, f, onMaj }: { entreprise: EntrepriseResume; 
   const [payMode, setPayMode] = useState(false);
   const [montant, setMontant] = useState(String(f.total_ttc));
   const [modePaiement, setModePaiement] = useState('especes');
+  const [chargeEmission, setChargeEmission] = useState(false);
+  const [erreurEmission, setErreurEmission] = useState('');
   const paye = f.statut === 'payee';
 
   async function voirPdf() {
@@ -103,6 +105,15 @@ function CarteFacture({ entreprise, f, onMaj }: { entreprise: EntrepriseResume; 
     await convertirDevisEnFacture(entreprise.id, f.id);
     onMaj();
   }
+  async function emettre() {
+    setChargeEmission(true); setErreurEmission('');
+    try {
+      await emettreFacture(entreprise.id, f.id);
+      onMaj();
+    } catch (e) {
+      setErreurEmission(e instanceof Error ? e.message : 'Erreur');
+    } finally { setChargeEmission(false); }
+  }
 
   return (
     <div className="carte" style={{ padding: 14 }}>
@@ -128,7 +139,12 @@ function CarteFacture({ entreprise, f, onMaj }: { entreprise: EntrepriseResume; 
         <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-clair" onClick={voirPdf}><Icon name="graph" size={16} /> PDF</button>
           <button className="btn btn-clair" onClick={whatsapp}>WhatsApp</button>
-          {!paye && f.type === 'facture' && !f.avoir_de_id && (
+          {f.type === 'facture' && f.statut === 'brouillon' && (
+            <button className="btn btn-primaire" onClick={emettre} disabled={chargeEmission}>
+              {chargeEmission ? '…' : 'Émettre'}
+            </button>
+          )}
+          {!paye && f.type === 'facture' && f.statut !== 'brouillon' && !f.avoir_de_id && (
             <button className="btn btn-primaire" onClick={() => setPayMode(!payMode)}>Encaisser</button>
           )}
           {f.type === 'facture' && f.statut !== 'brouillon' && !f.avoir_de_id && !f.a_un_avoir && (
@@ -147,6 +163,9 @@ function CarteFacture({ entreprise, f, onMaj }: { entreprise: EntrepriseResume; 
               </select>
               <Bouton onClick={payer}>Valider</Bouton>
             </div>
+          )}
+          {erreurEmission && (
+            <p style={{ color: 'var(--danger)', fontSize: 13, width: '100%', margin: '6px 0 0' }}>{erreurEmission}</p>
           )}
         </div>
       )}
@@ -183,7 +202,8 @@ function NouvelleFacture({ entreprise, onFait }: { entreprise: EntrepriseResume;
         cid = (await creerTiers(entreprise.id, { nom: nouveauClient.trim() })).tiersId;
       }
       if (!cid) { setErreur('Choisissez ou créez un client'); setCharge(false); return; }
-      const { factureId } = await creerFacture(entreprise.id, { type, tiersId: cid, lignes });
+      // clientUuid protège d'un double-clic/double-soumission (créerait deux brouillons).
+      const { factureId } = await creerFacture(entreprise.id, { type, tiersId: cid, lignes, clientUuid: nouvelUuid() });
       await emettreFacture(entreprise.id, factureId); // attribue le numéro séquentiel
       onFait();
     } catch (e) {

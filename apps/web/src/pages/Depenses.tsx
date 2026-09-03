@@ -84,6 +84,7 @@ function NouvelleDepense({ entreprise, onFait, onRetour }: {
   const [montant, setMontant] = useState('');
   const [mode, setMode] = useState('especes');
   const [recurrente, setRecurrente] = useState(false);
+  const [dateOperation, setDateOperation] = useState('');
   const [charge, setCharge] = useState(false);
   const [erreur, setErreur] = useState('');
 
@@ -96,7 +97,7 @@ function NouvelleDepense({ entreprise, onFait, onRetour }: {
         clientUuid, entrepriseId: entreprise.id, type: 'depense',
         payload: {
           categorie, libelle: libelle.trim() || labelCategorie(categorie), montant: Number(montant),
-          modePaiement: mode, recurrente,
+          modePaiement: mode, recurrente, dateOperation: dateOperation || null,
         },
       });
       void synchroniser();
@@ -117,6 +118,8 @@ function NouvelleDepense({ entreprise, onFait, onRetour }: {
         <Champ label="Montant (FCFA)" type="text" value={montant}
           onChange={(v) => setMontant(v.replace(/\D/g, ''))} placeholder="25000" />
         <Champ label="Mode de paiement" value={mode} onChange={setMode} options={MODES_PAIEMENT} />
+        <Champ label="Date de la dépense (optionnel, si saisie plus tard)" type="date"
+          value={dateOperation} onChange={setDateOperation} />
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 14px', fontSize: 14 }}>
           <input type="checkbox" checked={recurrente} onChange={(e) => setRecurrente(e.target.checked)} />
           Dépense récurrente (loyer, abonnement…)

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA, peut, type RoleMembre } from '@kombi/shared';
-import { listerVentesRecentes, annulerVente, type EntrepriseResume, type VenteRecente } from '../lib/api.js';
+import {
+  listerVentesRecentes, annulerVente, creerFactureDepuisVente, type EntrepriseResume, type VenteRecente,
+} from '../lib/api.js';
 import { Icon } from '../components/ui.js';
 
 const LIBELLE_MODE: Record<string, string> = {
@@ -55,9 +57,11 @@ function LigneVente({ entreprise, vente, peutAnnuler, onFait }: {
 }) {
   const [confirmation, setConfirmation] = useState(false);
   const [charge, setCharge] = useState(false);
+  const [chargeFacture, setChargeFacture] = useState(false);
   const [erreur, setErreur] = useState('');
 
   const annulable = peutAnnuler && vente.statut !== 'annulee' && !vente.facture_id;
+  const facturable = vente.statut === 'payee' && !vente.facture_id && !!vente.tiers_nom;
 
   async function annuler() {
     setCharge(true); setErreur('');
@@ -67,6 +71,16 @@ function LigneVente({ entreprise, vente, peutAnnuler, onFait }: {
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur');
     } finally { setCharge(false); }
+  }
+
+  async function facturer() {
+    setChargeFacture(true); setErreur('');
+    try {
+      await creerFactureDepuisVente(entreprise.id, vente.id);
+      onFait();
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Erreur');
+    } finally { setChargeFacture(false); }
   }
 
   return (
@@ -85,6 +99,11 @@ function LigneVente({ entreprise, vente, peutAnnuler, onFait }: {
             {LIBELLE_STATUT[vente.statut] ?? vente.statut}
           </span>
         </div>
+        {facturable && (
+          <button onClick={facturer} disabled={chargeFacture} className="btn btn-clair" style={{ padding: '8px 12px' }}>
+            {chargeFacture ? '…' : 'Facturer'}
+          </button>
+        )}
         {annulable && (
           <button onClick={() => setConfirmation(!confirmation)} className="btn btn-clair" style={{ padding: '8px 12px' }}>
             Annuler
@@ -94,6 +113,12 @@ function LigneVente({ entreprise, vente, peutAnnuler, onFait }: {
       {vente.facture_id && vente.statut !== 'annulee' && (
         <p className="muet" style={{ fontSize: 12, marginTop: 8 }}>
           Une facture a été émise pour cette vente — annulez-la via un avoir sur l'écran Factures.
+        </p>
+      )}
+      {vente.statut === 'payee' && !vente.facture_id && !vente.tiers_nom && (
+        <p className="muet" style={{ fontSize: 12, marginTop: 8 }}>
+          Vente sans client associé — impossible de la facturer a posteriori (ajoutez un client via Tiers, puis
+          recommencez la vente si une facture est nécessaire).
         </p>
       )}
       {confirmation && (

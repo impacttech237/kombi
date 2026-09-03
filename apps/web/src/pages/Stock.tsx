@@ -128,6 +128,7 @@ function Approvisionner({ entreprise, produit, onFait }: {
   const [fournisseurs, setFournisseurs] = useState<Tiers[]>([]);
   const [fournisseurId, setFournisseurId] = useState('');
   const [nouveauFournisseur, setNouveauFournisseur] = useState('');
+  const [dateOperation, setDateOperation] = useState('');
   const [charge, setCharge] = useState(false);
   const [erreur, setErreur] = useState('');
   const tvaEligible = entreprise.regime_fiscal !== 'igs' && entreprise.assujetti_tva === 1;
@@ -154,7 +155,7 @@ function Approvisionner({ entreprise, produit, onFait }: {
         payload: {
           produitId: produit.id, quantite: Number(qte), coutUnitaire: Number(cout),
           modePaiement: aCredit ? null : mode, aCredit, tiersId: aCredit ? tiersId : null,
-          tauxTva: avecTva ? TAUX_TVA_EFFECTIF : 0,
+          tauxTva: avecTva ? TAUX_TVA_EFFECTIF : 0, dateOperation: dateOperation || null,
         },
       });
       void synchroniser();
@@ -172,6 +173,8 @@ function Approvisionner({ entreprise, produit, onFait }: {
           onChange={(v) => setQte(v.replace(/\D/g, ''))} placeholder="10" />
         <Champ label="Coût d'achat unitaire (FCFA)" type="text" value={cout}
           onChange={(v) => setCout(v.replace(/\D/g, ''))} placeholder="3000" />
+        <Champ label="Date de réception (optionnel, si saisie plus tard)" type="date"
+          value={dateOperation} onChange={setDateOperation} />
 
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px', fontSize: 14 }}>
           <input type="checkbox" checked={aCredit} onChange={(e) => setACredit(e.target.checked)} />
