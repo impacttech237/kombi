@@ -8,7 +8,7 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 
 ---
 
-## 🎨 Refonte design system (2026-09-03, écrans principaux terminés)
+## 🎨 Refonte design system (2026-09-03, ✅ terminée)
 Décision du porteur du projet après revue de l'interface existante : l'ancienne identité (Space
 Grotesk/DM Sans, palette émeraude claire) est **abandonnée**. Nouvelle cible : le prototype
 Figma Make dans `docs/Interface application gestion PME/` (thème sombre, accent citron vert
@@ -37,11 +37,13 @@ design ni de son parcours utilisateur.
     probablement sous un profil futur), en attendant un futur écran dédié.
   - Implémenté dans `components/Shell.tsx` (icônes ajoutées hors prototype, même style trait
     fin : `IcoClipboard`, `IcoUsers`, `IcoSettings`).
-- ⬜ **Reste en ancien style** (pont de compatibilité `theme.css` toujours nécessaire pour eux) :
-  Dépenses, Créances, Dettes, Ventes (historique), Journal d'audit, Login/Inscription, et les
-  composants partagés `components/ui.tsx` (`Bouton`/`Champ`/`Logo`/`Icon`) dont ces écrans
-  dépendent. Aucun n'a de référence dans le prototype ; à concevoir dans le même langage visuel
-  quand on s'y attaque, puis supprimer le pont de compatibilité.
+- ✅ **Derniers écrans reskinnés** (absents du prototype, design original dans le même langage
+  visuel) : Dépenses (OCR de reçu préservé), Créances, Dettes, Historique des ventes, Journal
+  d'audit, Login/Inscription — plus les composants partagés `components/ui.tsx`
+  (`Bouton`/`Champ`/`Logo`) et `OfflineBanner`.
+- ✅ **Pont de compatibilité supprimé** de `theme.css` — plus aucun écran de l'application
+  n'utilise l'ancienne identité claire/émeraude ni les classes `.carte`/`.btn`/`.chip`/`.muet`.
+  `components/Layout.tsx` (mort, superseded par `Shell.tsx`) retiré.
 
 ---
 
