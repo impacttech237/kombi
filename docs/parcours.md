@@ -8,34 +8,40 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 
 ---
 
-## 🎨 Refonte design system (2026-09-03, en cours)
+## 🎨 Refonte design system (2026-09-03, écrans principaux terminés)
 Décision du porteur du projet après revue de l'interface existante : l'ancienne identité (Space
 Grotesk/DM Sans, palette émeraude claire) est **abandonnée**. Nouvelle cible : le prototype
 Figma Make dans `docs/Interface application gestion PME/` (thème sombre, accent citron vert
-`#b4e033`, Inter + DM Mono) — à reproduire **fidèlement**, écran par écran, sans dévier de son
+`#b4e033`, Inter + DM Mono) — reproduit **fidèlement**, écran par écran, sans dévier de son
 design ni de son parcours utilisateur.
 - ✅ **Fondations posées** : Tailwind CSS v4 ajouté à `apps/web` (`@tailwindcss/vite`), nouvelle
   palette/typo dans `theme.css`, set d'icônes trait fin porté (`components/icons.tsx`), shell de
   navigation porté fidèlement (`components/Shell.tsx` : Sidebar desktop + TopBar/BottomNav mobile
   avec sheet de notifications) et branché sur les vraies données (entreprise, rôle, notifications).
-  Pont de compatibilité temporaire dans `theme.css` (anciennes variables/classes remappées sur la
-  nouvelle palette) pour que les écrans pas encore portés restent lisibles pendant la migration.
-- ⬜ **Écrans à porter un par un** depuis le prototype : Dashboard, Ventes/Caisse, Factures,
-  Stock, Trésorerie, Clients, Comptabilité, onboarding (CompanySetup).
+- ✅ **Tous les écrans du prototype portés**, testés de bout en bout en local avec les vraies
+  données (voir commits) : Dashboard, Caisse (Ventes), Factures & Devis, Stock, Trésorerie,
+  Clients & Fournisseurs, Comptabilité, Onboarding (+ WelcomeBanner post-création). Chaque
+  adaptation aux limites du modèle de données réel (pas de catégories produit, pas de lignes
+  détaillées en liste de factures, etc.) est documentée en commentaire en tête de fichier.
+- ✅ **3 écrans absents du prototype conçus dans le même langage visuel** (tabs de filtrage,
+  cartes de statut, cartes à bascule) : Commandes/Missions, Équipe, Paramètres fiscaux.
 - ✅ **Architecture de navigation validée** (2026-09-03) — mobile-first, pas de surcharge de la
   barre principale : **4 onglets fixes** (Accueil, Ventes, Stock, Trésorerie) + bouton **Menu**
   ouvrant une feuille à 2 groupes, même traitement que la section « Administration » de la
   Sidebar desktop du prototype :
   - **Modules** : Factures & Devis, Commandes/Missions, Clients & Fournisseurs
   - **Administration** : Comptabilité (OHADA), Équipe, Paramètres fiscaux
-  - **Dépenses n'a délibérément aucune entrée** : elle rejoindra le flux de transactions de
-    l'écran Trésorerie (argent qui sort), au même titre que Créances/Dettes (argent pas encore
-    encaissé/payé) — lors du portage de cet écran. En attendant, ces 3 restent accessibles via
-    une rangée de boutons temporaire sous le contenu principal (`App.tsx`), avec « Se
-    déconnecter » (pas encore de nouvel emplacement, probablement sous un profil futur).
+  - Dépenses est atteignable depuis Trésorerie (bouton « Sortie ») ; Créances/Dettes (argent pas
+    encore encaissé/payé) restent accessibles via une rangée de boutons temporaire sous le
+    contenu principal (`App.tsx`), avec « Se déconnecter » (pas encore de nouvel emplacement,
+    probablement sous un profil futur), en attendant un futur écran dédié.
   - Implémenté dans `components/Shell.tsx` (icônes ajoutées hors prototype, même style trait
     fin : `IcoClipboard`, `IcoUsers`, `IcoSettings`).
-- ⬜ Supprimer le pont de compatibilité une fois tous les écrans portés.
+- ⬜ **Reste en ancien style** (pont de compatibilité `theme.css` toujours nécessaire pour eux) :
+  Dépenses, Créances, Dettes, Ventes (historique), Journal d'audit, Login/Inscription, et les
+  composants partagés `components/ui.tsx` (`Bouton`/`Champ`/`Logo`/`Icon`) dont ces écrans
+  dépendent. Aucun n'a de référence dans le prototype ; à concevoir dans le même langage visuel
+  quand on s'y attaque, puis supprimer le pont de compatibilité.
 
 ---
 
