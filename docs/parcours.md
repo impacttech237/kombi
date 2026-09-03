@@ -534,7 +534,23 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   (`notificationsActives()`, pas de table persistée — rien ne justifie encore un état à
   synchroniser) : factures en retard/à échéance ≤5j, produits en rupture/stock bas, échéance de
   déclaration IGS ≤30j (15 avril, régime IGS uniquement).
-- ⬜ 🟡 Couche IA (OCR reçus, catégorisation, chatbot) — replanifier
+- ✅ 🟡 **Pièce justificative (photo/scan) + OCR texte brut sur les dépenses** (2026-09-03,
+  demande explicite du porteur du projet). OCR **côté navigateur** (Tesseract.js, aucune clé/API
+  externe, gratuit et sans compte à créer) : lit le texte d'une photo de reçu pour aider à
+  recopier montant/fournisseur, rien n'est rempli automatiquement (scope volontairement limité —
+  pas d'extraction structurée, trop fragile sur des factures très variées). L'image est
+  redessinée sur un canvas avant l'OCR (`normaliserImage`) : le décodeur PNG interne de
+  Tesseract.js (Leptonica/WASM) est plus strict que celui du navigateur et échoue sur certains
+  fichiers pourtant valides — passer par un canvas normalise systématiquement le format. La pièce
+  elle-même (fichier tel quel, JPEG/PNG/WebP/PDF, 10 Mo max) est stockée dans **R2**
+  (`kombi-documents`, jusqu'ici inutilisé) via `POST/GET/DELETE /api/depenses/:id/piece`,
+  attachée après la création de la dépense (pas dans le flux offline — un fichier binaire
+  nécessite le réseau). Migration DO v11 (`depense.piece_cle`). Testé (`test/piece-depense.test.ts`) :
+  upload/consultation/remplacement/retrait, type de fichier refusé, dépense inexistante. Limité
+  aux **dépenses** pour l'instant — les achats fournisseurs n'ont pas d'écran de liste complet
+  (seul `Dettes.tsx` liste les impayés) pour accrocher la même fonctionnalité proprement ; à
+  étendre le jour où un tel écran existe.
+- ⬜ 🟡 Couche IA (catégorisation auto, chatbot) — replanifier (l'OCR de reçus est fait, voir ci-dessus)
 - ⬜ 🟡 Import bancaire / mobile money — réintégrer
 - ⬜ ⚪ Version anglaise (Cameroun anglophone)
 

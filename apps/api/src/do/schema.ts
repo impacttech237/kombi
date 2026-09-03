@@ -393,6 +393,15 @@ ALTER TABLE commande ADD COLUMN client_uuid TEXT
 CREATE UNIQUE INDEX idx_commande_client_uuid ON commande(client_uuid) WHERE client_uuid IS NOT NULL
 `;
 
+/**
+ * v11 — Pièce justificative (photo/scan de reçu) attachée à une dépense. Le fichier lui-même
+ * vit dans R2 (bucket DOCS, hors DO — voir routes/depenses.ts) ; seule la clé de l'objet R2 est
+ * stockée ici, pour retrouver/afficher la pièce depuis la fiche dépense.
+ */
+const MIGRATION_V11_PIECE_DEPENSE = `
+ALTER TABLE depense ADD COLUMN piece_cle TEXT
+`;
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -446,7 +455,9 @@ export const MIGRATIONS_DO: readonly MigrationDO[] = [
   { v: 9, statements: statementsDe(MIGRATION_V9_COMPTES_MOMO) },
   // v10 — idempotence offline des commandes/missions (client_uuid).
   { v: 10, statements: statementsDe(MIGRATION_V10_IDEMPOTENCE_COMMANDE) },
-  // v11… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v11 — pièce justificative (photo/scan) attachée à une dépense.
+  { v: 11, statements: statementsDe(MIGRATION_V11_PIECE_DEPENSE) },
+  // v12… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */

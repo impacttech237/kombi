@@ -1488,10 +1488,29 @@ export class EntrepriseDO extends DurableObject {
   async listerDepenses(): Promise<Record<string, unknown>[]> {
     return this.sql.exec(
       `SELECT d.id, d.categorie, d.compte_numero, d.libelle, d.montant, d.mode_paiement,
-              d.recurrente, d.date, t.nom AS tiers_nom
+              d.recurrente, d.date, t.nom AS tiers_nom, d.piece_cle
          FROM depense d LEFT JOIN tiers t ON t.id = d.tiers_id
         ORDER BY d.created_at DESC`,
     ).toArray() as never;
+  }
+
+  async depenseExiste(depenseId: string): Promise<boolean> {
+    return !!this.sql.exec('SELECT 1 FROM depense WHERE id = ?', depenseId).toArray()[0];
+  }
+
+  /** Attache (ou retire, si `pieceCle` est null) la clé R2 de la pièce justificative d'une dépense. */
+  async attacherPieceDepense(depenseId: string, pieceCle: string | null): Promise<void> {
+    const existe = this.sql.exec('SELECT 1 FROM depense WHERE id = ?', depenseId).toArray()[0];
+    if (!existe) throw new Error('Dépense introuvable');
+    this.sql.exec('UPDATE depense SET piece_cle = ? WHERE id = ?', pieceCle, depenseId);
+  }
+
+  /** Clé R2 de la pièce justificative d'une dépense, si elle existe. */
+  async getPieceDepense(depenseId: string): Promise<string | null> {
+    const row = this.sql.exec('SELECT piece_cle FROM depense WHERE id = ?', depenseId).toArray()[0] as
+      | { piece_cle: string | null }
+      | undefined;
+    return row?.piece_cle ?? null;
   }
 
   // ══════════════ États financiers (bilan + compte de résultat) ══════════════

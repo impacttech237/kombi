@@ -48,3 +48,62 @@ depenses.post('/', requirePermission('depense:manage'), async (c) => {
   }, { utilisateurId: c.get('utilisateurId'), role: c.get('role') });
   return c.json(res, res.deja ? 200 : 201);
 });
+
+// ── Pièce justificative (photo/scan d'un reçu ou d'une facture fournisseur) ──
+// Fichier stocké dans R2 (bucket DOCS, jusqu'ici inutilisé) ; seule la clé est gardée côté DO
+// (voir migration v11, schema.ts). L'OCR (extraction de texte) tourne côté navigateur
+// (Tesseract.js, apps/web) — le serveur ne stocke que le fichier tel quel, pas de texte extrait.
+const TYPES_PIECE_AUTORISES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
+const TAILLE_PIECE_MAX = 10 * 1024 * 1024; // 10 Mo
+
+function extensionPour(contentType: string): string {
+  return { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf' }[contentType] ?? 'bin';
+}
+
+depenses.post('/:id/piece', requirePermission('depense:manage'), async (c) => {
+  const contentType = c.req.header('content-type') ?? '';
+  if (!TYPES_PIECE_AUTORISES.has(contentType)) {
+    return c.json({ erreur: 'Type de fichier non supporté (image JPEG/PNG/WebP ou PDF uniquement)' }, 415);
+  }
+  const corps = await c.req.arrayBuffer();
+  if (corps.byteLength === 0) return c.json({ erreur: 'Fichier vide' }, 400);
+  if (corps.byteLength > TAILLE_PIECE_MAX) return c.json({ erreur: 'Fichier trop volumineux (10 Mo max)' }, 413);
+
+  const entrepriseId = c.get('entrepriseId');
+  const depenseId = c.req.param('id');
+  const stub = stubEntreprise(c.env, entrepriseId);
+  // Valide l'existence de la dépense AVANT d'écrire dans R2 — évite un fichier orphelin si l'id est invalide.
+  if (!(await stub.depenseExiste(depenseId))) return c.json({ erreur: 'Dépense introuvable' }, 404);
+  const ancienneCle = await stub.getPieceDepense(depenseId);
+
+  const cle = `pieces/${entrepriseId}/depense-${depenseId}-${Date.now()}.${extensionPour(contentType)}`;
+  await c.env.DOCS.put(cle, corps, { httpMetadata: { contentType } });
+  await stub.attacherPieceDepense(depenseId, cle);
+  if (ancienneCle) await c.env.DOCS.delete(ancienneCle); // remplace, ne laisse pas de fichier orphelin
+
+  return c.json({ cle }, 201);
+});
+
+depenses.get('/:id/piece', requirePermission('depense:read'), async (c) => {
+  const cle = await stubEntreprise(c.env, c.get('entrepriseId')).getPieceDepense(c.req.param('id'));
+  if (!cle) return c.json({ erreur: 'Aucune pièce jointe pour cette dépense' }, 404);
+
+  const objet = await c.env.DOCS.get(cle);
+  if (!objet) return c.json({ erreur: 'Pièce introuvable (fichier manquant)' }, 404);
+
+  return new Response(objet.body, {
+    headers: { 'content-type': objet.httpMetadata?.contentType ?? 'application/octet-stream' },
+  });
+});
+
+depenses.delete('/:id/piece', requirePermission('depense:manage'), async (c) => {
+  const entrepriseId = c.get('entrepriseId');
+  const depenseId = c.req.param('id');
+  const stub = stubEntreprise(c.env, entrepriseId);
+  const cle = await stub.getPieceDepense(depenseId);
+  if (cle) {
+    await c.env.DOCS.delete(cle);
+    await stub.attacherPieceDepense(depenseId, null);
+  }
+  return c.json({ ok: true });
+});

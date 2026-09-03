@@ -255,9 +255,34 @@ export const changerStatutCommande = (entrepriseId: string, id: string, statut: 
 export interface Depense {
   id: string; categorie: string; compte_numero: string; libelle: string; montant: number;
   mode_paiement: string; recurrente: number; date: string; tiers_nom: string | null;
+  piece_cle: string | null;
 }
 export const listerDepenses = (entrepriseId: string) =>
   api<{ depenses: Depense[] }>('/api/depenses', { entrepriseId }).then((r) => r.depenses);
+
+/** Pièce justificative (photo/scan) attachée à une dépense — fichier stocké dans R2. */
+export async function televerserPieceDepense(entrepriseId: string, depenseId: string, fichier: File): Promise<void> {
+  const res = await fetch(`${BASE}/api/depenses/${depenseId}/piece`, {
+    method: 'POST',
+    headers: { 'x-entreprise-id': entrepriseId, 'content-type': fichier.type },
+    credentials: 'include',
+    body: fichier,
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { erreur?: string };
+    throw new Error(err.erreur ?? `Erreur ${res.status}`);
+  }
+}
+export async function urlPieceDepense(entrepriseId: string, depenseId: string): Promise<string> {
+  const res = await fetch(`${BASE}/api/depenses/${depenseId}/piece`, {
+    headers: { 'x-entreprise-id': entrepriseId },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error('Pièce indisponible');
+  return URL.createObjectURL(await res.blob());
+}
+export const supprimerPieceDepense = (entrepriseId: string, depenseId: string) =>
+  api<{ ok: boolean }>(`/api/depenses/${depenseId}/piece`, { method: 'DELETE', entrepriseId });
 export const creerDepense = (
   entrepriseId: string,
   data: {
