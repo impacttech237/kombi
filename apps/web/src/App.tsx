@@ -84,10 +84,10 @@ function WelcomeBanner({ onNav }: { onNav: (m: string) => void }) {
 
 function Splash() {
   return (
-    <div className="center-ecran">
-      <div style={{ display: 'grid', placeItems: 'center', gap: 12 }}>
+    <div className="min-h-screen bg-[#0e1c0f] flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
         <Logo size={56} />
-        <span className="muet">Chargement…</span>
+        <span className="text-[#4a6b4a] text-sm">Chargement…</span>
       </div>
     </div>
   );

@@ -26,16 +26,16 @@ export function Login() {
   }
 
   return (
-    <div className="center-ecran">
-      <div style={{ width: '100%', maxWidth: 380 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 22 }}>
+    <div className="min-h-screen bg-[#0e1c0f] flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="flex flex-col items-center mb-6">
           <Logo size={56} />
-          <h1 style={{ fontSize: 30, margin: '14px 0 2px', fontWeight: 800 }}>Kombi</h1>
-          <p className="muet" style={{ margin: 0 }}>L'ami de votre gestion</p>
+          <h1 className="text-[#edf5ea] text-3xl font-extrabold mt-3 mb-0.5">Kombi</h1>
+          <p className="text-[#4a6b4a] text-sm">L'ami de votre gestion</p>
         </div>
 
-        <div className="carte" style={{ padding: 22 }}>
-          <h2 style={{ marginTop: 0, fontSize: 20 }}>
+        <div className="bg-[#162419] rounded-2xl p-5 border border-[#1e3222]">
+          <h2 className="text-[#edf5ea] text-lg font-semibold mt-0 mb-4">
             {inscription ? 'Créer un compte' : 'Se connecter'}
           </h2>
           {inscription && (
@@ -43,15 +43,15 @@ export function Login() {
           )}
           <Champ label="Email" type="email" value={email} onChange={setEmail} placeholder="vous@exemple.cm" />
           <Champ label="Mot de passe" type="password" value={mdp} onChange={setMdp} placeholder="••••••••" />
-          {erreur && <p style={{ color: 'var(--danger)', fontSize: 14, margin: '4px 0 12px' }}>{erreur}</p>}
+          {erreur && <p className="text-[#f87171] text-sm mt-1 mb-3">{erreur}</p>}
           <Bouton bloc onClick={soumettre} disabled={charge || !email || !mdp}>
             {charge ? '…' : inscription ? 'Créer mon compte' : 'Se connecter'}
           </Bouton>
         </div>
 
-        <p style={{ textAlign: 'center', marginTop: 16, fontSize: 14 }} className="muet">
+        <p className="text-center text-[#4a6b4a] text-sm mt-4">
           {inscription ? 'Déjà un compte ? ' : 'Pas encore de compte ? '}
-          <button className="btn btn-ghost" style={{ padding: '2px 6px' }}
+          <button className="text-[#b4e033] font-medium px-1.5 py-0.5 hover:underline"
             onClick={() => { setInscription(!inscription); setErreur(''); }}>
             {inscription ? 'Se connecter' : 'Créer un compte'}
           </button>

@@ -1,6 +1,10 @@
+/**
+ * Composants UI partagés — reskinnés dans le langage visuel du prototype Figma Make (dark,
+ * accent citron vert #b4e033) pour les écrans sans référence prototype qui en dépendent encore
+ * (Login, Dépenses, Créances, Dettes, Ventes historique, Journal).
+ */
 import type { ReactNode } from 'react';
 
-/* ── Icônes (SVG inline, trait 2px) ── */
 const P = ({ d }: { d: string }) => (
   <path d={d} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
 );
@@ -30,13 +34,18 @@ export function Icon({ name, size = 22 }: { name: string; size?: number }) {
 
 export function Logo({ size = 40 }: { size?: number }) {
   return (
-    <div style={{
-      width: size, height: size, borderRadius: 14, background: 'var(--vert)',
-      display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 800, fontSize: size * 0.5,
-      flexShrink: 0,
-    }}>K</div>
+    <div className="shrink-0 bg-[#b4e033] text-[#0e1c0f] font-extrabold rounded-2xl flex items-center justify-center"
+      style={{ width: size, height: size, fontSize: size * 0.5 }}>
+      K
+    </div>
   );
 }
+
+const VARIANTE_CLS: Record<string, string> = {
+  primaire: 'bg-[#b4e033] text-[#0e1c0f] active:scale-95',
+  clair: 'bg-[#1e3222] text-[#edf5ea] border border-[#2a4230] hover:bg-[#2a4230]',
+  ghost: 'bg-transparent text-[#b4e033] hover:bg-[#b4e033]/10',
+};
 
 export function Bouton({
   children, onClick, type = 'button', variante = 'primaire', bloc, disabled,
@@ -46,7 +55,7 @@ export function Bouton({
 }) {
   return (
     <button type={type} onClick={onClick} disabled={disabled}
-      className={`btn btn-${variante}${bloc ? ' btn-bloc' : ''}`}>
+      className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${bloc ? 'w-full' : ''} ${VARIANTE_CLS[variante]}`}>
       {children}
     </button>
   );
@@ -58,41 +67,17 @@ export function Champ({
   label: string; type?: string; value: string; onChange: (v: string) => void;
   placeholder?: string; options?: { value: string; label: string }[];
 }) {
+  const inputCls = 'w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none';
   return (
-    <div className="champ">
-      <label>{label}</label>
+    <div className="mb-4">
+      <label className="text-[#6b9165] text-xs font-medium block mb-1.5">{label}</label>
       {options ? (
-        <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
           {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       ) : (
         <input type={type} value={value} placeholder={placeholder}
-          onChange={(e) => onChange(e.target.value)} />
-      )}
-    </div>
-  );
-}
-
-/* Carte de statistique (style dashboard des modèles) */
-export function CarteStat({
-  titre, valeur, delta, positif = true, icone,
-}: {
-  titre: string; valeur: string; delta?: string; positif?: boolean; icone: string;
-}) {
-  return (
-    <div className="carte" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span className="muet" style={{ fontSize: 13, fontWeight: 500 }}>{titre}</span>
-        <span style={{
-          width: 34, height: 34, borderRadius: 12, background: 'var(--vert-clair)',
-          color: 'var(--vert)', display: 'grid', placeItems: 'center',
-        }}><Icon name={icone} size={18} /></span>
-      </div>
-      <div className="chiffre" style={{ fontSize: 26, fontWeight: 700 }}>{valeur}</div>
-      {delta && (
-        <span className={`chip ${positif ? 'chip-ok' : 'chip-bas'}`}>
-          <Icon name={positif ? 'hausse' : 'baisse'} size={13} /> {delta}
-        </span>
+          onChange={(e) => onChange(e.target.value)} className={inputCls} />
       )}
     </div>
   );

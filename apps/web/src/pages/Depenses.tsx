@@ -1,12 +1,17 @@
+/**
+ * Dépenses — absent du prototype Figma Make, design original dans le même langage visuel que
+ * les écrans portés. Rejoindra à terme le flux de transactions de Trésorerie (voir
+ * docs/parcours.md) ; en attendant, reste un écran autonome.
+ */
 import { useEffect, useState } from 'react';
-import { formaterFCFA, CATEGORIES_DEPENSE } from '@kombi/shared';
+import { formaterFCFA as fmt, CATEGORIES_DEPENSE } from '@kombi/shared';
 import {
   listerDepenses, televerserPieceDepense, urlPieceDepense, supprimerPieceDepense,
   type EntrepriseResume, type Depense,
 } from '../lib/api.js';
 import { enfilerMutation, nouvelUuid } from '../offline/db.js';
 import { synchroniser } from '../offline/sync.js';
-import { Bouton, Champ, Icon } from '../components/ui.js';
+import { IcoPlus, IcoChevR, IcoX, IcoFile, IcoAlert } from '../components/icons.js';
 
 /**
  * Re-décode l'image via le décodeur natif du navigateur puis la redessine sur un canvas — le
@@ -42,10 +47,8 @@ async function lireTexteImage(fichier: File): Promise<string> {
 }
 
 const MODES_PAIEMENT = [
-  { value: 'especes', label: 'Espèces' },
-  { value: 'mtn_momo', label: 'MTN MoMo' },
-  { value: 'orange_money', label: 'Orange Money' },
-  { value: 'virement', label: 'Virement' },
+  { value: 'especes', label: 'Espèces' }, { value: 'mtn_momo', label: 'MTN MoMo' },
+  { value: 'orange_money', label: 'Orange Money' }, { value: 'virement', label: 'Virement' },
   { value: 'cheque', label: 'Chèque' },
 ];
 
@@ -53,55 +56,80 @@ function labelCategorie(code: string): string {
   return CATEGORIES_DEPENSE.find((c) => c.code === code)?.label ?? code;
 }
 
+const inputCls = 'w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none';
+
 export function Depenses({ entreprise, onRetour }: { entreprise: EntrepriseResume; onRetour: () => void }) {
   const [liste, setListe] = useState<Depense[] | null>(null);
-  const [vue, setVue] = useState<'liste' | 'nouveau'>('liste');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [detail, setDetail] = useState<Depense | null>(null);
 
-  function recharger() { listerDepenses(entreprise.id).then(setListe).catch(() => setListe((p) => p ?? [])); }
-  useEffect(recharger, [entreprise.id]);
+  function recharger() { return listerDepenses(entreprise.id).then(setListe).catch(() => setListe((p) => p ?? [])); }
+  useEffect(() => { void recharger(); }, [entreprise.id]);
 
-  if (vue === 'nouveau')
-    return <NouvelleDepense entreprise={entreprise} onFait={() => { setVue('liste'); recharger(); }} onRetour={() => setVue('liste')} />;
-
-  const totalMois = (liste ?? []).reduce((s, d) => s + d.montant, 0);
+  const total = (liste ?? []).reduce((s, d) => s + d.montant, 0);
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <button onClick={onRetour} style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Icon name="baisse" size={18} /> <h1 className="titre-page">Dépenses</h1>
+    <div className="-mx-4 -mt-4 md:-mx-8 md:-mt-6 flex-1 flex flex-col overflow-hidden">
+      <div className="px-4 md:px-8 pt-4 pb-2 flex items-center gap-2">
+        <button onClick={onRetour} className="w-9 h-9 shrink-0 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+          <IcoChevR cls="w-4 h-4 rotate-180" />
         </button>
-        <Bouton onClick={() => setVue('nouveau')}><Icon name="plus" size={18} /> Dépense</Bouton>
+        <h1 className="text-[#edf5ea] text-lg font-bold flex-1">Dépenses</h1>
       </div>
 
       {liste !== null && liste.length > 0 && (
-        <div className="carte" style={{ textAlign: 'center', marginBottom: 12 }}>
-          <div className="muet" style={{ fontSize: 13 }}>Total des dépenses enregistrées</div>
-          <div className="chiffre" style={{ fontSize: 28, fontWeight: 700, color: 'var(--danger)' }}>
-            {formaterFCFA(totalMois)}
+        <div className="px-4 md:px-8 pb-2">
+          <div className="bg-[#162419] rounded-2xl p-4 text-center">
+            <p className="text-[#4a6b4a] text-xs">Total des dépenses enregistrées</p>
+            <p className="text-[#f87171] font-mono font-bold text-2xl mt-0.5">{fmt(total)}</p>
           </div>
         </div>
       )}
 
-      {liste === null ? <p className="muet">Chargement…</p>
-        : liste.length === 0 ? (
-          <div className="carte" style={{ textAlign: 'center', padding: 28 }}>
-            <p className="muet">Aucune dépense enregistrée pour l'instant.</p>
-            <Bouton onClick={() => setVue('nouveau')}>Nouvelle dépense</Bouton>
-          </div>
+      <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-24 md:pb-8 space-y-2 pt-1">
+        {liste === null ? (
+          <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
+        ) : liste.length === 0 ? (
+          <p className="text-[#4a6b4a] text-sm text-center py-8">Aucune dépense enregistrée pour l'instant.</p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {liste.map((d) => <LigneDepense key={d.id} entreprise={entreprise} depense={d} onMaj={recharger} />)}
-          </div>
+          liste.map((d) => (
+            <button key={d.id} onClick={() => setDetail(d)}
+              className="w-full bg-[#162419] rounded-2xl p-4 flex items-center gap-3 text-left hover:bg-[#1e3222] transition-colors">
+              <div className="flex-1 min-w-0">
+                <p className="text-[#edf5ea] font-medium text-sm truncate">{d.libelle}</p>
+                <p className="text-[#4a6b4a] text-xs mt-0.5">{labelCategorie(d.categorie)}{d.recurrente ? ' · récurrente' : ''}</p>
+              </div>
+              {d.piece_cle && <IcoFile cls="w-4 h-4 text-[#b4e033] shrink-0" />}
+              <span className="text-[#f87171] font-mono font-semibold text-sm shrink-0">−{fmt(d.montant)}</span>
+            </button>
+          ))
         )}
+      </div>
+
+      <button onClick={() => setCreateOpen(true)}
+        className="fixed bottom-24 md:bottom-6 right-4 w-14 h-14 bg-[#b4e033] rounded-full flex items-center justify-center text-[#0e1c0f] shadow-lg shadow-[#b4e033]/20 z-10 active:scale-95 transition-all">
+        <IcoPlus cls="w-6 h-6" />
+      </button>
+
+      {createOpen && (
+        <NouvelleDepenseSheet entreprise={entreprise} onClose={() => setCreateOpen(false)}
+          onCree={() => { setCreateOpen(false); void recharger(); }} />
+      )}
+      {detail && (
+        <DetailDepenseSheet entreprise={entreprise} depense={detail} onClose={() => setDetail(null)}
+          onMaj={() => {
+            void recharger().then(() => {
+              listerDepenses(entreprise.id).then((liste) => setDetail(liste.find((d) => d.id === detail.id) ?? null)).catch(() => {});
+            });
+          }} />
+      )}
     </div>
   );
 }
 
-function LigneDepense({ entreprise, depense, onMaj }: {
-  entreprise: EntrepriseResume; depense: Depense; onMaj: () => void;
+function DetailDepenseSheet({ entreprise, depense, onClose, onMaj }: {
+  entreprise: EntrepriseResume; depense: Depense; onClose: () => void; onMaj: () => void;
 }) {
-  const [ouvert, setOuvert] = useState(false);
   const [charge, setCharge] = useState(false);
   const [erreur, setErreur] = useState('');
 
@@ -114,11 +142,9 @@ function LigneDepense({ entreprise, depense, onMaj }: {
       setErreur(e instanceof Error ? e.message : 'Erreur');
     } finally { setCharge(false); }
   }
-
   async function voirPiece() {
     try { window.open(await urlPieceDepense(entreprise.id, depense.id), '_blank'); } catch { /* ignore */ }
   }
-
   async function retirerPiece() {
     if (!confirm('Retirer la pièce jointe de cette dépense ?')) return;
     setCharge(true);
@@ -126,56 +152,52 @@ function LigneDepense({ entreprise, depense, onMaj }: {
   }
 
   return (
-    <div className="carte" style={{ padding: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600 }}>{depense.libelle}</div>
-          <div className="muet" style={{ fontSize: 13 }}>
-            {labelCategorie(depense.categorie)}{depense.recurrente ? ' · récurrente' : ''}
-          </div>
-        </div>
-        <span className="chiffre" style={{ fontWeight: 700, color: 'var(--danger)' }}>
-          −{formaterFCFA(depense.montant)}
-        </span>
-        <button onClick={() => setOuvert(!ouvert)} className="btn btn-clair"
-          style={{ padding: '6px 10px', color: depense.piece_cle ? 'var(--vert)' : undefined }}
-          aria-label={depense.piece_cle ? 'Pièce jointe' : 'Joindre une pièce'}
-          title={depense.piece_cle ? 'Pièce jointe' : 'Joindre une pièce'}>
-          <Icon name="facture" size={16} />
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#0e1c0f]">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#1e3222] bg-[#0a1408] shrink-0">
+        <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+          <IcoChevR cls="w-4 h-4 rotate-180" />
+        </button>
+        <h2 className="text-[#edf5ea] font-semibold text-sm flex-1">{depense.libelle}</h2>
+        <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+          <IcoX cls="w-3.5 h-3.5" />
         </button>
       </div>
-      {ouvert && (
-        <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--bord)' }}>
+      <div className="flex-1 overflow-y-auto px-4 pt-5 space-y-4">
+        <div className="bg-[#162419] rounded-2xl p-4 text-center">
+          <p className="text-[#4a6b4a] text-xs">{labelCategorie(depense.categorie)}</p>
+          <p className="text-[#f87171] font-mono font-bold text-2xl mt-0.5">−{fmt(depense.montant)}</p>
+        </div>
+
+        <div>
+          <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-2">Pièce justificative</p>
           {depense.piece_cle ? (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button className="btn btn-clair" onClick={voirPiece}>Voir la pièce</button>
-              <button className="btn btn-clair" onClick={() => document.getElementById(`piece-${depense.id}`)?.click()}
-                disabled={charge}>Remplacer</button>
-              <button className="btn btn-clair" onClick={retirerPiece} disabled={charge}
-                style={{ color: 'var(--danger)' }}>Retirer</button>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={voirPiece} className="bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-2 text-xs font-medium border border-[#2a4230]">Voir la pièce</button>
+              <button onClick={() => document.getElementById('piece-input')?.click()} disabled={charge}
+                className="bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-2 text-xs font-medium border border-[#2a4230] disabled:opacity-40">Remplacer</button>
+              <button onClick={retirerPiece} disabled={charge}
+                className="text-[#f87171] text-xs font-medium px-3 py-2 hover:bg-[#f87171]/8 rounded-xl transition-colors disabled:opacity-40">Retirer</button>
             </div>
           ) : (
-            <p className="muet" style={{ fontSize: 13, margin: '0 0 8px' }}>
-              Photo du reçu/de la facture — utile pour retrouver le justificatif plus tard.
-            </p>
+            <>
+              <p className="text-[#4a6b4a] text-xs mb-2 leading-relaxed">Photo du reçu/de la facture — utile pour retrouver le justificatif plus tard.</p>
+              <button onClick={() => document.getElementById('piece-input')?.click()} disabled={charge}
+                className="bg-[#1e3222] text-[#b4e033] rounded-xl px-4 py-2.5 text-sm font-medium border border-[#b4e033]/20 disabled:opacity-40">
+                {charge ? 'Envoi…' : 'Joindre une photo/PDF'}
+              </button>
+            </>
           )}
-          <input id={`piece-${depense.id}`} type="file" accept="image/*,application/pdf" capture="environment"
-            style={{ display: 'none' }}
+          <input id="piece-input" type="file" accept="image/*,application/pdf" capture="environment" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void ajouterPiece(f); e.target.value = ''; }} />
-          {!depense.piece_cle && (
-            <Bouton variante="clair" onClick={() => document.getElementById(`piece-${depense.id}`)?.click()} disabled={charge}>
-              {charge ? 'Envoi…' : 'Joindre une photo/PDF'}
-            </Bouton>
-          )}
-          {erreur && <p style={{ color: 'var(--danger)', fontSize: 13, marginTop: 8 }}>{erreur}</p>}
+          {erreur && <p className="text-[#f87171] text-xs mt-2">{erreur}</p>}
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
-function NouvelleDepense({ entreprise, onFait, onRetour }: {
-  entreprise: EntrepriseResume; onFait: () => void; onRetour: () => void;
+function NouvelleDepenseSheet({ entreprise, onClose, onCree }: {
+  entreprise: EntrepriseResume; onClose: () => void; onCree: () => void;
 }) {
   const [categorie, setCategorie] = useState(CATEGORIES_DEPENSE[0]!.code);
   const [libelle, setLibelle] = useState('');
@@ -200,7 +222,6 @@ function NouvelleDepense({ entreprise, onFait, onRetour }: {
   async function creer() {
     setCharge(true); setErreur('');
     try {
-      // Offline-first : enregistrée localement (marche sans réseau), synchronisée dès que possible.
       const clientUuid = nouvelUuid();
       await enfilerMutation({
         clientUuid, entrepriseId: entreprise.id, type: 'depense',
@@ -210,55 +231,82 @@ function NouvelleDepense({ entreprise, onFait, onRetour }: {
         },
       });
       void synchroniser();
-      onFait();
+      onCree();
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur');
     } finally { setCharge(false); }
   }
 
   return (
-    <div>
-      <h1 className="titre-page" style={{ marginBottom: 12 }}>Nouvelle dépense</h1>
-      <div className="carte" style={{ marginBottom: 12 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
-          <Icon name="facture" size={18} /> Scanner un reçu (optionnel)
-        </label>
-        <p className="muet" style={{ margin: '0 0 10px', fontSize: 13 }}>
-          Lit le texte de la photo pour vous aider à recopier le montant et le fournisseur —
-          rien n'est rempli automatiquement. La pièce elle-même se joint après l'enregistrement,
-          depuis la liste des dépenses.
-        </p>
-        <input type="file" accept="image/*" capture="environment"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) void scanner(f); }} />
-        {lectureEnCours && <p className="muet" style={{ fontSize: 13, marginTop: 8 }}>Lecture en cours…</p>}
-        {texteScan && (
-          <textarea readOnly value={texteScan} rows={5} style={{
-            width: '100%', marginTop: 10, padding: 10, border: '1px solid var(--bord)',
-            borderRadius: 12, fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box', resize: 'vertical',
-          }} />
-        )}
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#0e1c0f]">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#1e3222] bg-[#0a1408] shrink-0">
+        <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+          <IcoChevR cls="w-4 h-4 rotate-180" />
+        </button>
+        <h2 className="text-[#edf5ea] font-semibold text-sm flex-1">Nouvelle dépense</h2>
+        <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+          <IcoX cls="w-3.5 h-3.5" />
+        </button>
       </div>
-      <div className="carte">
-        <Champ label="Catégorie" value={categorie} onChange={setCategorie}
-          options={CATEGORIES_DEPENSE.map((c) => ({ value: c.code, label: c.label }))} />
-        <Champ label="Libellé" value={libelle} onChange={setLibelle}
-          placeholder={`Ex. ${labelCategorie(categorie)} de ce mois`} />
-        <Champ label="Montant (FCFA)" type="text" value={montant}
-          onChange={(v) => setMontant(v.replace(/\D/g, ''))} placeholder="25000" />
-        <Champ label="Mode de paiement" value={mode} onChange={setMode} options={MODES_PAIEMENT} />
-        <Champ label="Date de la dépense (optionnel, si saisie plus tard)" type="date"
-          value={dateOperation} onChange={setDateOperation} />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 14px', fontSize: 14 }}>
-          <input type="checkbox" checked={recurrente} onChange={(e) => setRecurrente(e.target.checked)} />
+      <div className="flex-1 overflow-y-auto px-4 pt-5 space-y-4">
+        <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
+          <div className="flex items-center gap-2 mb-2">
+            <IcoFile cls="w-4 h-4 text-[#b4e033]" />
+            <p className="text-[#edf5ea] text-sm font-medium">Scanner un reçu (optionnel)</p>
+          </div>
+          <p className="text-[#4a6b4a] text-xs leading-relaxed mb-2">
+            Lit le texte de la photo pour vous aider à recopier le montant et le fournisseur —
+            rien n'est rempli automatiquement. La pièce elle-même se joint après l'enregistrement.
+          </p>
+          <input type="file" accept="image/*" capture="environment" className="text-xs text-[#6b9165]"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void scanner(f); }} />
+          {lectureEnCours && <p className="text-[#4a6b4a] text-xs mt-2">Lecture en cours…</p>}
+          {texteScan && (
+            <textarea readOnly value={texteScan} rows={5}
+              className="w-full mt-2 bg-[#1e3222] text-[#edf5ea] text-xs rounded-xl p-3 border border-[#2a4230] resize-y" />
+          )}
+        </div>
+
+        <div>
+          <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Catégorie</label>
+          <select value={categorie} onChange={(e) => setCategorie(e.target.value)} className={inputCls}>
+            {CATEGORIES_DEPENSE.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Libellé</label>
+          <input value={libelle} onChange={(e) => setLibelle(e.target.value)} placeholder={`Ex. ${labelCategorie(categorie)} de ce mois`} className={inputCls} />
+        </div>
+        <div>
+          <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Montant (FCFA)</label>
+          <input inputMode="numeric" value={montant} onChange={(e) => setMontant(e.target.value.replace(/\D/g, ''))} placeholder="25000" className={inputCls} />
+        </div>
+        <div>
+          <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Mode de paiement</label>
+          <select value={mode} onChange={(e) => setMode(e.target.value)} className={inputCls}>
+            {MODES_PAIEMENT.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Date de la dépense (optionnel)</label>
+          <input type="date" value={dateOperation} onChange={(e) => setDateOperation(e.target.value)} className={`${inputCls} [color-scheme:dark]`} />
+        </div>
+        <label className="flex items-center gap-2.5 text-sm text-[#edf5ea]">
+          <input type="checkbox" checked={recurrente} onChange={(e) => setRecurrente(e.target.checked)} className="accent-[#b4e033] w-4 h-4" />
           Dépense récurrente (loyer, abonnement…)
         </label>
-        {erreur && <p style={{ color: 'var(--danger)', fontSize: 14 }}>{erreur}</p>}
-        <div style={{ display: 'flex', gap: 10 }}>
-          <Bouton variante="clair" onClick={onRetour}>Annuler</Bouton>
-          <Bouton bloc onClick={creer} disabled={charge || !montant || Number(montant) <= 0}>
-            {charge ? '…' : 'Enregistrer'}
-          </Bouton>
-        </div>
+        {erreur && (
+          <div className="flex items-start gap-2">
+            <IcoAlert cls="w-4 h-4 text-[#f87171] shrink-0 mt-0.5" />
+            <p className="text-[#f87171] text-xs">{erreur}</p>
+          </div>
+        )}
+      </div>
+      <div className="border-t border-[#1e3222] px-4 py-3 bg-[#0a1408] shrink-0">
+        <button onClick={creer} disabled={charge || !montant || Number(montant) <= 0}
+          className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40">
+          {charge ? '…' : 'Enregistrer'}
+        </button>
       </div>
     </div>
   );
