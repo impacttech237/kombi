@@ -99,7 +99,7 @@ function Espace() {
           : onglet === 'dettes' ? <Dettes entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'equipe' ? <Equipe entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'parametres' ? <Parametres entreprise={active} onRetour={() => setOnglet('dashboard')} />
-          : onglet === 'tiers' ? <Tiers entreprise={active} onRetour={() => setOnglet('dashboard')} />
+          : onglet === 'tiers' ? <Tiers entreprise={active} onRetour={() => setOnglet('dashboard')} onNav={setOnglet} />
           : onglet === 'tresorerie'
             ? <Tresorerie entreprise={active} onCaisse={() => setOnglet('caisse')} onDepenses={() => setOnglet('depenses')} />
           : <Comptabilite entreprise={active} />}

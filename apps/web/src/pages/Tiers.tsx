@@ -1,87 +1,144 @@
+/**
+ * Clients & Fournisseurs — porté fidèlement du prototype Figma Make (Clients(), lignes 2280-2386).
+ * Adaptations : listerTiers() ne renvoie pas de solde/dernière opération/nb de transactions par
+ * tiers en liste (seul getTiersDetail(), par tiers, les calcule) — la liste n'affiche donc que
+ * les infos disponibles en masse ; le solde réel apparaît dans la fiche détail.
+ */
 import { useEffect, useState } from 'react';
-import { formaterFCFA } from '@kombi/shared';
+import { formaterFCFA as fmt } from '@kombi/shared';
 import {
-  listerTiers, getTiersDetail,
+  listerTiers, getTiersDetail, creerTiers,
   type EntrepriseResume, type Tiers as TiersType, type TiersDetail,
 } from '../lib/api.js';
-import { enfilerMutation, nouvelUuid } from '../offline/db.js';
-import { synchroniser } from '../offline/sync.js';
-import { Bouton, Champ, Icon } from '../components/ui.js';
+import { IcoSearch, IcoPlus, IcoChevR, IcoX, Avatar } from '../components/icons.js';
 
 const STATUT_LIBELLE: Record<string, string> = {
   brouillon: 'Brouillon', envoyee: 'Envoyée', payee_partiellement: 'Partiel', payee: 'Payée',
   en_retard: 'En retard', annulee: 'Annulée', a_credit: 'À crédit', regle: 'Réglé', annule: 'Annulé',
 };
 
-export function Tiers({ entreprise, onRetour }: { entreprise: EntrepriseResume; onRetour: () => void }) {
-  const [liste, setListe] = useState<TiersType[] | null>(null);
-  const [recherche, setRecherche] = useState('');
-  const [vue, setVue] = useState<'liste' | 'nouveau'>('liste');
-  const [selectionne, setSelectionne] = useState<string | null>(null);
+const inputCls = 'w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none';
 
-  function recharger() { listerTiers(entreprise.id).then(setListe).catch(() => setListe((p) => p ?? [])); }
-  useEffect(recharger, [entreprise.id]);
-
-  if (selectionne)
-    return <FicheTiers entreprise={entreprise} tiersId={selectionne} onRetour={() => setSelectionne(null)} />;
-  if (vue === 'nouveau')
-    return <NouveauTiers entreprise={entreprise} onFait={() => { setVue('liste'); recharger(); }} onAnnuler={() => setVue('liste')} />;
-
-  const filtres = (liste ?? []).filter((t) => t.nom.toLowerCase().includes(recherche.toLowerCase()));
-
+function SheetHeader({ title, onClose }: { title: string; onClose: () => void }) {
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <button onClick={onRetour} style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Icon name="baisse" size={18} /> <h1 className="titre-page">Clients &amp; fournisseurs</h1>
-        </button>
-        <Bouton onClick={() => setVue('nouveau')}><Icon name="plus" size={18} /> Nouveau</Bouton>
-      </div>
-
-      {liste !== null && liste.length > 0 && (
-        <input placeholder="Rechercher un nom…" value={recherche} onChange={(e) => setRecherche(e.target.value)}
-          style={{ width: '100%', padding: '12px 14px', border: '1px solid var(--bord)', borderRadius: 12,
-            boxSizing: 'border-box', marginBottom: 12 }} />
-      )}
-
-      {liste === null ? <p className="muet">Chargement…</p>
-        : liste.length === 0 ? (
-          <div className="carte" style={{ textAlign: 'center', padding: 28 }}>
-            <p className="muet">Aucun client ni fournisseur pour l'instant.</p>
-            <Bouton onClick={() => setVue('nouveau')}>Ajouter</Bouton>
-          </div>
-        ) : filtres.length === 0 ? (
-          <p className="muet">Aucun résultat pour « {recherche} ».</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {filtres.map((t) => (
-              <button key={t.id} onClick={() => setSelectionne(t.id)} className="carte"
-                style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
-                  padding: 14, borderRadius: 16, background: '#fff', border: '1px solid var(--bord)' }}>
-                <span style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--vert-clair)',
-                  color: 'var(--vert)', display: 'grid', placeItems: 'center', flexShrink: 0, fontWeight: 700 }}>
-                  {t.nom.slice(0, 1).toUpperCase()}
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>{t.nom}</div>
-                  <div className="muet" style={{ fontSize: 13 }}>
-                    {t.type === 'fournisseur' ? 'Fournisseur' : t.type === 'les_deux' ? 'Client & fournisseur' : 'Client'}
-                    {t.telephone && ` · ${t.telephone}`}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
+    <div className="flex items-center gap-3 px-4 py-3 border-b border-[#1e3222] bg-[#0a1408] shrink-0">
+      <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+        <IcoChevR cls="w-4 h-4 rotate-180" />
+      </button>
+      <h2 className="text-[#edf5ea] font-semibold text-sm flex-1">{title}</h2>
+      <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+        <IcoX cls="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 }
 
-function NouveauTiers({ entreprise, onFait, onAnnuler }: {
-  entreprise: EntrepriseResume; onFait: () => void; onAnnuler: () => void;
+export function Tiers({ entreprise, onRetour, onNav }: {
+  entreprise: EntrepriseResume; onRetour: () => void; onNav?: (m: string) => void;
+}) {
+  const [liste, setListe] = useState<TiersType[] | null>(null);
+  const [tab, setTab] = useState<'clients' | 'fournisseurs'>('clients');
+  const [search, setSearch] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selectionne, setSelectionne] = useState<string | null>(null);
+
+  function recharger() { return listerTiers(entreprise.id).then(setListe).catch(() => setListe((p) => p ?? [])); }
+  useEffect(() => { void recharger(); }, [entreprise.id]);
+
+  if (selectionne)
+    return <FicheTiers entreprise={entreprise} tiersId={selectionne} onRetour={() => setSelectionne(null)} />;
+
+  const tousClients = (liste ?? []).filter((t) => t.type === 'client' || t.type === 'les_deux');
+  const tousFournisseurs = (liste ?? []).filter((t) => t.type === 'fournisseur' || t.type === 'les_deux');
+  const items = tab === 'clients' ? tousClients : tousFournisseurs;
+  const filtered = items.filter((t) => t.nom.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="-mx-4 -mt-4 md:-mx-8 md:-mt-6 flex-1 flex flex-col overflow-hidden">
+      <div className="px-4 md:px-8 pt-4 pb-2 flex gap-2 items-center">
+        <button onClick={onRetour} className="w-9 h-9 shrink-0 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+          <IcoChevR cls="w-4 h-4 rotate-180" />
+        </button>
+        {([
+          { key: 'clients' as const, label: 'Clients', count: tousClients.length },
+          { key: 'fournisseurs' as const, label: 'Fournisseurs', count: tousFournisseurs.length },
+        ]).map(({ key, label, count }) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-all ${tab === key ? 'bg-[#b4e033] text-[#0e1c0f]' : 'bg-[#1e3222] text-[#6b9165] border border-[#2a4230]'}`}>
+            {label}
+            <span className={`rounded-full text-xs px-1.5 ${tab === key ? 'bg-[#0e1c0f]/20 text-[#0e1c0f]' : 'bg-[#2a4230] text-[#6b9165]'}`}>{count}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="px-4 md:px-8 pb-2 pt-2">
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4a6b4a]"><IcoSearch cls="w-4 h-4" /></span>
+          <input value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder={`Rechercher un ${tab === 'clients' ? 'client' : 'fournisseur'}...`}
+            className="w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl pl-9 pr-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none" />
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-24 md:pb-8 space-y-2 pt-1">
+        {liste === null ? (
+          <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-[#4a6b4a] text-sm text-center py-8">
+            {items.length === 0 ? `Aucun ${tab === 'clients' ? 'client' : 'fournisseur'} pour l'instant.` : `Aucun résultat pour « ${search} ».`}
+          </p>
+        ) : (
+          filtered.map((t) => (
+            <div key={t.id} className="bg-[#162419] rounded-2xl p-4">
+              <div className="flex items-center gap-3">
+                <Avatar name={t.nom} size="md" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[#edf5ea] font-medium text-sm truncate">{t.nom}</p>
+                  <p className="text-[#4a6b4a] text-xs mt-0.5">{t.telephone ?? 'Pas de téléphone'}</p>
+                </div>
+                <button onClick={() => setSelectionne(t.id)} className="text-[#b4e033] text-xs font-medium shrink-0">Voir fiche</button>
+              </div>
+              <div className="flex gap-2 mt-3 pt-3 border-t border-[#1e3222]">
+                <button onClick={() => onNav?.('factures')}
+                  className="flex-1 bg-[#1e3222] text-[#edf5ea] rounded-xl py-2 text-xs font-medium hover:bg-[#2a4230] transition-colors">
+                  {tab === 'clients' ? 'Factures' : 'Bons de commande'}
+                </button>
+                {tab === 'clients' && (
+                  <button onClick={() => onNav?.('caisse')}
+                    className="flex-1 bg-[#1e3222] text-[#edf5ea] rounded-xl py-2 text-xs font-medium hover:bg-[#2a4230] transition-colors">
+                    Nouvelle vente
+                  </button>
+                )}
+                {t.telephone && (
+                  <a href={`tel:${t.telephone.replace(/\s/g, '')}`}
+                    className="bg-[#b4e033]/10 text-[#b4e033] rounded-xl py-2 px-3 text-xs font-medium border border-[#b4e033]/20 hover:bg-[#b4e033]/20 transition-colors">
+                    Appeler
+                  </a>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <button onClick={() => setCreateOpen(true)}
+        className="fixed bottom-24 md:bottom-6 right-4 w-14 h-14 bg-[#b4e033] rounded-full flex items-center justify-center text-[#0e1c0f] shadow-lg shadow-[#b4e033]/20 z-10 active:scale-95 transition-all">
+        <IcoPlus cls="w-6 h-6" />
+      </button>
+
+      {createOpen && (
+        <NouveauTiersSheet entreprise={entreprise} typeInitial={tab === 'clients' ? 'client' : 'fournisseur'}
+          onClose={() => setCreateOpen(false)} onCree={() => { setCreateOpen(false); void recharger(); }} />
+      )}
+    </div>
+  );
+}
+
+function NouveauTiersSheet({ entreprise, typeInitial, onClose, onCree }: {
+  entreprise: EntrepriseResume; typeInitial: 'client' | 'fournisseur'; onClose: () => void; onCree: () => void;
 }) {
   const [nom, setNom] = useState('');
-  const [type, setType] = useState<'client' | 'fournisseur'>('client');
+  const [type, setType] = useState<'client' | 'fournisseur'>(typeInitial);
   const [telephone, setTelephone] = useState('');
   const [niu, setNiu] = useState('');
   const [email, setEmail] = useState('');
@@ -93,39 +150,40 @@ function NouveauTiers({ entreprise, onFait, onAnnuler }: {
     if (!nom.trim()) { setErreur('Nom requis'); return; }
     setCharge(true); setErreur('');
     try {
-      // Offline-first : enregistré localement (marche sans réseau), synchronisé dès que possible.
-      const clientUuid = nouvelUuid();
-      await enfilerMutation({
-        clientUuid, entrepriseId: entreprise.id, type: 'tiers',
-        payload: {
-          nom: nom.trim(), type, telephone: telephone || undefined, niu: niu || undefined,
-          email: email || undefined, adresse: adresse || undefined,
-        },
+      await creerTiers(entreprise.id, {
+        nom: nom.trim(), type, telephone: telephone || undefined, niu: niu || undefined,
+        email: email || undefined, adresse: adresse || undefined,
       });
-      void synchroniser();
-      onFait();
+      onCree();
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur');
     } finally { setCharge(false); }
   }
 
   return (
-    <div>
-      <h1 className="titre-page" style={{ marginBottom: 12 }}>Nouveau tiers</h1>
-      <div className="carte">
-        <Champ label="Nom" value={nom} onChange={setNom} placeholder="Ex. Boutique Awa" />
-        <Champ label="Type" value={type} onChange={(v) => setType(v as 'client' | 'fournisseur')}
-          options={[{ value: 'client', label: 'Client' }, { value: 'fournisseur', label: 'Fournisseur' }]} />
-        <Champ label="Téléphone" value={telephone} onChange={setTelephone} placeholder="6XX XXX XXX" />
-        <Champ label="NIU" value={niu} onChange={setNiu} placeholder="Optionnel" />
-        <Champ label="Email" value={email} onChange={setEmail} placeholder="Optionnel" />
-        <Champ label="Adresse" value={adresse} onChange={setAdresse} placeholder="Optionnel" />
-
-        {erreur && <p style={{ color: 'var(--danger)', fontSize: 14 }}>{erreur}</p>}
-        <div style={{ display: 'flex', gap: 10 }}>
-          <Bouton variante="clair" onClick={onAnnuler}>Annuler</Bouton>
-          <Bouton bloc onClick={valider} disabled={charge || !nom.trim()}>{charge ? '…' : 'Enregistrer'}</Bouton>
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#0e1c0f]">
+      <SheetHeader title="Nouveau tiers" onClose={onClose} />
+      <div className="flex-1 overflow-y-auto px-4 pt-5 space-y-4">
+        <div className="flex gap-2 bg-[#162419] rounded-2xl p-1.5 border border-[#2a4230]">
+          {(['client', 'fournisseur'] as const).map((t) => (
+            <button key={t} onClick={() => setType(t)}
+              className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${type === t ? 'bg-[#b4e033] text-[#0e1c0f]' : 'text-[#4a6b4a]'}`}>
+              {t === 'client' ? 'Client' : 'Fournisseur'}
+            </button>
+          ))}
         </div>
+        <input value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Nom / Raison sociale *" className={inputCls} />
+        <input value={telephone} onChange={(e) => setTelephone(e.target.value)} placeholder="Téléphone" type="tel" className={inputCls} />
+        <input value={niu} onChange={(e) => setNiu(e.target.value)} placeholder="NIU (optionnel)" className={inputCls} />
+        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email (optionnel)" type="email" className={inputCls} />
+        <input value={adresse} onChange={(e) => setAdresse(e.target.value)} placeholder="Adresse (optionnel)" className={inputCls} />
+        {erreur && <p className="text-[#f87171] text-xs">{erreur}</p>}
+      </div>
+      <div className="border-t border-[#1e3222] px-4 py-3 bg-[#0a1408] shrink-0">
+        <button onClick={valider} disabled={charge || !nom.trim()}
+          className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40">
+          {charge ? '…' : 'Enregistrer'}
+        </button>
       </div>
     </div>
   );
@@ -141,70 +199,74 @@ function FicheTiers({ entreprise, tiersId, onRetour }: {
     getTiersDetail(entreprise.id, tiersId).then(setFiche).catch((e) => setErreur(e instanceof Error ? e.message : 'Erreur'));
   }, [entreprise.id, tiersId]);
 
-  if (erreur) return <p style={{ color: 'var(--danger)' }}>{erreur}</p>;
-  if (!fiche) return <p className="muet">Chargement…</p>;
-
-  const operations = [
+  const operations = fiche ? [
     ...fiche.ventes.map((v) => ({ id: v.id, date: v.date, montant: v.total_ttc, statut: v.statut, libelle: 'Vente' })),
     ...fiche.factures.map((f) => ({
       id: f.id, date: f.date_emission ?? '', montant: f.total_ttc, statut: f.statut,
       libelle: f.numero ?? (f.type === 'devis' ? 'Devis (brouillon)' : 'Facture (brouillon)'),
     })),
     ...fiche.achats.map((a) => ({ id: a.id, date: a.date, montant: a.total_ttc, statut: a.statut, libelle: 'Achat' })),
-  ].sort((a, b) => (a.date < b.date ? 1 : -1));
+  ].sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
 
   return (
-    <div>
-      <button onClick={onRetour} style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-        <Icon name="baisse" size={18} /> <h1 className="titre-page" style={{ margin: 0 }}>{fiche.nom}</h1>
-      </button>
+    <div className="fixed inset-0 z-40 flex flex-col bg-[#0e1c0f]">
+      <SheetHeader title={fiche?.nom ?? '…'} onClose={onRetour} />
+      <div className="flex-1 overflow-y-auto pb-8">
+        {erreur ? (
+          <p className="text-[#f87171] text-sm px-4 pt-4">{erreur}</p>
+        ) : !fiche ? (
+          <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
+        ) : (
+          <>
+            <div className="mx-4 mt-4 bg-[#162419] rounded-2xl p-4 border border-[#1e3222] space-y-1.5">
+              <p className="text-[#4a6b4a] text-xs uppercase tracking-wide font-medium">
+                {fiche.type === 'fournisseur' ? 'Fournisseur' : fiche.type === 'les_deux' ? 'Client & fournisseur' : 'Client'}
+              </p>
+              {fiche.telephone && <p className="text-[#edf5ea] text-sm">📞 {fiche.telephone}</p>}
+              {fiche.email && <p className="text-[#edf5ea] text-sm">✉️ {fiche.email}</p>}
+              {fiche.niu && <p className="text-[#edf5ea] text-sm">NIU : {fiche.niu}</p>}
+              {fiche.adresse && <p className="text-[#edf5ea] text-sm">{fiche.adresse}</p>}
+            </div>
 
-      <div className="carte" style={{ marginBottom: 12 }}>
-        <div className="muet" style={{ fontSize: 13, marginBottom: 8 }}>
-          {fiche.type === 'fournisseur' ? 'Fournisseur' : fiche.type === 'les_deux' ? 'Client & fournisseur' : 'Client'}
-        </div>
-        {fiche.telephone && <div style={{ fontSize: 14, marginBottom: 4 }}>📞 {fiche.telephone}</div>}
-        {fiche.email && <div style={{ fontSize: 14, marginBottom: 4 }}>✉️ {fiche.email}</div>}
-        {fiche.niu && <div style={{ fontSize: 14, marginBottom: 4 }}>NIU : {fiche.niu}</div>}
-        {fiche.adresse && <div style={{ fontSize: 14 }}>{fiche.adresse}</div>}
+            {(fiche.soldeDu > 0 || fiche.soldeAPayer > 0) && (
+              <div className="mx-4 mt-3 grid gap-3" style={{ gridTemplateColumns: fiche.soldeDu > 0 && fiche.soldeAPayer > 0 ? '1fr 1fr' : '1fr' }}>
+                {fiche.soldeDu > 0 && (
+                  <div className="bg-[#162419] rounded-2xl p-4 text-center border border-[#fbbf24]/20">
+                    <p className="text-[#4a6b4a] text-xs">Nous doit</p>
+                    <p className="text-[#fbbf24] font-mono font-bold text-lg mt-0.5">{fmt(fiche.soldeDu)}</p>
+                  </div>
+                )}
+                {fiche.soldeAPayer > 0 && (
+                  <div className="bg-[#162419] rounded-2xl p-4 text-center border border-[#f87171]/20">
+                    <p className="text-[#4a6b4a] text-xs">On lui doit</p>
+                    <p className="text-[#f87171] font-mono font-bold text-lg mt-0.5">{fmt(fiche.soldeAPayer)}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-wide mx-4 mt-5 mb-2">Historique</p>
+            {operations.length === 0 ? (
+              <p className="text-[#4a6b4a] text-sm px-4">Aucune opération enregistrée.</p>
+            ) : (
+              <div className="mx-4 bg-[#162419] rounded-2xl overflow-hidden">
+                {operations.map((o, i) => (
+                  <div key={o.id} className={`flex items-center gap-3 px-4 py-3 ${i < operations.length - 1 ? 'border-b border-[#1e3222]' : ''}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[#edf5ea] text-sm font-medium">{o.libelle}</p>
+                      <p className="text-[#4a6b4a] text-xs mt-0.5">{o.date ? new Date(o.date).toLocaleDateString('fr-FR') : '—'}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[#edf5ea] font-mono font-semibold text-sm">{fmt(o.montant)}</p>
+                      <p className="text-[#4a6b4a] text-xs mt-0.5">{STATUT_LIBELLE[o.statut] ?? o.statut}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
-
-      {(fiche.soldeDu > 0 || fiche.soldeAPayer > 0) && (
-        <div style={{ display: 'grid', gridTemplateColumns: fiche.soldeDu > 0 && fiche.soldeAPayer > 0 ? '1fr 1fr' : '1fr', gap: 10, marginBottom: 12 }}>
-          {fiche.soldeDu > 0 && (
-            <div className="carte" style={{ textAlign: 'center' }}>
-              <div className="muet" style={{ fontSize: 12 }}>Nous doit</div>
-              <div className="chiffre" style={{ fontSize: 20, fontWeight: 700, color: 'var(--vert)' }}>{formaterFCFA(fiche.soldeDu)}</div>
-            </div>
-          )}
-          {fiche.soldeAPayer > 0 && (
-            <div className="carte" style={{ textAlign: 'center' }}>
-              <div className="muet" style={{ fontSize: 12 }}>On lui doit</div>
-              <div className="chiffre" style={{ fontSize: 20, fontWeight: 700, color: 'var(--danger)' }}>{formaterFCFA(fiche.soldeAPayer)}</div>
-            </div>
-          )}
-        </div>
-      )}
-
-      <strong style={{ display: 'block', marginBottom: 8 }}>Historique</strong>
-      {operations.length === 0 ? (
-        <p className="muet">Aucune opération enregistrée.</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {operations.map((o) => (
-            <div key={o.id} className="carte" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{o.libelle}</div>
-                <div className="muet" style={{ fontSize: 12 }}>{o.date ? new Date(o.date).toLocaleDateString('fr-FR') : '—'}</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div className="chiffre" style={{ fontWeight: 600 }}>{formaterFCFA(o.montant)}</div>
-                <span className="muet" style={{ fontSize: 12 }}>{STATUT_LIBELLE[o.statut] ?? o.statut}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
