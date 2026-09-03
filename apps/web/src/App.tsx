@@ -22,6 +22,65 @@ import { Tresorerie } from './pages/Tresorerie.js';
 import { AppShell } from './components/Shell.js';
 import { OfflineBanner } from './components/OfflineBanner.js';
 import { Bouton, Logo } from './components/ui.js';
+import { IcoOk, IcoCart, IcoChevR, IcoBox, IcoFile, IcoUser, IcoWlt } from './components/icons.js';
+
+/**
+ * Bandeau de bienvenue affiché une fois à la place du Tableau de bord juste après la création
+ * d'une entreprise — porté fidèlement du prototype Figma Make (WelcomeBanner(), lignes 3137-3191).
+ */
+function WelcomeBanner({ onNav }: { onNav: (m: string) => void }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="bg-[#162419] rounded-2xl p-5 border border-[#b4e033]/20">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 bg-[#b4e033] rounded-xl flex items-center justify-center text-[#0e1c0f]">
+            <IcoOk cls="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[#edf5ea] font-semibold">Bienvenue dans Kombi !</p>
+            <p className="text-[#4a6b4a] text-xs">Votre espace est prêt.</p>
+          </div>
+        </div>
+        <p className="text-[#6b9165] text-sm leading-relaxed">
+          Votre entreprise a bien été créée. Commencez par enregistrer vos premières ventes pour alimenter vos
+          tableaux de bord.
+        </p>
+      </div>
+
+      <button onClick={() => onNav('caisse')}
+        className="w-full bg-[#162419] rounded-2xl p-5 text-left border border-[#2a4230] hover:border-[#b4e033]/30 active:scale-[0.99] transition-all">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-[#b4e033]/15 rounded-xl flex items-center justify-center text-[#b4e033] shrink-0">
+            <IcoCart cls="w-5 h-5" />
+          </div>
+          <div className="flex-1">
+            <p className="text-[#edf5ea] font-semibold text-sm">Enregistrez votre première vente</p>
+            <p className="text-[#6b9165] text-xs mt-0.5">Comptant ou à crédit, en espèces ou mobile money</p>
+          </div>
+          <IcoChevR cls="w-4 h-4 text-[#4a6b4a] shrink-0" />
+        </div>
+      </button>
+
+      <div className="grid grid-cols-2 gap-3">
+        {[
+          { m: 'stock', Icon: IcoBox, title: 'Ajouter des produits', sub: 'Configurez votre catalogue' },
+          { m: 'factures', Icon: IcoFile, title: 'Créer une facture', sub: 'Envoyez votre premier devis' },
+          { m: 'tiers', Icon: IcoUser, title: 'Ajouter un client', sub: 'Gérez vos contacts' },
+          { m: 'tresorerie', Icon: IcoWlt, title: 'Suivre la trésorerie', sub: 'Vos soldes en temps réel' },
+        ].map(({ m, Icon, title, sub }) => (
+          <button key={m} onClick={() => onNav(m)}
+            className="bg-[#162419] rounded-2xl p-4 text-left border border-[#2a4230] hover:border-[#b4e033]/20 active:scale-[0.98] transition-all">
+            <div className="w-9 h-9 bg-[#1e3222] rounded-xl flex items-center justify-center text-[#b4e033] mb-3">
+              <Icon cls="w-4 h-4" />
+            </div>
+            <p className="text-[#edf5ea] text-xs font-semibold leading-snug">{title}</p>
+            <p className="text-[#4a6b4a] text-[10px] mt-0.5 leading-snug">{sub}</p>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function Splash() {
   return (
@@ -39,6 +98,7 @@ function Espace() {
   const [entreprises, setEntreprises] = useState<EntrepriseResume[] | null>(null);
   const [activeId] = useState<string | null>(() => localStorage.getItem('kombi.entreprise'));
   const [onglet, setOnglet] = useState('dashboard');
+  const [justCreated, setJustCreated] = useState(false);
 
   function recharger() {
     return listerEntreprises()
@@ -53,7 +113,7 @@ function Espace() {
 
   if (entreprises === null) return <Splash />;
   if (entreprises.length === 0)
-    return <Onboarding onCree={() => { setEntreprises(null); void recharger(); }} />;
+    return <Onboarding onCree={() => { setJustCreated(true); setEntreprises(null); void recharger(); }} />;
 
   const active = entreprises.find((e) => e.id === activeId) ?? entreprises[0]!;
   localStorage.setItem('kombi.entreprise', active.id);
@@ -68,9 +128,10 @@ function Espace() {
 
   const role = active.role as RoleMembre;
   // Architecture de nav validée le 2026-09-03 (voir docs/parcours.md « Refonte design system ») :
-  // 4 onglets fixes + feuille Menu (Modules/Administration). Dépenses/Créances/Dettes n'ont pas
-  // encore d'entrée — elles rejoindront le flux de transactions de Trésorerie lors de son
-  // portage ; en attendant, la rangée sous le contenu reste leur seul accès.
+  // 4 onglets fixes + feuille Menu (Modules/Administration). Créances/Dettes (argent pas encore
+  // encaissé/payé) n'ont pas d'entrée dédiée — restent accessibles via la rangée sous le contenu
+  // en attendant un futur écran dédié ; Dépenses est atteignable depuis Trésorerie (bouton
+  // « Sortie ») en plus de cette même rangée.
   const masquer = [
     ...(active.secteur === 'service' || !peut(role, 'stock:read') ? ['stock'] : []),
     ...(peut(role, 'compta:read') ? [] : ['compta', 'tresorerie']),
@@ -88,7 +149,8 @@ function Espace() {
       nomUtilisateur={nomUtilisateur} entrepriseId={active.id} isOnline={navigator.onLine} masquer={masquer}>
       <div className="px-4 pt-4 md:px-8 md:pt-6">
         <OfflineBanner />
-        {onglet === 'dashboard' ? <Dashboard entreprise={active} onCaisse={() => setOnglet('caisse')} onNav={setOnglet} />
+        {onglet === 'dashboard' && justCreated ? <WelcomeBanner onNav={(m) => { setJustCreated(false); setOnglet(m); }} />
+          : onglet === 'dashboard' ? <Dashboard entreprise={active} onCaisse={() => setOnglet('caisse')} onNav={setOnglet} />
           : onglet === 'caisse' ? <Caisse entreprise={active} onHistorique={() => setOnglet('ventes')} />
           : onglet === 'ventes' ? <Ventes entreprise={active} role={role} onRetour={() => setOnglet('caisse')} />
           : onglet === 'stock' ? <Stock entreprise={active} />
@@ -104,8 +166,9 @@ function Espace() {
             ? <Tresorerie entreprise={active} onCaisse={() => setOnglet('caisse')} onDepenses={() => setOnglet('depenses')} />
           : <Comptabilite entreprise={active} />}
 
-        {/* Temporaire : Dépenses/Créances/Dettes rejoindront Trésorerie (voir commentaire plus
-            haut). Se déconnecter n'a pas encore de nouvel emplacement (profil ?). */}
+        {/* Temporaire : Créances/Dettes n'ont pas encore d'écran dédié dans le nouveau design
+            (voir commentaire plus haut). Se déconnecter n'a pas encore de nouvel emplacement
+            (profil ?). */}
         <div className="flex justify-center flex-wrap gap-2 mt-6 mb-24 md:mb-6">
           {peut(role, 'depense:read') && (
             <Bouton variante="ghost" onClick={() => setOnglet('depenses')}>Dépenses</Bouton>
