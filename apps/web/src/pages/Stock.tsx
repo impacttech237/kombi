@@ -247,7 +247,7 @@ function ApprovisionnerSheet({ entreprise, produit, onClose, onFait }: {
     setErreur(''); setCharge(true);
     try {
       let tiersId = fournisseurId;
-      if (aCredit && !tiersId && nouveauFournisseur.trim()) {
+      if (!tiersId && nouveauFournisseur.trim()) {
         tiersId = (await creerTiers(entreprise.id, { nom: nouveauFournisseur.trim(), type: 'fournisseur' })).tiersId;
       }
       if (aCredit && !tiersId) { setErreur('Choisissez ou créez un fournisseur'); setCharge(false); return; }
@@ -256,7 +256,7 @@ function ApprovisionnerSheet({ entreprise, produit, onClose, onFait }: {
         clientUuid, entrepriseId: entreprise.id, type: 'stock_entree',
         payload: {
           produitId: produit.id, quantite: Number(qte), coutUnitaire: Number(cout),
-          modePaiement: aCredit ? null : mode, aCredit, tiersId: aCredit ? tiersId : null,
+          modePaiement: aCredit ? null : mode, aCredit, tiersId: tiersId || null,
           tauxTva: avecTva ? TAUX_TVA_EFFECTIF : 0, dateOperation: null,
           dateEcheance: aCredit ? (dateEcheance || null) : null,
         },
@@ -305,14 +305,32 @@ function ApprovisionnerSheet({ entreprise, produit, onClose, onFait }: {
             </Champ>
           </>
         ) : (
-          <Champ label="Payé par">
-            <select value={mode} onChange={(e) => setMode(e.target.value)} className={inputCls}>
-              <option value="especes">Espèces</option>
-              <option value="mtn_momo">MTN MoMo</option>
-              <option value="orange_money">Orange Money</option>
-              <option value="virement">Virement</option>
-            </select>
-          </Champ>
+          <>
+            <Champ label="Payé par">
+              <select value={mode} onChange={(e) => setMode(e.target.value)} className={inputCls}>
+                <option value="especes">Espèces</option>
+                <option value="mtn_momo">MTN MoMo</option>
+                <option value="orange_money">Orange Money</option>
+                <option value="virement">Virement</option>
+              </select>
+            </Champ>
+            {fournisseurs.length > 0 && (
+              <Champ label="Fournisseur (optionnel)">
+                <select value={fournisseurId} onChange={(e) => { setFournisseurId(e.target.value); setNouveauFournisseur(''); }} className={inputCls}>
+                  <option value="">Non renseigné</option>
+                  {fournisseurs.map((f) => <option key={f.id} value={f.id}>{f.nom}</option>)}
+                </select>
+              </Champ>
+            )}
+            {!fournisseurId && (
+              <Champ label={fournisseurs.length > 0 ? 'Ou nouveau fournisseur (optionnel)' : 'Fournisseur (optionnel)'}>
+                <input value={nouveauFournisseur} onChange={(e) => setNouveauFournisseur(e.target.value)} placeholder="Ex. Grossiste Awa" className={inputCls} />
+              </Champ>
+            )}
+            {(fournisseurId || nouveauFournisseur.trim()) && (
+              <p className="text-[#4a6b4a] text-xs -mt-2">Vous pourrez joindre le scan de la facture depuis la fiche de ce fournisseur (Clients & Fournisseurs).</p>
+            )}
+          </>
         )}
         {erreur && <p className="text-[#f87171] text-xs">{erreur}</p>}
       </div>

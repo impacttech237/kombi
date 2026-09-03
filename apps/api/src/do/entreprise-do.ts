@@ -362,7 +362,7 @@ export class EntrepriseDO extends DurableObject {
       tiersId,
     ).toArray();
     const achats = this.sql.exec(
-      `SELECT id, date, total_ttc, statut FROM achat_fournisseur WHERE tiers_id = ? ORDER BY date DESC LIMIT 20`, tiersId,
+      `SELECT id, date, total_ttc, statut, piece_cle FROM achat_fournisseur WHERE tiers_id = ? ORDER BY date DESC LIMIT 20`, tiersId,
     ).toArray();
 
     const soldeVentesCredit = this.sql.exec(
@@ -810,13 +810,14 @@ export class EntrepriseDO extends DurableObject {
     produitId: string; quantite: number; coutUnitaire: number; modePaiement?: string | null;
     aCredit?: boolean; tiersId?: string | null; tauxTva?: number; regimeFiscal?: string | null;
     dateOperation?: string | null; clientUuid?: string | null; dateEcheance?: string | null;
-  }, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }): Promise<{ nouveauStock: number; nouveauCmp: number }> {
+  }, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }): Promise<{ nouveauStock: number; nouveauCmp: number; achatId: string | null }> {
     if (a.clientUuid) {
       const ex = this.sql.exec('SELECT id FROM mouvement_stock WHERE client_uuid = ?', a.clientUuid).toArray()[0];
       if (ex) {
         const prodEx = this.sql.exec('SELECT stock_actuel, cout_moyen_pondere FROM produit WHERE id = ?', a.produitId)
           .toArray()[0] as { stock_actuel: number; cout_moyen_pondere: number };
-        return { nouveauStock: prodEx.stock_actuel, nouveauCmp: prodEx.cout_moyen_pondere };
+        // Rejeu offline (déjà appliqué) : le client a déjà reçu l'achatId lors du premier succès.
+        return { nouveauStock: prodEx.stock_actuel, nouveauCmp: prodEx.cout_moyen_pondere, achatId: null };
       }
     }
     const prod = this.sql
@@ -876,14 +877,18 @@ export class EntrepriseDO extends DurableObject {
       l('6031', 'credit', montantHt);
       this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
 
-      // Achat à crédit : trace la dette fournisseur (montant dû, suivi dans « ce que je dois »).
+      // Trace un `achat_fournisseur` (dette si à crédit, sinon déjà réglé) dès qu'un fournisseur
+      // est renseigné — même au comptant — pour permettre d'y attacher le scan de la facture
+      // fournisseur (voir services/pieces.ts) ; sans fournisseur, rien à tracer (comportement
+      // historique inchangé pour un simple achat au comptant sans tiers connu).
       let achatId: string | null = null;
-      if (a.aCredit) {
+      if (a.tiersId) {
         achatId = uid();
         this.sql.exec(
           `INSERT INTO achat_fournisseur (id, exercice_id, tiers_id, date, total_ht, total_tva, total_ttc, statut, ecriture_id, date_echeance)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'a_credit', ?, ?)`,
-          achatId, exerciceId, a.tiersId, dateOp, montantHt, montantTva, montantRegle, ecritureId, a.dateEcheance ?? null,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          achatId, exerciceId, a.tiersId, dateOp, montantHt, montantTva, montantRegle,
+          a.aCredit ? 'a_credit' : 'regle', ecritureId, a.dateEcheance ?? null,
         );
         this.sql.exec(
           `INSERT INTO ligne_achat (id, achat_id, produit_id, quantite, cout_unitaire, montant_ht)
@@ -897,7 +902,7 @@ export class EntrepriseDO extends DurableObject {
         avant: { stock: prod.stock_actuel, cmp: prod.cout_moyen_pondere },
         apres: { stock: etat.quantite, cmp: etat.cmp, quantiteEntree: a.quantite, aCredit: !!a.aCredit, achatId },
       });
-      return { nouveauStock: etat.quantite, nouveauCmp: etat.cmp };
+      return { nouveauStock: etat.quantite, nouveauCmp: etat.cmp, achatId };
     });
   }
 

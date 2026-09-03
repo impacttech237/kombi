@@ -7,10 +7,10 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA as fmt } from '@kombi/shared';
 import {
-  listerTiers, getTiersDetail, creerTiers,
+  listerTiers, getTiersDetail, creerTiers, televerserPieceAchat, urlPieceAchat, supprimerPieceAchat,
   type EntrepriseResume, type Tiers as TiersType, type TiersDetail,
 } from '../lib/api.js';
-import { IcoSearch, IcoPlus, IcoChevR, IcoX, Avatar } from '../components/icons.js';
+import { IcoSearch, IcoPlus, IcoChevR, IcoX, IcoFile, Avatar } from '../components/icons.js';
 
 const STATUT_LIBELLE: Record<string, string> = {
   brouillon: 'Brouillon', envoyee: 'Envoyée', payee_partiellement: 'Partiel', payee: 'Payée',
@@ -195,17 +195,21 @@ function FicheTiers({ entreprise, tiersId, onRetour }: {
   const [fiche, setFiche] = useState<TiersDetail | null>(null);
   const [erreur, setErreur] = useState('');
 
-  useEffect(() => {
+  function recharger() {
     getTiersDetail(entreprise.id, tiersId).then(setFiche).catch((e) => setErreur(e instanceof Error ? e.message : 'Erreur'));
-  }, [entreprise.id, tiersId]);
+  }
+  useEffect(recharger, [entreprise.id, tiersId]);
 
   const operations = fiche ? [
-    ...fiche.ventes.map((v) => ({ id: v.id, date: v.date, montant: v.total_ttc, statut: v.statut, libelle: 'Vente' })),
+    ...fiche.ventes.map((v) => ({ type: 'vente' as const, id: v.id, date: v.date, montant: v.total_ttc, statut: v.statut, libelle: 'Vente', pieceCle: null })),
     ...fiche.factures.map((f) => ({
-      id: f.id, date: f.date_emission ?? '', montant: f.total_ttc, statut: f.statut,
-      libelle: f.numero ?? (f.type === 'devis' ? 'Devis (brouillon)' : 'Facture (brouillon)'),
+      type: 'facture' as const, id: f.id, date: f.date_emission ?? '', montant: f.total_ttc, statut: f.statut,
+      libelle: f.numero ?? (f.type === 'devis' ? 'Devis (brouillon)' : 'Facture (brouillon)'), pieceCle: null,
     })),
-    ...fiche.achats.map((a) => ({ id: a.id, date: a.date, montant: a.total_ttc, statut: a.statut, libelle: 'Achat' })),
+    ...fiche.achats.map((a) => ({
+      type: 'achat' as const, id: a.id, date: a.date, montant: a.total_ttc, statut: a.statut,
+      libelle: 'Achat fournisseur', pieceCle: a.piece_cle,
+    })),
   ].sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
 
   return (
@@ -251,22 +255,87 @@ function FicheTiers({ entreprise, tiersId, onRetour }: {
             ) : (
               <div className="mx-4 bg-[#162419] rounded-2xl overflow-hidden">
                 {operations.map((o, i) => (
-                  <div key={o.id} className={`flex items-center gap-3 px-4 py-3 ${i < operations.length - 1 ? 'border-b border-[#1e3222]' : ''}`}>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[#edf5ea] text-sm font-medium">{o.libelle}</p>
-                      <p className="text-[#4a6b4a] text-xs mt-0.5">{o.date ? new Date(o.date).toLocaleDateString('fr-FR') : '—'}</p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-[#edf5ea] font-mono font-semibold text-sm">{fmt(o.montant)}</p>
-                      <p className="text-[#4a6b4a] text-xs mt-0.5">{STATUT_LIBELLE[o.statut] ?? o.statut}</p>
-                    </div>
-                  </div>
+                  <OperationLigne key={`${o.type}-${o.id}`} entreprise={entreprise} operation={o}
+                    dernier={i === operations.length - 1} onFait={recharger} />
                 ))}
               </div>
             )}
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+interface Operation {
+  type: 'vente' | 'facture' | 'achat';
+  id: string; date: string; montant: number; statut: string; libelle: string; pieceCle: string | null;
+}
+
+/**
+ * Une ligne de l'historique. Seuls les achats fournisseurs ont un contrôle « pièce » (scan de la
+ * facture) — les ventes/factures n'ont pas d'endpoint dédié ici (voir Créances pour les ventes à
+ * crédit) et les factures se régénèrent déjà en PDF à la demande.
+ */
+function OperationLigne({ entreprise, operation: o, dernier, onFait }: {
+  entreprise: EntrepriseResume; operation: Operation; dernier: boolean; onFait: () => void;
+}) {
+  const [charge, setCharge] = useState(false);
+  const [erreur, setErreur] = useState('');
+  const pieceInputId = `piece-tiers-achat-${o.id}`;
+
+  async function ajouterPiece(fichier: File) {
+    setCharge(true); setErreur('');
+    try {
+      await televerserPieceAchat(entreprise.id, o.id, fichier);
+      onFait();
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Erreur');
+    } finally { setCharge(false); }
+  }
+  async function voirPiece() {
+    try { window.open(await urlPieceAchat(entreprise.id, o.id), '_blank'); } catch { /* ignore */ }
+  }
+  async function retirerPiece() {
+    if (!confirm('Retirer la pièce jointe de cet achat ?')) return;
+    setCharge(true);
+    try { await supprimerPieceAchat(entreprise.id, o.id); onFait(); } finally { setCharge(false); }
+  }
+
+  return (
+    <div className={`px-4 py-3 ${dernier ? '' : 'border-b border-[#1e3222]'}`}>
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-[#edf5ea] text-sm font-medium">{o.libelle}</p>
+          <p className="text-[#4a6b4a] text-xs mt-0.5">{o.date ? new Date(o.date).toLocaleDateString('fr-FR') : '—'}</p>
+        </div>
+        {o.pieceCle && <IcoFile cls="w-4 h-4 text-[#b4e033] shrink-0" />}
+        <div className="text-right shrink-0">
+          <p className="text-[#edf5ea] font-mono font-semibold text-sm">{fmt(o.montant)}</p>
+          <p className="text-[#4a6b4a] text-xs mt-0.5">{STATUT_LIBELLE[o.statut] ?? o.statut}</p>
+        </div>
+      </div>
+      {o.type === 'achat' && (
+        <div className="flex items-center gap-2 mt-2 flex-wrap">
+          {o.pieceCle ? (
+            <>
+              <button onClick={voirPiece} className="bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-1.5 text-xs font-medium border border-[#2a4230]">Voir la pièce</button>
+              <button onClick={() => document.getElementById(pieceInputId)?.click()} disabled={charge}
+                className="bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-1.5 text-xs font-medium border border-[#2a4230] disabled:opacity-40">Remplacer</button>
+              <button onClick={retirerPiece} disabled={charge}
+                className="text-[#f87171] text-xs font-medium px-3 py-1.5 hover:bg-[#f87171]/8 rounded-xl transition-colors disabled:opacity-40">Retirer</button>
+            </>
+          ) : (
+            <button onClick={() => document.getElementById(pieceInputId)?.click()} disabled={charge}
+              className="bg-[#1e3222] text-[#b4e033] rounded-xl px-3 py-1.5 text-xs font-medium border border-[#b4e033]/20 disabled:opacity-40">
+              {charge ? 'Envoi…' : 'Joindre la facture fournisseur'}
+            </button>
+          )}
+          <input id={pieceInputId} type="file" accept="image/*,application/pdf" capture="environment" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void ajouterPiece(f); e.target.value = ''; }} />
+        </div>
+      )}
+      {erreur && <p className="text-[#f87171] text-xs mt-1">{erreur}</p>}
     </div>
   );
 }

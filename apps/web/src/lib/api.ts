@@ -150,7 +150,7 @@ export const approvisionner = (
     tiersId?: string | null; tauxTva?: number; clientUuid?: string; dateOperation?: string | null;
     dateEcheance?: string | null;
   },
-) => api<{ nouveauStock: number; nouveauCmp: number }>(
+) => api<{ nouveauStock: number; nouveauCmp: number; achatId: string | null }>(
   `/api/produits/${produitId}/entree`, { method: 'POST', body: data, entrepriseId },
 );
 
@@ -183,7 +183,7 @@ export const creerTiers = (
 export interface TiersDetail extends Tiers {
   ventes: { id: string; date: string; total_ttc: number; statut: string }[];
   factures: { id: string; numero: string | null; type: string; total_ttc: number; statut: string; date_emission: string | null }[];
-  achats: { id: string; date: string; total_ttc: number; statut: string }[];
+  achats: { id: string; date: string; total_ttc: number; statut: string; piece_cle: string | null }[];
   soldeDu: number; soldeAPayer: number;
 }
 export const getTiersDetail = (entrepriseId: string, id: string) =>
