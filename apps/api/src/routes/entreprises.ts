@@ -6,6 +6,8 @@ import {
 } from '@kombi/shared';
 import { planCreationEntreprise } from '../services/onboarding.js';
 import { sauvegarderEntreprise, listerSauvegardes } from '../services/sauvegarde.js';
+import { cleCacheRole } from '../middleware/tenant.js';
+import { invaliderCache } from '../lib/cache-isolate.js';
 import { stubEntreprise, type AppEnv } from '../types.js';
 
 /**
@@ -208,6 +210,7 @@ entreprises.post('/:id/membres', async (c) => {
   )
     .bind(crypto.randomUUID(), utilisateur.id, entrepriseId, corps.data.role)
     .run();
+  invaliderCache(cleCacheRole(utilisateur.id, entrepriseId));
   return c.json({ ok: true }, 201);
 });
 
@@ -222,9 +225,16 @@ entreprises.post('/:id/membres/:membreId/role', async (c) => {
   const corps = zRole.safeParse(await c.req.json().catch(() => null));
   if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);
 
+  const membre = await c.env.DB.prepare('SELECT utilisateur_id FROM membre_entreprise WHERE id = ? AND entreprise_id = ?')
+    .bind(c.req.param('membreId'), entrepriseId)
+    .first<{ utilisateur_id: string }>();
+
   await c.env.DB.prepare('UPDATE membre_entreprise SET role = ? WHERE id = ? AND entreprise_id = ?')
     .bind(corps.data.role, c.req.param('membreId'), entrepriseId)
     .run();
+  // Cache du rôle (audit infra 2026-09-03, point 7) : invalider pour que le changement soit pris
+  // en compte immédiatement, sans attendre l'expiration du TTL (30s, voir middleware/tenant.ts).
+  if (membre) invaliderCache(cleCacheRole(membre.utilisateur_id, entrepriseId));
   return c.json({ ok: true });
 });
 
@@ -234,8 +244,14 @@ entreprises.delete('/:id/membres/:membreId', async (c) => {
   const role = await rolePourEntreprise(c.env.DB, c.get('utilisateurId'), entrepriseId);
   if (!role || !peut(role, 'membre:manage')) return c.json({ erreur: 'Accès refusé' }, 403);
 
+  const membre = await c.env.DB.prepare('SELECT utilisateur_id FROM membre_entreprise WHERE id = ? AND entreprise_id = ?')
+    .bind(c.req.param('membreId'), entrepriseId)
+    .first<{ utilisateur_id: string }>();
+
   await c.env.DB.prepare('DELETE FROM membre_entreprise WHERE id = ? AND entreprise_id = ?')
     .bind(c.req.param('membreId'), entrepriseId)
     .run();
+  // Un accès retiré doit cesser immédiatement, pas rester actif jusqu'à expiration du cache.
+  if (membre) invaliderCache(cleCacheRole(membre.utilisateur_id, entrepriseId));
   return c.json({ ok: true });
 });

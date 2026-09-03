@@ -125,5 +125,31 @@ seul Durable Object, sans réplique Cloudflare native. Décisions de conception 
   normal) — la restauration insère donc en `'brouillon'`, insère les lignes, puis revalide,
   exactement comme le reste de l'application.
 
+## D16 — Cache TTL en mémoire d'isolate pour réduire la contention D1 (2026-09-03)
+Point 7 de l'audit du 2026-09-03 : D1 interrogé 3 à 5 fois par requête métier (session
+better-auth, résolution utilisateur, vérification tenant, rate-limit) avant même d'atteindre le
+Durable Object shardé — contredit la stratégie de scalabilité par sharding à 100k utilisateurs
+simultanés (D11). Décisions de conception :
+- **Cache en mémoire d'isolate (`lib/cache-isolate.ts`), pas KV ni Cache API.** Pas de nouvelle
+  ressource Cloudflare à provisionner, zéro changement de `wrangler.toml`, latence quasi nulle
+  (pas d'appel réseau). Contrepartie assumée : *best-effort*, pas une garantie forte — un isolate
+  froid repart à vide (dégradation propre, re-lecture D1), et il n'y a aucune coordination entre
+  isolates. Le bénéfice réel dépend de la réutilisation d'isolates chauds sous charge soutenue —
+  précisément le scénario visé (haute volumétrie), mais à re-mesurer une fois un trafic réel
+  observable ; si le taux de succès du cache s'avère trop faible en production, KV (cohérence
+  éventuelle, coordonné entre isolates) est l'étape suivante logique.
+- **TTL différencié par sensibilité** : profil utilisateur (`auth_id → utilisateur.id`, 5 min — ne
+  change jamais une fois créé) vs rôle dans une entreprise (30s — peut changer, et un accès révoqué
+  doit cesser de fonctionner dans un délai raisonnable).
+- **Invalidation ciblée à la mutation**, pas seulement le TTL : ajout/retrait/changement de rôle
+  d'un membre (`routes/entreprises.ts`) invalide immédiatement l'entrée concernée, pour qu'un
+  accès révoqué cesse tout de suite plutôt que d'attendre 30s. Testé (`test/cache-role.test.ts`).
+- **Jamais utilisé pour une donnée où l'incohérence inter-isolate serait dangereuse** (paiement,
+  écriture comptable) — ces opérations passent exclusivement par le Durable Object, jamais par ce
+  cache. Le cache ne couvre que des lectures d'autorisation à faible enjeu et forte volumétrie.
+- Le `getSession()` de better-auth lui-même n'est PAS mis en cache par-dessus (risque de rejouer
+  une session expirée/révoquée par better-auth) — seule la résolution du profil métier qui en
+  découle l'est.
+
 ## Décisions ouvertes (restantes)
 - Décompte exact des « 2 ans » de maintien de régime (exercices civils vs glissants).

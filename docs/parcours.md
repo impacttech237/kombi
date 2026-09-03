@@ -455,7 +455,17 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   `setListe([])`) — dégradation propre plutôt qu'un faux état vide. Cache lecture complet (revoir
   des données déjà chargées sans réseau) volontairement hors scope de ce lot : un chantier
   distinct plus large que le P1 « écriture hors-ligne » ciblé ici.
-- ⬜ 🟡 Cache session (rôle + entreprises) pour soulager D1 à l'échelle
+- ✅ 🟡 **Cache TTL du rôle et du profil utilisateur** (audit infra 2026-09-03, point 7 : D1
+  interrogé 3 à 5 fois par requête métier avant même d'atteindre le Durable Object shardé,
+  contredisant l'objectif du sharding par entreprise à 100k utilisateurs simultanés).
+  `lib/cache-isolate.ts` : cache TTL en mémoire à l'échelle de l'isolate Worker (best-effort,
+  dégrade proprement sur isolate froid — jamais utilisé pour une donnée où l'incohérence
+  inter-isolate serait dangereuse). Profil utilisateur (`auth_id → utilisateur.id`, TTL 5 min,
+  ne change jamais) dans `middleware/auth.ts` ; rôle dans une entreprise (TTL 30s, borne la
+  fenêtre d'un accès révoqué) dans `middleware/tenant.ts`, invalidé immédiatement à l'ajout/
+  retrait/changement de rôle d'un membre (`routes/entreprises.ts`). Round-trip d'invalidation
+  testé (`test/cache-role.test.ts`) : un membre retiré ou dont le rôle change perd/gagne l'accès
+  immédiatement, pas après expiration du TTL.
 - ✅ Icônes PWA (installabilité) : `apps/web/public/icon-192.png`/`icon-512.png` générées (le
   manifeste les référençait déjà mais les fichiers n'existaient pas → PWA non installable/icône
   cassée), reprenant le design du logo (carré émeraude arrondi + « K » — `Logo` dans `ui.tsx`) ;
