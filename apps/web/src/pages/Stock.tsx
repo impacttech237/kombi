@@ -259,7 +259,7 @@ function ApprovisionnerSheet({ entreprise, produit, onClose, onFait }: {
           tauxTva: avecTva ? TAUX_TVA_EFFECTIF : 0, dateOperation: null,
         },
       });
-      void synchroniser();
+      await synchroniser();
       onFait();
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur');

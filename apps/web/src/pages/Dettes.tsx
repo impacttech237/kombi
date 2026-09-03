@@ -76,7 +76,7 @@ function LigneDette({ entreprise, dette, onFait }: {
         clientUuid, entrepriseId: entreprise.id, type: 'paiement_achat',
         payload: { achatId: dette.id, montant: Math.min(du, Number(montant) || 0), modePaiement: mode },
       });
-      void synchroniser();
+      await synchroniser();
       setOuvert(false); onFait();
     } finally { setCharge(false); }
   }

@@ -195,7 +195,7 @@ export function Factures({ entreprise }: { entreprise: EntrepriseResume }) {
           onConfirm={async (montant, modePaiement) => {
             const clientUuid = nouvelUuid();
             await enfilerMutation({ clientUuid, entrepriseId: entreprise.id, type: 'paiement_facture', payload: { factureId: paySheet.id, montant, modePaiement } });
-            void synchroniser();
+            await synchroniser();
             setPaySheet(null); void recharger();
           }}
         />

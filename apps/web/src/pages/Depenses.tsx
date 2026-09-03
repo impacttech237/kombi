@@ -230,7 +230,7 @@ function NouvelleDepenseSheet({ entreprise, onClose, onCree }: {
           modePaiement: mode, recurrente, dateOperation: dateOperation || null,
         },
       });
-      void synchroniser();
+      await synchroniser();
       onCree();
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur');

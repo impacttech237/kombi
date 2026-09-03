@@ -262,7 +262,7 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
           modePaiement: aCredit ? null : mode, aCredit, tiersId: tiersId || null,
         },
       });
-      void synchroniser();
+      await synchroniser();
       const now = new Date();
       const datetime = now.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
         + ' à ' + now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });

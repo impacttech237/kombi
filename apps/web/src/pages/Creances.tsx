@@ -20,7 +20,7 @@ async function encaisserOffline(
 ): Promise<void> {
   const clientUuid = nouvelUuid();
   await enfilerMutation({ clientUuid, entrepriseId, type, payload: { [idField]: id, montant, modePaiement } });
-  void synchroniser();
+  await synchroniser();
 }
 
 const MODES = [
