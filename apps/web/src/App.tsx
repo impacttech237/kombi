@@ -16,6 +16,7 @@ import { Creances } from './pages/Creances.js';
 import { Dettes } from './pages/Dettes.js';
 import { Equipe } from './pages/Equipe.js';
 import { Tiers } from './pages/Tiers.js';
+import { Parametres } from './pages/Parametres.js';
 import { Comptabilite } from './pages/Comptabilite.js';
 import { Ecran, TopBar, BottomNav } from './components/Layout.js';
 import { OfflineBanner } from './components/OfflineBanner.js';
@@ -86,6 +87,7 @@ function Espace() {
           : onglet === 'creances' ? <Creances entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'dettes' ? <Dettes entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'equipe' ? <Equipe entreprise={active} onRetour={() => setOnglet('dashboard')} />
+          : onglet === 'parametres' ? <Parametres entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'tiers' ? <Tiers entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : <Comptabilite entreprise={active} />}
       </div>
@@ -95,6 +97,9 @@ function Espace() {
         )}
         {peut(role, 'membre:manage') && (
           <Bouton variante="ghost" onClick={() => setOnglet('equipe')}>Équipe</Bouton>
+        )}
+        {peut(role, 'entreprise:manage') && (
+          <Bouton variante="ghost" onClick={() => setOnglet('parametres')}>Paramètres fiscaux</Bouton>
         )}
         <Bouton variante="ghost" onClick={deconnexion}>Se déconnecter</Bouton>
       </div>

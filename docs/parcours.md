@@ -303,6 +303,24 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   sur les assujettis TVA, pas sur les TPE à l'IGS (qui peuvent facturer un client anonyme).
 - ⬜ ⚪ Vrai brouillon modifiable (émission non forcée)
 
+## Paramètres entreprise
+- ✅ 🔴 **CGA/TVA enfin modifiables après l'onboarding** — trouvé en relisant `Spécifications_
+  technique.md` §1.1 face au code réel : `adherent_cga` et `assujetti_tva` n'étaient exposés
+  **nulle part en écriture** après la création de l'entreprise (l'onboarding ne les collecte pas
+  non plus). Concrètement, **aucune entreprise réelle ne pouvait bénéficier de la réduction IGS
+  CGA** (pourtant documentée comme « fonctionnalité gratuite phare » dans `packages/fiscal/src/
+  igs.ts`) ni activer la TVA — un défaut silencieux qui fausse le calcul fiscal pour toute
+  entreprise adhérente d'un CGA ou assujettie TVA au régime réel. Corrigé : `PATCH /api/
+  entreprises/:id` (NIU, `adherentCga`, `assujettiTva` — `entreprise:manage`, admin uniquement)
+  + `GET /api/entreprises/:id/parametres`, écran `Parametres.tsx` (bouton « Paramètres fiscaux »
+  à côté d'Équipe). `regime_fiscal` reste volontairement hors de cet écran : un changement de
+  régime ne doit jamais s'appliquer rétroactivement sans un vrai parcours de confirmation (spec
+  §1.1), pas un simple interrupteur.
+- ⬜ 🟠 Coordonnées entreprise (adresse, ville, téléphone, email, RCCM) + logo — aucune colonne
+  D1 pour l'instant (`entreprise` ne porte que l'identité fiscale), nécessite une migration.
+  Alimente aussi la personnalisation des documents PDF (logo, couleur, mentions — spec §2).
+- ⬜ ⚪ Profil utilisateur (nom/téléphone éditables, changement de mot de passe) — spec §1.4.
+
 ## Tiers (clients / fournisseurs)
 - ✅ Écran Tiers dédié (liste/recherche globale) : `Tiers.tsx`, accessible depuis le bouton
   « Clients & fournisseurs » (gérant/admin/comptable via `tiers:read`) — recherche par nom,

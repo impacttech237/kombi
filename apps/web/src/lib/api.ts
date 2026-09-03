@@ -37,6 +37,17 @@ export const creerEntreprise = (data: {
   raisonSociale: string; secteur: string; natureActivite: string; niu?: string;
 }) => api<{ entrepriseId: string }>('/api/entreprises', { method: 'POST', body: data });
 
+// ── Paramètres entreprise (fiscal) ──
+export interface ParametresEntreprise {
+  raison_sociale: string; niu: string | null; secteur: string; nature_activite: string;
+  regime_fiscal: string; adherent_cga: number; assujetti_tva: number;
+}
+export const getParametresEntreprise = (entrepriseId: string) =>
+  api<ParametresEntreprise>(`/api/entreprises/${entrepriseId}/parametres`);
+export const majParametresEntreprise = (
+  entrepriseId: string, data: { niu?: string | null; adherentCga?: boolean; assujettiTva?: boolean },
+) => api<{ ok: boolean }>(`/api/entreprises/${entrepriseId}`, { method: 'PATCH', body: data });
+
 // ── Équipe (membres & rôles) ──
 export interface Membre { id: string; nom: string; email: string; role: string; }
 export const listerMembres = (entrepriseId: string) =>

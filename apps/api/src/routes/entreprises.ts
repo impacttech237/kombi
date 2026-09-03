@@ -54,6 +54,54 @@ entreprises.post('/', async (c) => {
   return c.json({ entrepriseId }, 201);
 });
 
+const zParametres = z.object({
+  niu: z.string().trim().max(32).nullish(),
+  adherentCga: z.boolean().optional(),
+  assujettiTva: z.boolean().optional(),
+});
+
+/**
+ * Paramètres fiscaux de l'entreprise (NIU, adhésion CGA, assujettissement TVA) — jusqu'ici
+ * jamais exposés en écriture après l'onboarding alors qu'ils pilotent l'IGS (CGA ÷ 2, spec
+ * §6.2 : « fonctionnalité gratuite phare ») et l'éligibilité TVA. `regime_fiscal` reste hors de
+ * cette route : un changement de régime ne doit jamais s'appliquer rétroactivement sans un
+ * parcours de confirmation dédié (spec §1.1), pas un simple champ de formulaire.
+ */
+entreprises.patch('/:id', async (c) => {
+  const entrepriseId = c.req.param('id');
+  const role = await rolePourEntreprise(c.env.DB, c.get('utilisateurId'), entrepriseId);
+  if (!role || !peut(role, 'entreprise:manage')) return c.json({ erreur: 'Accès refusé' }, 403);
+
+  const corps = zParametres.safeParse(await c.req.json().catch(() => null));
+  if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);
+  const p = corps.data;
+
+  const champs: string[] = [];
+  const valeurs: unknown[] = [];
+  if (p.niu !== undefined) { champs.push('niu = ?'); valeurs.push(p.niu || null); }
+  if (p.adherentCga !== undefined) { champs.push('adherent_cga = ?'); valeurs.push(p.adherentCga ? 1 : 0); }
+  if (p.assujettiTva !== undefined) { champs.push('assujetti_tva = ?'); valeurs.push(p.assujettiTva ? 1 : 0); }
+  if (!champs.length) return c.json({ erreur: 'Aucun champ à mettre à jour' }, 400);
+
+  await c.env.DB.prepare(`UPDATE entreprise SET ${champs.join(', ')} WHERE id = ?`)
+    .bind(...valeurs, entrepriseId)
+    .run();
+  return c.json({ ok: true });
+});
+
+/** Paramètres fiscaux actuels (pour pré-remplir l'écran Réglages). */
+entreprises.get('/:id/parametres', async (c) => {
+  const entrepriseId = c.req.param('id');
+  const role = await rolePourEntreprise(c.env.DB, c.get('utilisateurId'), entrepriseId);
+  if (!role) return c.json({ erreur: 'Accès refusé' }, 403);
+
+  const ent = await c.env.DB.prepare(
+    'SELECT raison_sociale, niu, secteur, nature_activite, regime_fiscal, adherent_cga, assujetti_tva FROM entreprise WHERE id = ?',
+  ).bind(entrepriseId).first();
+  if (!ent) return c.json({ erreur: 'Entreprise introuvable' }, 404);
+  return c.json(ent);
+});
+
 /** Modules actifs de l'entreprise (lus dans sa base dédiée). */
 entreprises.get('/:id/modules', async (c) => {
   const utilisateurId = c.get('utilisateurId');
