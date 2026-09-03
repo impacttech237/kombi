@@ -20,6 +20,7 @@ const zEntreeStock = z.object({
   tiersId: z.string().nullish(),
   tauxTva: zTauxTva.optional().default(0),
   dateOperation: zDateISO.nullish(),
+  dateEcheance: zDateISO.nullish(),
   clientUuid: z.string().nullish(),
 }).refine((v) => v.aCredit || v.modePaiement, { message: 'Mode de paiement requis (ou achat à crédit)' })
   .refine((v) => !v.aCredit || v.tiersId, { message: 'Un fournisseur est requis pour un achat à crédit' });
@@ -61,6 +62,7 @@ produits.post('/:id/entree', requirePermission('stock:manage'), async (c) => {
     produitId: c.req.param('id'), quantite: e.quantite, coutUnitaire: e.coutUnitaire,
     modePaiement: e.modePaiement ?? null, aCredit: e.aCredit, tiersId: e.tiersId ?? null,
     tauxTva: e.tauxTva, regimeFiscal, dateOperation: e.dateOperation ?? null, clientUuid: e.clientUuid ?? null,
+    dateEcheance: e.dateEcheance ?? null,
   }, { utilisateurId: c.get('utilisateurId'), role: c.get('role') });
   return c.json(res);
 });

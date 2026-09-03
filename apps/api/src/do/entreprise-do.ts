@@ -58,6 +58,8 @@ export interface VenteEntree {
   dateOperation?: string | null;
   /** Régime fiscal courant de l'entreprise (lu en D1 par la route) — la TVA est interdite à l'IGS. */
   regimeFiscal?: string | null;
+  /** Date à laquelle le client doit régler (uniquement pertinent si `aCredit`). */
+  dateEcheance?: string | null;
 }
 
 export class EntrepriseDO extends DurableObject {
@@ -511,10 +513,11 @@ export class EntrepriseDO extends DurableObject {
       const venteId = uid();
       this.sql.exec(
         `INSERT INTO vente (id, exercice_id, date, tiers_id, mode_paiement, total_ht, total_tva, total_ttc,
-                            statut, ecriture_id, caissier_id, client_uuid)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                            statut, ecriture_id, caissier_id, client_uuid, date_echeance)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         venteId, exerciceId, dateOp, v.tiersId ?? null, v.aCredit ? null : v.modePaiement, totalHt, totalTva, totalTtc,
         v.aCredit ? 'a_credit' : 'payee', ecritureId, v.caissierId ?? null, v.clientUuid ?? null,
+        v.aCredit ? (v.dateEcheance ?? null) : null,
       );
       let ordre = 0;
       for (const l of calc) {
@@ -600,13 +603,15 @@ export class EntrepriseDO extends DurableObject {
 
   /** Ventes à crédit non soldées (« on me doit ») — pour l'écran créances. */
   async listerVentesACredit(): Promise<Record<string, unknown>[]> {
-    return this.sql.exec(
-      `SELECT v.id, v.date, v.total_ttc, v.statut, t.nom AS tiers_nom,
+    const rows = this.sql.exec(
+      `SELECT v.id, v.date, v.total_ttc, v.statut, v.date_echeance, t.nom AS tiers_nom,
               COALESCE((SELECT SUM(montant) FROM paiement_vente WHERE vente_id = v.id), 0) AS regle
          FROM vente v LEFT JOIN tiers t ON t.id = v.tiers_id
         WHERE v.statut IN ('a_credit', 'payee_partiellement')
         ORDER BY v.date ASC`,
-    ).toArray() as never;
+    ).toArray() as (Record<string, unknown> & { date_echeance: string | null })[];
+    const aujourdhui = this.dateCourante();
+    return rows.map((r) => ({ ...r, enRetard: r.date_echeance !== null && r.date_echeance < aujourdhui }));
   }
 
   /** Historique des ventes récentes (écran caisse — pour retrouver une vente à annuler). */
@@ -758,7 +763,7 @@ export class EntrepriseDO extends DurableObject {
   async entrerStock(a: {
     produitId: string; quantite: number; coutUnitaire: number; modePaiement?: string | null;
     aCredit?: boolean; tiersId?: string | null; tauxTva?: number; regimeFiscal?: string | null;
-    dateOperation?: string | null; clientUuid?: string | null;
+    dateOperation?: string | null; clientUuid?: string | null; dateEcheance?: string | null;
   }, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }): Promise<{ nouveauStock: number; nouveauCmp: number }> {
     if (a.clientUuid) {
       const ex = this.sql.exec('SELECT id FROM mouvement_stock WHERE client_uuid = ?', a.clientUuid).toArray()[0];
@@ -830,9 +835,9 @@ export class EntrepriseDO extends DurableObject {
       if (a.aCredit) {
         achatId = uid();
         this.sql.exec(
-          `INSERT INTO achat_fournisseur (id, exercice_id, tiers_id, date, total_ht, total_tva, total_ttc, statut, ecriture_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'a_credit', ?)`,
-          achatId, exerciceId, a.tiersId, dateOp, montantHt, montantTva, montantRegle, ecritureId,
+          `INSERT INTO achat_fournisseur (id, exercice_id, tiers_id, date, total_ht, total_tva, total_ttc, statut, ecriture_id, date_echeance)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'a_credit', ?, ?)`,
+          achatId, exerciceId, a.tiersId, dateOp, montantHt, montantTva, montantRegle, ecritureId, a.dateEcheance ?? null,
         );
         this.sql.exec(
           `INSERT INTO ligne_achat (id, achat_id, produit_id, quantite, cout_unitaire, montant_ht)
@@ -956,13 +961,15 @@ export class EntrepriseDO extends DurableObject {
 
   /** Dettes fournisseurs non soldées (« ce que je dois »). */
   async listerDettesFournisseurs(): Promise<Record<string, unknown>[]> {
-    return this.sql.exec(
-      `SELECT a.id, a.date, a.total_ttc, a.statut, t.nom AS tiers_nom,
+    const rows = this.sql.exec(
+      `SELECT a.id, a.date, a.total_ttc, a.statut, a.date_echeance, t.nom AS tiers_nom,
               COALESCE((SELECT SUM(montant) FROM paiement_achat WHERE achat_id = a.id), 0) AS regle
          FROM achat_fournisseur a LEFT JOIN tiers t ON t.id = a.tiers_id
         WHERE a.statut IN ('a_credit', 'payee_partiellement')
         ORDER BY a.date ASC`,
-    ).toArray() as never;
+    ).toArray() as (Record<string, unknown> & { date_echeance: string | null })[];
+    const aujourdhui = this.dateCourante();
+    return rows.map((r) => ({ ...r, enRetard: r.date_echeance !== null && r.date_echeance < aujourdhui }));
   }
 
   // ══════════════ Facturation & devis ══════════════

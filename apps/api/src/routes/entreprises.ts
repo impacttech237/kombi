@@ -60,6 +60,7 @@ const zParametres = z.object({
   niu: z.string().trim().max(32).nullish(),
   adherentCga: z.boolean().optional(),
   assujettiTva: z.boolean().optional(),
+  noteFacture: z.string().trim().max(400).nullish(),
 });
 
 /**
@@ -83,6 +84,7 @@ entreprises.patch('/:id', async (c) => {
   if (p.niu !== undefined) { champs.push('niu = ?'); valeurs.push(p.niu || null); }
   if (p.adherentCga !== undefined) { champs.push('adherent_cga = ?'); valeurs.push(p.adherentCga ? 1 : 0); }
   if (p.assujettiTva !== undefined) { champs.push('assujetti_tva = ?'); valeurs.push(p.assujettiTva ? 1 : 0); }
+  if (p.noteFacture !== undefined) { champs.push('note_facture = ?'); valeurs.push(p.noteFacture || null); }
   if (!champs.length) return c.json({ erreur: 'Aucun champ à mettre à jour' }, 400);
 
   await c.env.DB.prepare(`UPDATE entreprise SET ${champs.join(', ')} WHERE id = ?`)
@@ -98,7 +100,7 @@ entreprises.get('/:id/parametres', async (c) => {
   if (!role) return c.json({ erreur: 'Accès refusé' }, 403);
 
   const ent = await c.env.DB.prepare(
-    'SELECT raison_sociale, niu, secteur, nature_activite, regime_fiscal, adherent_cga, assujetti_tva FROM entreprise WHERE id = ?',
+    'SELECT raison_sociale, niu, secteur, nature_activite, regime_fiscal, adherent_cga, assujetti_tva, note_facture FROM entreprise WHERE id = ?',
   ).bind(entrepriseId).first();
   if (!ent) return c.json({ erreur: 'Entreprise introuvable' }, 404);
   return c.json(ent);

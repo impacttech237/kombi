@@ -21,7 +21,7 @@ async function rejouer(m: Mutation): Promise<void> {
         modePaiement: (p.modePaiement as string | undefined) ?? null,
         aCredit: p.aCredit as boolean | undefined,
         tiersId: (p.tiersId as string | undefined) ?? null,
-        clientUuid: m.clientUuid,
+        clientUuid: m.clientUuid, dateEcheance: (p.dateEcheance as string | undefined) ?? null,
       });
       return;
     case 'depense':
@@ -44,6 +44,7 @@ async function rejouer(m: Mutation): Promise<void> {
         modePaiement: (p.modePaiement as string | undefined) ?? null, aCredit: p.aCredit as boolean | undefined,
         tiersId: (p.tiersId as string | undefined) ?? null, tauxTva: p.tauxTva as number | undefined,
         clientUuid: m.clientUuid, dateOperation: (p.dateOperation as string | undefined) ?? null,
+        dateEcheance: (p.dateEcheance as string | undefined) ?? null,
       });
       return;
     case 'paiement_vente':

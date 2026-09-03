@@ -9,7 +9,7 @@ export interface DonneesFacture {
   tiers_nom?: string; tiers_niu?: string; tiers_adresse?: string;
   lignes: { designation: string; quantite: number; prix_unitaire: number; taux_tva: number; montant_ht: number }[];
 }
-export interface Emetteur { raisonSociale: string; niu?: string | null; }
+export interface Emetteur { raisonSociale: string; niu?: string | null; noteFacture?: string | null; }
 
 const fmt = (n: number) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' FCFA';
 const VERT = rgb(0.063, 0.471, 0.31); // #10784f approx accent
@@ -82,7 +82,21 @@ export async function genererFacturePDF(f: DonneesFacture, e: Emetteur): Promise
   txt('Total TTC', 380, y - 42, 12, true, VERT);
   txt(fmt(f.total_ttc), width - M - 110, y - 42, 12, true, VERT);
 
-  // Pied
+  // Pied — note personnalisée de l'entreprise (coordonnées bancaires, remerciement, conditions…,
+  // voir Paramètres fiscaux), puis la mention système. Repliée sur plusieurs lignes au besoin
+  // (pdf-lib ne fait pas de wrap automatique) : ~100 caractères tient sur la largeur A4 en taille 8.
+  if (e.noteFacture) {
+    const mots = e.noteFacture.split(/\s+/);
+    let ligneCourante = '';
+    const lignesNote: string[] = [];
+    for (const mot of mots) {
+      const essai = ligneCourante ? `${ligneCourante} ${mot}` : mot;
+      if (essai.length > 100) { lignesNote.push(ligneCourante); ligneCourante = mot; } else { ligneCourante = essai; }
+    }
+    if (ligneCourante) lignesNote.push(ligneCourante);
+    let noteY = 40 + lignesNote.slice(0, 3).length * 11;
+    for (const l of lignesNote.slice(0, 3)) { txt(l, M, noteY, 8, false, rgb(0.5, 0.55, 0.52)); noteY -= 11; }
+  }
   txt('Correction éventuelle par avoir. Généré par Kombi.', M, 40, 8, false, rgb(0.5, 0.55, 0.52));
 
   return doc.save();

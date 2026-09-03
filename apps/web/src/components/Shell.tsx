@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { listerNotifications, type NotificationActive } from '../lib/api.js';
 import {
   IcoHome, IcoCart, IcoFile, IcoBox, IcoWlt, IcoBell, IcoLayers, IcoX, IcoChevR, IcoGrid,
-  IcoUser, IcoUsers, IcoClipboard, IcoBarChart, IcoSettings, Avatar,
+  IcoUser, IcoUsers, IcoClipboard, IcoBarChart, IcoSettings, IcoTrendDown, IcoHandCoins, IcoLogOut, Avatar,
 } from './icons.js';
 
 export interface NavItem {
@@ -22,10 +22,9 @@ export interface NavItem {
 /**
  * Architecture de navigation (validée avec le porteur du projet, 2026-09-03) : le prototype est
  * conçu mobile-first et ne doit pas être surchargé — seuls 4 onglets restent visibles en
- * permanence, tout le reste vit dans la feuille « Menu », organisée en 2 groupes (même
- * traitement visuel que la section « Administration » de la Sidebar du prototype). Dépenses n'a
- * PAS d'entrée dédiée : elle rejoint le flux de transactions de l'écran Trésorerie (à faire lors
- * du portage de cet écran), au même titre que Créances/Dettes (argent pas encore encaissé/payé).
+ * permanence, tout le reste vit dans la feuille « Menu », organisée en groupes (même traitement
+ * visuel que la section « Administration » de la Sidebar du prototype). Dépenses/Créances/Dettes
+ * ont leur propre groupe « Finances » dans ce menu (plus d'écran dédié requis).
  */
 const PRIMARY_TABS: NavItem[] = [
   { code: 'dashboard', label: 'Tableau de bord', short: 'Accueil', Icon: IcoHome },
@@ -40,13 +39,19 @@ const MENU_MODULES: NavItem[] = [
   { code: 'tiers', label: 'Clients & Fournisseurs', short: 'Tiers', Icon: IcoUser },
 ];
 
+const MENU_FINANCES: NavItem[] = [
+  { code: 'depenses', label: 'Dépenses', short: 'Dépenses', Icon: IcoTrendDown },
+  { code: 'creances', label: 'Créances (on me doit)', short: 'Créances', Icon: IcoHandCoins },
+  { code: 'dettes', label: 'Dettes (je dois)', short: 'Dettes', Icon: IcoHandCoins },
+];
+
 const MENU_ADMIN: NavItem[] = [
   { code: 'compta', label: 'Comptabilité (OHADA)', short: 'Compta', Icon: IcoBarChart },
   { code: 'equipe', label: 'Équipe', short: 'Équipe', Icon: IcoUsers },
   { code: 'parametres', label: 'Paramètres fiscaux', short: 'Réglages', Icon: IcoSettings },
 ];
 
-const ALL_NAV = [...PRIMARY_TABS, ...MENU_MODULES, ...MENU_ADMIN];
+const ALL_NAV = [...PRIMARY_TABS, ...MENU_MODULES, ...MENU_FINANCES, ...MENU_ADMIN];
 
 function useNotifications(entrepriseId: string | undefined) {
   const [notifs, setNotifs] = useState<NotificationActive[] | null>(null);
@@ -86,8 +91,8 @@ function NotifSheet({ notifs, onClose }: {
   );
 }
 
-export function Sidebar({ active, onNav, nomEntreprise, nomUtilisateur }: {
-  active: string; onNav: (code: string) => void; nomEntreprise: string; nomUtilisateur: string;
+export function Sidebar({ active, onNav, nomEntreprise, nomUtilisateur, onLogout }: {
+  active: string; onNav: (code: string) => void; nomEntreprise: string; nomUtilisateur: string; onLogout: () => void;
 }) {
   return (
     <aside className="hidden md:flex w-60 flex-col bg-[#0a1408] border-r border-[#1e3222] shrink-0">
@@ -127,6 +132,17 @@ export function Sidebar({ active, onNav, nomEntreprise, nomUtilisateur }: {
         ))}
 
         <div className="my-3 border-t border-[#1e3222]" />
+        <p className="px-3 text-[#3d5c44] text-xs font-medium uppercase tracking-wide mb-1">Finances</p>
+
+        {MENU_FINANCES.map(({ code, label, Icon }) => (
+          <button key={code} onClick={() => onNav(code)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${active === code ? 'bg-[#b4e033] text-[#0e1c0f]' : 'text-[#6b9165] hover:bg-[#1e3222] hover:text-[#edf5ea]'}`}>
+            <Icon />
+            <span className="flex-1 text-left">{label}</span>
+          </button>
+        ))}
+
+        <div className="my-3 border-t border-[#1e3222]" />
         <p className="px-3 text-[#3d5c44] text-xs font-medium uppercase tracking-wide mb-1">Administration</p>
 
         {MENU_ADMIN.map(({ code, label, Icon }) => (
@@ -138,7 +154,7 @@ export function Sidebar({ active, onNav, nomEntreprise, nomUtilisateur }: {
         ))}
       </nav>
 
-      <div className="px-4 py-4 border-t border-[#1e3222]">
+      <div className="px-4 py-4 border-t border-[#1e3222] space-y-3">
         <div className="flex items-center gap-3">
           <Avatar name={nomUtilisateur} size="sm" />
           <div className="flex-1 min-w-0">
@@ -146,6 +162,11 @@ export function Sidebar({ active, onNav, nomEntreprise, nomUtilisateur }: {
           </div>
           <span className="w-2 h-2 rounded-full bg-[#4ade80] shrink-0" title="En ligne" />
         </div>
+        <button onClick={onLogout}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[#6b9165] hover:bg-[#1e3222] hover:text-[#f87171] transition-all">
+          <IcoLogOut />
+          <span className="flex-1 text-left">Se déconnecter</span>
+        </button>
       </div>
     </aside>
   );
@@ -195,14 +216,15 @@ export function TopBar({ active, isOnline, entrepriseId, nomUtilisateur, onNav }
   );
 }
 
-export function BottomNav({ active, onNav, masquer = [] }: {
-  active: string; onNav: (code: string) => void; masquer?: string[];
+export function BottomNav({ active, onNav, masquer = [], onLogout }: {
+  active: string; onNav: (code: string) => void; masquer?: string[]; onLogout: () => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const mainItems = PRIMARY_TABS.filter((n) => !masquer.includes(n.code));
   const menuModules = MENU_MODULES.filter((n) => !masquer.includes(n.code));
+  const menuFinances = MENU_FINANCES.filter((n) => !masquer.includes(n.code));
   const menuAdmin = MENU_ADMIN.filter((n) => !masquer.includes(n.code));
-  const overflowItems = [...menuModules, ...menuAdmin];
+  const overflowItems = [...menuModules, ...menuFinances, ...menuAdmin];
   const menuActive = showMenu || overflowItems.some((n) => n.code === active);
 
   const navigate = (code: string) => { onNav(code); setShowMenu(false); };
@@ -273,14 +295,29 @@ export function BottomNav({ active, onNav, masquer = [] }: {
                   </div>
                 </>
               )}
+              {menuFinances.length > 0 && (
+                <>
+                  <p className="text-[#3d5c44] text-xs font-medium uppercase tracking-wider px-1 mb-2 mt-1">Finances</p>
+                  <div className="space-y-2 mb-4">
+                    {menuFinances.map((item) => <MenuItemButton key={item.code} item={item} active={active} onClick={() => navigate(item.code)} />)}
+                  </div>
+                </>
+              )}
               {menuAdmin.length > 0 && (
                 <>
                   <p className="text-[#3d5c44] text-xs font-medium uppercase tracking-wider px-1 mb-2">Administration</p>
-                  <div className="space-y-2">
+                  <div className="space-y-2 mb-4">
                     {menuAdmin.map((item) => <MenuItemButton key={item.code} item={item} active={active} onClick={() => navigate(item.code)} />)}
                   </div>
                 </>
               )}
+              <button onClick={() => { setShowMenu(false); onLogout(); }}
+                className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl bg-[#1e3222] border border-[#2a4230] text-[#f87171] active:scale-[.98] transition-all">
+                <div className="w-10 h-10 rounded-full bg-[#2a4230] flex items-center justify-center shrink-0">
+                  <IcoLogOut />
+                </div>
+                <span className="flex-1 text-left font-medium text-sm">Se déconnecter</span>
+              </button>
             </div>
           </div>
         </div>
@@ -307,20 +344,20 @@ function MenuItemButton({ item, active, onClick }: { item: NavItem; active: stri
   );
 }
 
-export function AppShell({ active, onNav, nomEntreprise, nomUtilisateur, entrepriseId, isOnline, masquer, children }: {
+export function AppShell({ active, onNav, nomEntreprise, nomUtilisateur, entrepriseId, isOnline, masquer, onLogout, children }: {
   active: string; onNav: (code: string) => void; nomEntreprise: string; nomUtilisateur: string;
-  entrepriseId: string | undefined; isOnline: boolean; masquer?: string[]; children: React.ReactNode;
+  entrepriseId: string | undefined; isOnline: boolean; masquer?: string[]; onLogout: () => void; children: React.ReactNode;
 }) {
   return (
     <div className="min-h-screen flex bg-[#0e1c0f]">
-      <Sidebar active={active} onNav={onNav} nomEntreprise={nomEntreprise} nomUtilisateur={nomUtilisateur} />
+      <Sidebar active={active} onNav={onNav} nomEntreprise={nomEntreprise} nomUtilisateur={nomUtilisateur} onLogout={onLogout} />
       <div className="flex-1 flex flex-col min-w-0">
         <TopBar active={active} isOnline={isOnline} entrepriseId={entrepriseId} nomUtilisateur={nomUtilisateur} onNav={onNav} />
         <main className="flex-1 overflow-y-auto pb-28 md:pb-6">{children}</main>
       </div>
-      <BottomNav active={active} onNav={onNav} masquer={masquer} />
+      <BottomNav active={active} onNav={onNav} masquer={masquer} onLogout={onLogout} />
     </div>
   );
 }
 
-export { PRIMARY_TABS, MENU_MODULES, MENU_ADMIN };
+export { PRIMARY_TABS, MENU_MODULES, MENU_FINANCES, MENU_ADMIN };

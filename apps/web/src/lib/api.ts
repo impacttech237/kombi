@@ -41,12 +41,13 @@ export const creerEntreprise = (data: {
 // ── Paramètres entreprise (fiscal) ──
 export interface ParametresEntreprise {
   raison_sociale: string; niu: string | null; secteur: string; nature_activite: string;
-  regime_fiscal: string; adherent_cga: number; assujetti_tva: number;
+  regime_fiscal: string; adherent_cga: number; assujetti_tva: number; note_facture: string | null;
 }
 export const getParametresEntreprise = (entrepriseId: string) =>
   api<ParametresEntreprise>(`/api/entreprises/${entrepriseId}/parametres`);
 export const majParametresEntreprise = (
-  entrepriseId: string, data: { niu?: string | null; adherentCga?: boolean; assujettiTva?: boolean },
+  entrepriseId: string,
+  data: { niu?: string | null; adherentCga?: boolean; assujettiTva?: boolean; noteFacture?: string | null },
 ) => api<{ ok: boolean }>(`/api/entreprises/${entrepriseId}`, { method: 'PATCH', body: data });
 
 // ── Équipe (membres & rôles) ──
@@ -68,7 +69,7 @@ export const enregistrerVente = (
   entrepriseId: string,
   data: {
     lignes: LigneCaisse[]; modePaiement?: string | null; aCredit?: boolean;
-    tiersId?: string | null; clientUuid: string;
+    tiersId?: string | null; clientUuid: string; dateEcheance?: string | null;
   },
 ) => api<{ venteId: string; totalTtc: number; enSurvente: boolean }>('/api/ventes', { method: 'POST', body: data, entrepriseId });
 
@@ -78,6 +79,7 @@ export const payerVente = (
 
 export interface VenteACredit {
   id: string; date: string; total_ttc: number; statut: string; tiers_nom: string | null; regle: number;
+  date_echeance: string | null; enRetard: boolean;
 }
 export const listerVentesACredit = (entrepriseId: string) =>
   api<{ ventes: VenteACredit[] }>('/api/ventes/credit', { entrepriseId }).then((r) => r.ventes);
@@ -146,6 +148,7 @@ export const approvisionner = (
   data: {
     quantite: number; coutUnitaire: number; modePaiement?: string | null; aCredit?: boolean;
     tiersId?: string | null; tauxTva?: number; clientUuid?: string; dateOperation?: string | null;
+    dateEcheance?: string | null;
   },
 ) => api<{ nouveauStock: number; nouveauCmp: number }>(
   `/api/produits/${produitId}/entree`, { method: 'POST', body: data, entrepriseId },
@@ -154,6 +157,7 @@ export const approvisionner = (
 // ── Dettes fournisseurs (« ce que je dois ») ──
 export interface DetteFournisseur {
   id: string; date: string; total_ttc: number; statut: string; tiers_nom: string | null; regle: number;
+  date_echeance: string | null; enRetard: boolean;
 }
 export const listerDettesFournisseurs = (entrepriseId: string) =>
   api<{ dettes: DetteFournisseur[] }>('/api/achats/dettes', { entrepriseId }).then((r) => r.dettes);

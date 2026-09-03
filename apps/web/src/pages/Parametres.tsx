@@ -37,6 +37,7 @@ export function Parametres({ entreprise, onRetour }: { entreprise: EntrepriseRes
   const [niu, setNiu] = useState('');
   const [adherentCga, setAdherentCga] = useState(false);
   const [assujettiTva, setAssujettiTva] = useState(false);
+  const [noteFacture, setNoteFacture] = useState('');
   const [charge, setCharge] = useState(false);
   const [erreur, setErreur] = useState('');
   const [succes, setSucces] = useState(false);
@@ -44,13 +45,16 @@ export function Parametres({ entreprise, onRetour }: { entreprise: EntrepriseRes
   useEffect(() => {
     getParametresEntreprise(entreprise.id).then((p) => {
       setParams(p); setNiu(p.niu ?? ''); setAdherentCga(p.adherent_cga === 1); setAssujettiTva(p.assujetti_tva === 1);
+      setNoteFacture(p.note_facture ?? '');
     }).catch((e) => setErreur(e instanceof Error ? e.message : 'Erreur'));
   }, [entreprise.id]);
 
   async function enregistrer() {
     setCharge(true); setErreur(''); setSucces(false);
     try {
-      await majParametresEntreprise(entreprise.id, { niu: niu.trim() || null, adherentCga, assujettiTva });
+      await majParametresEntreprise(entreprise.id, {
+        niu: niu.trim() || null, adherentCga, assujettiTva, noteFacture: noteFacture.trim() || null,
+      });
       setSucces(true);
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur');
@@ -99,6 +103,14 @@ export function Parametres({ entreprise, onRetour }: { entreprise: EntrepriseRes
               </p>
             </div>
           )}
+
+          <div>
+            <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Note personnalisée sur vos factures</label>
+            <textarea value={noteFacture} onChange={(e) => setNoteFacture(e.target.value)} rows={3} maxLength={400}
+              placeholder="Coordonnées bancaires, remerciement, conditions de paiement…"
+              className="w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none resize-none" />
+            <p className="text-[#4a6b4a] text-[10px] mt-1">Affichée en bas de vos factures et devis PDF.</p>
+          </div>
 
           {erreur && <p className="text-[#f87171] text-xs">{erreur}</p>}
           {succes && <p className="text-[#4ade80] text-xs">Paramètres enregistrés.</p>}

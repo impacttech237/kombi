@@ -71,7 +71,9 @@ export function Creances({ entreprise, onRetour }: { entreprise: EntrepriseResum
         ) : (
           <>
             {ventes!.map((v) => (
-              <LigneCreance key={v.id} titre={v.tiers_nom ?? 'Client'} sousTitre="Vente à crédit" du={v.total_ttc - v.regle}
+              <LigneCreance key={v.id} titre={v.tiers_nom ?? 'Client'}
+                sousTitre={v.date_echeance ? `Vente à crédit · échéance ${v.date_echeance}` : 'Vente à crédit'}
+                du={v.total_ttc - v.regle} enRetard={v.enRetard}
                 onPayer={(montant, mode) => encaisserOffline(entreprise.id, 'paiement_vente', 'venteId', v.id, montant, mode)}
                 onFait={recharger} />
             ))}

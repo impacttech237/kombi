@@ -11,6 +11,7 @@ const zVente = z.object({
   tiersId: z.string().nullish(),
   clientUuid: z.string().nullish(),
   dateOperation: zDateISO.nullish(),
+  dateEcheance: zDateISO.nullish(),
 }).refine((v) => v.aCredit || v.modePaiement, { message: 'Mode de paiement requis (ou vente à crédit)' })
   .refine((v) => !v.aCredit || v.tiersId, { message: 'Un client est requis pour une vente à crédit' });
 
@@ -35,6 +36,7 @@ ventes.post('/', requirePermission('vente:create'), async (c) => {
   const res = await stubEntreprise(c.env, entrepriseId).enregistrerVente({
     lignes, modePaiement: v.modePaiement ?? null, aCredit: v.aCredit, tiersId: v.tiersId ?? null, caissierId,
     clientUuid: v.clientUuid ?? null, dateOperation: v.dateOperation ?? null, regimeFiscal,
+    dateEcheance: v.dateEcheance ?? null,
   }, { utilisateurId: caissierId, role: c.get('role') });
   return c.json(res, res.deja ? 200 : 201);
 });

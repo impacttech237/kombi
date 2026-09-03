@@ -86,9 +86,15 @@ function LigneDette({ entreprise, dette, onFait }: {
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-[#edf5ea] font-medium text-sm truncate">{dette.tiers_nom ?? 'Fournisseur'}</p>
-          <p className="text-[#4a6b4a] text-xs mt-0.5">{dette.statut === 'payee_partiellement' ? 'Partiellement réglée' : 'Achat à crédit'}</p>
+          <p className="text-[#4a6b4a] text-xs mt-0.5">
+            {dette.statut === 'payee_partiellement' ? 'Partiellement réglée' : 'Achat à crédit'}
+            {dette.date_echeance ? ` · échéance ${dette.date_echeance}` : ''}
+          </p>
         </div>
-        <p className="text-[#f87171] font-mono font-semibold text-sm shrink-0">{fmt(du)}</p>
+        <div className="text-right shrink-0">
+          <p className="text-[#f87171] font-mono font-semibold text-sm">{fmt(du)}</p>
+          {dette.enRetard && <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-[#f87171]/15 text-[#f87171] mt-0.5 inline-block">En retard</span>}
+        </div>
         <button onClick={() => setOuvert(!ouvert)}
           className="bg-[#1e3222] text-[#edf5ea] text-xs px-3 py-2 rounded-xl font-medium border border-[#2a4230] shrink-0">
           Régler

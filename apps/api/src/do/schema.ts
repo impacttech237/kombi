@@ -402,6 +402,18 @@ const MIGRATION_V11_PIECE_DEPENSE = `
 ALTER TABLE depense ADD COLUMN piece_cle TEXT
 `;
 
+/**
+ * v12 — Date d'échéance sur une créance (vente à crédit) ou une dette (achat à crédit) : jusqu'ici
+ * seule `facture.date_echeance` existait — une vente/achat à crédit enregistré directement depuis
+ * la Caisse/le Stock (sans passer par une facture) n'avait aucun moyen d'indiquer quand le client
+ * doit payer ou quand le fournisseur doit être payé, ni de calcul de retard.
+ */
+const MIGRATION_V12_ECHEANCE_CREDIT = `
+ALTER TABLE vente ADD COLUMN date_echeance TEXT
+--##
+ALTER TABLE achat_fournisseur ADD COLUMN date_echeance TEXT
+`;
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -457,7 +469,9 @@ export const MIGRATIONS_DO: readonly MigrationDO[] = [
   { v: 10, statements: statementsDe(MIGRATION_V10_IDEMPOTENCE_COMMANDE) },
   // v11 — pièce justificative (photo/scan) attachée à une dépense.
   { v: 11, statements: statementsDe(MIGRATION_V11_PIECE_DEPENSE) },
-  // v12… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v12 — date d'échéance sur une créance/dette née d'une vente/achat à crédit (hors facture).
+  { v: 12, statements: statementsDe(MIGRATION_V12_ECHEANCE_CREDIT) },
+  // v13… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */

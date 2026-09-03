@@ -21,7 +21,7 @@ import { Comptabilite } from './pages/Comptabilite.js';
 import { Tresorerie } from './pages/Tresorerie.js';
 import { AppShell } from './components/Shell.js';
 import { OfflineBanner } from './components/OfflineBanner.js';
-import { Bouton, Logo } from './components/ui.js';
+import { Logo } from './components/ui.js';
 import { IcoOk, IcoCart, IcoChevR, IcoBox, IcoFile, IcoUser, IcoWlt } from './components/icons.js';
 
 /**
@@ -128,10 +128,7 @@ function Espace() {
 
   const role = active.role as RoleMembre;
   // Architecture de nav validée le 2026-09-03 (voir docs/parcours.md « Refonte design system ») :
-  // 4 onglets fixes + feuille Menu (Modules/Administration). Créances/Dettes (argent pas encore
-  // encaissé/payé) n'ont pas d'entrée dédiée — restent accessibles via la rangée sous le contenu
-  // en attendant un futur écran dédié ; Dépenses est atteignable depuis Trésorerie (bouton
-  // « Sortie ») en plus de cette même rangée.
+  // 4 onglets fixes + feuille Menu (Modules/Finances/Administration) — voir components/Shell.tsx.
   const masquer = [
     ...(active.secteur === 'service' || !peut(role, 'stock:read') ? ['stock'] : []),
     ...(peut(role, 'compta:read') ? [] : ['compta', 'tresorerie']),
@@ -141,12 +138,16 @@ function Espace() {
     ...(peut(role, 'commande:read') ? [] : ['commandes']),
     ...(peut(role, 'membre:manage') ? [] : ['equipe']),
     ...(peut(role, 'entreprise:manage') ? [] : ['parametres']),
+    ...(peut(role, 'depense:read') ? [] : ['depenses']),
+    ...(peut(role, 'vente:read') ? [] : ['creances']),
+    ...(peut(role, 'achat:read') ? [] : ['dettes']),
   ];
   const nomUtilisateur = session?.user?.name?.trim() || active.raison_sociale;
 
   return (
     <AppShell active={onglet} onNav={setOnglet} nomEntreprise={active.raison_sociale}
-      nomUtilisateur={nomUtilisateur} entrepriseId={active.id} isOnline={navigator.onLine} masquer={masquer}>
+      nomUtilisateur={nomUtilisateur} entrepriseId={active.id} isOnline={navigator.onLine} masquer={masquer}
+      onLogout={deconnexion}>
       <div className="px-4 pt-4 md:px-8 md:pt-6">
         <OfflineBanner />
         {onglet === 'dashboard' && justCreated ? <WelcomeBanner onNav={(m) => { setJustCreated(false); setOnglet(m); }} />
@@ -165,22 +166,6 @@ function Espace() {
           : onglet === 'tresorerie'
             ? <Tresorerie entreprise={active} onCaisse={() => setOnglet('caisse')} onDepenses={() => setOnglet('depenses')} />
           : <Comptabilite entreprise={active} />}
-
-        {/* Temporaire : Créances/Dettes n'ont pas encore d'écran dédié dans le nouveau design
-            (voir commentaire plus haut). Se déconnecter n'a pas encore de nouvel emplacement
-            (profil ?). */}
-        <div className="flex justify-center flex-wrap gap-2 mt-6 mb-24 md:mb-6">
-          {peut(role, 'depense:read') && (
-            <Bouton variante="ghost" onClick={() => setOnglet('depenses')}>Dépenses</Bouton>
-          )}
-          {peut(role, 'vente:read') && (
-            <Bouton variante="ghost" onClick={() => setOnglet('creances')}>Créances</Bouton>
-          )}
-          {peut(role, 'achat:read') && (
-            <Bouton variante="ghost" onClick={() => setOnglet('dettes')}>Dettes</Bouton>
-          )}
-          <Bouton variante="ghost" onClick={deconnexion}>Se déconnecter</Bouton>
-        </div>
       </div>
     </AppShell>
   );

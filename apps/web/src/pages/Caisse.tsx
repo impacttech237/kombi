@@ -170,6 +170,7 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
   const [remiseGlobale, setRemiseGlobale] = useState('');
   const [montantRecu, setMontantRecu] = useState('');
   const [tiersId, setTiersId] = useState('');
+  const [dateEcheance, setDateEcheance] = useState('');
   const [clientSearch, setClientSearch] = useState('');
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClientNom, setNewClientNom] = useState('');
@@ -231,7 +232,7 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
   function resetAll() {
     setPanier([]); setShowCart(false); setShowPay(false); setRecu(null);
     setRemiseGlobale(''); setMontantRecu(''); setSaleMode('comptant');
-    setTiersId(''); setClientSearch(''); setShowNewClient(false); setNewClientNom(''); setErreur('');
+    setTiersId(''); setClientSearch(''); setShowNewClient(false); setNewClientNom(''); setDateEcheance(''); setErreur('');
   }
 
   async function creerClientRapide() {
@@ -260,6 +261,7 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
         payload: {
           lignes: lignesFinales.map(({ remisePct: _remisePct, ...l }) => l),
           modePaiement: aCredit ? null : mode, aCredit, tiersId: tiersId || null,
+          dateEcheance: aCredit ? (dateEcheance || null) : null,
         },
       });
       await synchroniser();
@@ -532,6 +534,13 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
               ) : (
                 <div>
                   <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-wide mb-3">Client (obligatoire)</p>
+                  {tiersId && (
+                    <div className="mb-3">
+                      <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-wide mb-2">Échéance de paiement (optionnel)</p>
+                      <input type="date" value={dateEcheance} onChange={(e) => setDateEcheance(e.target.value)}
+                        className="w-full bg-[#1e3222] text-[#edf5ea] rounded-xl px-4 py-3 text-sm border border-[#2a4230] focus:border-[#fbbf24] focus:outline-none transition-colors" />
+                    </div>
+                  )}
                   {tiersId ? (
                     <div className="flex items-center gap-3 bg-[#1e3222] rounded-2xl p-3.5 border border-[#fbbf24]/30">
                       <Avatar name={tiers.find((t) => t.id === tiersId)?.nom ?? '?'} size="sm" />

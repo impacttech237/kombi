@@ -9,8 +9,8 @@ import { formaterFCFA as fmt } from '@kombi/shared';
 import { TAUX_TVA_EFFECTIF } from '@kombi/fiscal';
 import {
   listerFactures, creerFacture, emettreFacture, creerAvoir, convertirDevisEnFacture,
-  listerTiers, creerTiers, urlPdfFacture, fichierPdfFacture,
-  type EntrepriseResume, type FactureResume, type Tiers, type LigneFacture,
+  listerTiers, creerTiers, urlPdfFacture, fichierPdfFacture, listerProduits,
+  type EntrepriseResume, type FactureResume, type Tiers, type LigneFacture, type Produit,
 } from '../lib/api.js';
 import { enfilerMutation, nouvelUuid } from '../offline/db.js';
 import { synchroniser } from '../offline/sync.js';
@@ -413,13 +413,19 @@ function CreateWizard({ entreprise, onClose, onCreated }: {
   const [newCliSheet, setNewCliSheet] = useState(false);
   const [newCliNom, setNewCliNom] = useState('');
   const [newCliTel, setNewCliTel] = useState('');
-  type WizLine = { id: string; desc: string; qty: string; unitPrice: string };
+  type WizLine = { id: string; desc: string; qty: string; unitPrice: string; produitId?: string };
   const [lignes, setLignes] = useState<WizLine[]>([{ id: '1', desc: '', qty: '1', unitPrice: '' }]);
   const [dueDate, setDueDate] = useState('');
   const [charge, setCharge] = useState(false);
   const [erreur, setErreur] = useState('');
+  const [produits, setProduits] = useState<Produit[]>([]);
+  const [pickerLigneId, setPickerLigneId] = useState<string | null>(null);
+  const [produitSearch, setProduitSearch] = useState('');
 
-  useEffect(() => { listerTiers(entreprise.id).then(setTiers).catch(() => {}); }, [entreprise.id]);
+  useEffect(() => {
+    listerTiers(entreprise.id).then((ts) => setTiers(ts.filter((t) => t.type === 'client' || t.type === 'les_deux'))).catch(() => {});
+    listerProduits(entreprise.id).then(setProduits).catch(() => {});
+  }, [entreprise.id]);
 
   const tvaApplicable = entreprise.regime_fiscal !== 'igs' && entreprise.assujetti_tva === 1;
   function ligneTotal(l: WizLine) { return Math.round((parseFloat(l.qty) || 0) * (parseFloat(l.unitPrice) || 0)); }
@@ -444,10 +450,10 @@ function CreateWizard({ entreprise, onClose, onCreated }: {
   }
 
   async function enregistrerBrouillon() {
-    if (!clientId) return;
+    if (!clientId) { setErreur('Choisissez un client avant d\'enregistrer.'); setStep(2); return; }
     const lignesReelles: LigneFacture[] = lignes.filter((l) => l.desc.trim())
       .map((l) => ({ designation: l.desc.trim(), quantite: parseFloat(l.qty) || 1, prixUnitaire: parseFloat(l.unitPrice) || 0 }));
-    if (!lignesReelles.length) return;
+    if (!lignesReelles.length) { setErreur('Ajoutez au moins une ligne avec une désignation.'); setStep(3); return; }
     setCharge(true); setErreur('');
     try {
       await creerFacture(entreprise.id, { type, tiersId: clientId, lignes: lignesReelles, dateEcheance: dueDate || undefined, clientUuid: nouvelUuid() });
@@ -458,11 +464,16 @@ function CreateWizard({ entreprise, onClose, onCreated }: {
   }
 
   const filteredCli = tiers.filter((t) => t.nom.toLowerCase().includes(clientSearch.toLowerCase()));
+  const filteredProduits = produits.filter((p) => p.nom.toLowerCase().includes(produitSearch.toLowerCase()));
   const step2Valid = !!clientId;
   const step3Valid = lignes.some((l) => l.desc.trim());
   const selClient = tiers.find((t) => t.id === clientId);
 
-  function goNext() { setStep((s) => (Math.min(4, s + 1) as 1 | 2 | 3 | 4)); }
+  function goNext() {
+    if (step === 2 && !step2Valid) { setErreur('Choisissez un client pour continuer.'); return; }
+    setErreur('');
+    setStep((s) => (Math.min(4, s + 1) as 1 | 2 | 3 | 4));
+  }
   function goBack() { setStep((s) => (Math.max(1, s - 1) as 1 | 2 | 3 | 4)); }
 
   return (
@@ -582,8 +593,16 @@ function CreateWizard({ entreprise, onClose, onCreated }: {
                       <button onClick={() => removeLigne(l.id)} className="text-[#f87171] text-xs"><IcoX cls="w-3.5 h-3.5" /></button>
                     )}
                   </div>
-                  <input value={l.desc} onChange={(e) => updateLigne(l.id, 'desc', e.target.value)} placeholder="Désignation"
-                    className="w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-3 py-2.5 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none" />
+                  <div className="flex gap-2">
+                    <input value={l.desc} onChange={(e) => updateLigne(l.id, 'desc', e.target.value)} placeholder="Désignation"
+                      className="flex-1 min-w-0 bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-3 py-2.5 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none" />
+                    {produits.length > 0 && (
+                      <button type="button" onClick={() => { setPickerLigneId(l.id); setProduitSearch(''); }}
+                        className="shrink-0 bg-[#1e3222] text-[#b4e033] rounded-xl px-3 py-2.5 text-xs font-medium border border-[#b4e033]/30">
+                        Catalogue
+                      </button>
+                    )}
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[#4a6b4a] text-[10px] font-medium block mb-1">Quantité</label>
@@ -627,6 +646,46 @@ function CreateWizard({ entreprise, onClose, onCreated }: {
           </div>
         )}
 
+        {pickerLigneId && (
+          <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/60" onClick={() => setPickerLigneId(null)}>
+            <div className="bg-[#162419] rounded-t-3xl overflow-hidden max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <div className="w-10 h-1 bg-[#2a4230] rounded-full mx-auto mt-3 mb-1 shrink-0" />
+              <div className="px-5 pt-3 pb-2 flex items-center justify-between shrink-0">
+                <p className="text-[#edf5ea] font-semibold text-base">Choisir un article / service</p>
+                <button onClick={() => setPickerLigneId(null)} className="w-7 h-7 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+                  <IcoX cls="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="px-4 pb-2 shrink-0">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4a6b4a]"><IcoSearch cls="w-4 h-4" /></span>
+                  <input value={produitSearch} onChange={(e) => setProduitSearch(e.target.value)} placeholder="Rechercher..." autoFocus
+                    className="w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl pl-9 pr-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none" />
+                </div>
+              </div>
+              <div className="overflow-y-auto px-4 pb-8 space-y-1.5">
+                {filteredProduits.length === 0 ? (
+                  <p className="text-[#4a6b4a] text-sm text-center py-8">Aucun article trouvé.</p>
+                ) : filteredProduits.map((p) => (
+                  <button key={p.id} onClick={() => {
+                    const id = pickerLigneId;
+                    setLignes((prev) => prev.map((l) => (l.id === id
+                      ? { ...l, desc: p.nom, unitPrice: String(p.prix_vente), produitId: p.id } : l)));
+                    setPickerLigneId(null);
+                  }}
+                    className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm text-left bg-[#1e3222] border border-[#2a4230] hover:border-[#b4e033]/40 transition-all">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[#edf5ea] font-medium truncate">{p.nom}</p>
+                      {p.sku && <p className="text-[#4a6b4a] text-xs font-mono">{p.sku}</p>}
+                    </div>
+                    <span className="text-[#b4e033] font-mono text-sm font-semibold shrink-0">{fmt(p.prix_vente)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {step === 4 && (
           <div className="pt-5 space-y-4">
             <div>
@@ -662,23 +721,23 @@ function CreateWizard({ entreprise, onClose, onCreated }: {
                 ))}
               </div>
             </div>
-            {erreur && <p className="text-[#f87171] text-xs">{erreur}</p>}
           </div>
         )}
       </div>
 
+      {erreur && <p className="text-[#f87171] text-xs px-4 pb-2">{erreur}</p>}
       <div className="border-t border-[#1e3222] px-4 py-3 flex gap-2 bg-[#0a1408] shrink-0">
-        <button onClick={enregistrerBrouillon} disabled={charge || !step2Valid || !step3Valid}
+        <button onClick={enregistrerBrouillon} disabled={charge}
           className="flex-1 bg-[#1e3222] text-[#6b9165] rounded-xl py-3 text-xs font-medium border border-[#2a4230] disabled:opacity-40">
           Enregistrer le brouillon
         </button>
         {step < 4 ? (
-          <button onClick={goNext} disabled={step === 2 && !step2Valid}
-            className={`flex-1 rounded-xl py-3 text-sm font-semibold transition-all ${(step === 2 && !step2Valid) ? 'bg-[#1e3222] text-[#4a6b4a]' : 'bg-[#b4e033] text-[#0e1c0f] active:scale-[0.98]'}`}>
+          <button onClick={goNext}
+            className="flex-1 rounded-xl py-3 text-sm font-semibold transition-all bg-[#b4e033] text-[#0e1c0f] active:scale-[0.98]">
             Continuer →
           </button>
         ) : (
-          <button onClick={enregistrerBrouillon} disabled={charge || !step2Valid || !step3Valid}
+          <button onClick={enregistrerBrouillon} disabled={charge}
             className="flex-1 bg-[#b4e033] text-[#0e1c0f] rounded-xl py-3 text-sm font-bold active:scale-[0.98] transition-all disabled:opacity-40">
             {charge ? '…' : 'Créer le brouillon'}
           </button>

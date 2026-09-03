@@ -234,6 +234,7 @@ function ApprovisionnerSheet({ entreprise, produit, onClose, onFait }: {
   const [fournisseurs, setFournisseurs] = useState<Tiers[]>([]);
   const [fournisseurId, setFournisseurId] = useState('');
   const [nouveauFournisseur, setNouveauFournisseur] = useState('');
+  const [dateEcheance, setDateEcheance] = useState('');
   const [charge, setCharge] = useState(false);
   const [erreur, setErreur] = useState('');
   const tvaEligible = entreprise.regime_fiscal !== 'igs' && entreprise.assujetti_tva === 1;
@@ -257,6 +258,7 @@ function ApprovisionnerSheet({ entreprise, produit, onClose, onFait }: {
           produitId: produit.id, quantite: Number(qte), coutUnitaire: Number(cout),
           modePaiement: aCredit ? null : mode, aCredit, tiersId: aCredit ? tiersId : null,
           tauxTva: avecTva ? TAUX_TVA_EFFECTIF : 0, dateOperation: null,
+          dateEcheance: aCredit ? (dateEcheance || null) : null,
         },
       });
       await synchroniser();
@@ -298,6 +300,9 @@ function ApprovisionnerSheet({ entreprise, produit, onClose, onFait }: {
             {!fournisseurId && (
               <Champ label="Nom du fournisseur"><input value={nouveauFournisseur} onChange={(e) => setNouveauFournisseur(e.target.value)} placeholder="Ex. Grossiste Awa" className={inputCls} /></Champ>
             )}
+            <Champ label="Échéance de paiement (optionnel)">
+              <input type="date" value={dateEcheance} onChange={(e) => setDateEcheance(e.target.value)} className={inputCls} />
+            </Champ>
           </>
         ) : (
           <Champ label="Payé par">
