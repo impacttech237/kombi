@@ -79,8 +79,22 @@ SQLite embarqué** (`ctx.storage.sql`) — D1 est lui-même bâti sur ce mécani
 - La colonne `entreprise_id` disparaît des tables tenant (redondante : le DO EST la frontière).
 - `TenantDb` (couture applicative) est retirée : remplacée par la frontière physique du DO.
 
-## Décisions ouvertes (à trancher / valider ONECCA)
+## D14 — Validation ONECCA des 8 points ouverts (2026-09-03)
+Réponses transmises par le porteur du projet, basées sur le SYSCOHADA révisé, le CGI camerounais
+et les pratiques DGI/ONECCA. Détail complet : `docs/reference/09-validations-onecca.md`.
+Résumé des actions :
+- **Correctif appliqué** : sous-comptes Mobile Money — MTN MoMo et Orange Money partagent le même
+  compte racine **552** (subdivisé en `5521`/`5522`), pas deux comptes racine distincts comme
+  précédemment modélisé (`552` vs `553` — `553` est en réalité « carte péage », sans rapport).
+- **Correctif à appliquer** : le reçu de caisse doit porter le NIU du vendeur (mention minimale
+  confirmée) — absent aujourd'hui de `EntrepriseResume` et du reçu généré par `Caisse.tsx`.
+- **Confirmé déjà conforme, aucun changement** : CAC 10 % sur l'IGS (`igs.ts`), minimum de
+  perception IS 2 %/2,2 % (`is.ts`, pas encore branché à une route), secteurs toujours au Réel
+  (`regime.ts`), CMP comme méthode de valorisation stock, facture PDF (NIU + numérotation +
+  HT/TVA/TTC).
+- **Comptes réservés pour une implémentation future** (rien à construire immédiatement) : RRR
+  609/709, escomptes 673/773, frais Mobile Money 6312, écarts 658/758/47, compte 890 pour
+  l'écriture d'à-nouveau à la clôture.
+
+## Décisions ouvertes (restantes)
 - Décompte exact des « 2 ans » de maintien de régime (exercices civils vs glissants).
-- Base précise du minimum de perception IS (2 % de quoi).
-- Mentions minimales d'un reçu de caisse (vs facture normalisée).
-- Acceptabilité de l'inventaire permanent pour une TPE au SMT (sinon repli intermittent).

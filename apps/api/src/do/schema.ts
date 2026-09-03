@@ -365,6 +365,23 @@ CREATE UNIQUE INDEX idx_tiers_client_uuid ON tiers(client_uuid) WHERE client_uui
 CREATE UNIQUE INDEX idx_mouvement_stock_client_uuid ON mouvement_stock(client_uuid) WHERE client_uuid IS NOT NULL
 `;
 
+/**
+ * v9 — Correction des comptes Mobile Money (validation ONECCA, voir docs/reference/09-
+ * validations-onecca.md §1) : MTN MoMo et Orange Money partagent le compte racine 552
+ * (Téléphone portable), sous-compte par opérateur — PAS deux comptes racine distincts comme
+ * précédemment modélisé (l'ancien '553' est en réalité « carte péage », sans rapport). Les
+ * comptes 552/553 mal nommés restent en base pour les entreprises déjà créées (une écriture
+ * validée est immuable, on ne réécrit jamais son compte) ; seuls les NOUVEAUX encaissements
+ * postent désormais sur 5521/5522 (voir `COMPTE_TRESORERIE_PAR_MODE`).
+ */
+const MIGRATION_V9_COMPTES_MOMO = `
+INSERT OR IGNORE INTO compte_comptable (id, numero, libelle, classe, type)
+VALUES (lower(hex(randomblob(16))), '5521', 'Mobile Money — Orange Money', 5, 'actif')
+--##
+INSERT OR IGNORE INTO compte_comptable (id, numero, libelle, classe, type)
+VALUES (lower(hex(randomblob(16))), '5522', 'Mobile Money — MTN MoMo', 5, 'actif')
+`;
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -414,7 +431,9 @@ export const MIGRATIONS_DO: readonly MigrationDO[] = [
   { v: 7, statements: statementsDe(MIGRATION_V7_DEVIS) },
   // v8 — idempotence offline des encaissements (client_uuid sur paiement_vente/facture/achat).
   { v: 8, statements: statementsDe(MIGRATION_V8_IDEMPOTENCE_PAIEMENTS) },
-  // v9… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v9 — comptes Mobile Money corrigés (5521/5522 au lieu de 552/553, validation ONECCA).
+  { v: 9, statements: statementsDe(MIGRATION_V9_COMPTES_MOMO) },
+  // v10… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */

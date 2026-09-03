@@ -1,6 +1,7 @@
 /**
  * Impôt sur les Sociétés (IS) — CGI 2026, Art. 17, 17 bis, 22.
- * Voir docs/reference/04-is.md. Fondations pour V1 (DSF) — calcul complet à valider ONECCA.
+ * Voir docs/reference/04-is.md et 09-validations-onecca.md §6 (minimum de perception et base
+ * confirmés). Fondations pour V1 (DSF) — pas encore branché à une route/écran.
  */
 
 import { arrondirFCFA, type FCFA } from '@kombi/shared';
@@ -26,7 +27,8 @@ export interface ResultatIS {
 
 /**
  * Calcule l'IS dû = max(bénéfice * taux, minimum de perception), CAC inclus.
- * baseReference = base du minimum de perception (à cadrer précisément avec ONECCA).
+ * baseReference = CA HT de l'exercice précédent (confirmé, docs/reference/09-validations-
+ * onecca.md §6) — à alimenter ainsi par l'appelant le jour où l'IS complet est câblé.
  */
 export function calculerIS(
   beneficeNetFiscal: FCFA,

@@ -740,8 +740,9 @@ export class EntrepriseDO extends DurableObject {
    * écart n'est pas une nouvelle entrée à un coût différent). Écriture symétrique de l'inventaire
    * permanent (`docs/reference/08-stock-inventaire-permanent.md`) : perte (delta < 0) = débit 6031
    * / crédit 311, comme une sortie sans vente ; surplus (delta > 0) = débit 311 / crédit 6031,
-   * comme une entrée sans achat. Le compte précis pour ce cas (6031 vs 658) reste « à valider
-   * ONECCA » selon la doc de référence — 6031 retenu par cohérence avec le mécanisme déjà en place.
+   * comme une entrée sans achat. Validé ONECCA (docs/reference/09-validations-onecca.md §2) :
+   * 6031 est la base correcte pour tout ajustement ; router les cas anormaux/significatifs (vol
+   * notamment) vers 658 en plus serait une amélioration future, pas un correctif requis ici.
    */
   async ajusterStock(
     a: { produitId: string; delta: number; motif: string },
@@ -1490,7 +1491,7 @@ export class EntrepriseDO extends DurableObject {
       ).toArray()[0] as { net: number };
       return row.net;
     };
-    return { especes: net('571'), mtnMomo: net('552'), orangeMoney: net('553'), banque: net('521') };
+    return { especes: net('571'), mtnMomo: net('5522'), orangeMoney: net('5521'), banque: net('521') };
   }
 
   /** Journal général : liste des écritures validées, la plus récente en premier. */

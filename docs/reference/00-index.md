@@ -29,6 +29,7 @@ doivent implémenter **exactement** ces règles — aucune valeur codée en dur 
 - [06-etats-financiers.md](06-etats-financiers.md) — Système Normal / SMT (le « allégé » n'existe plus), seuils
 - [07-ventes-facturation.md](07-ventes-facturation.md) — vente ≠ facture (CGI Art. 150), numérotation
 - [08-stock-inventaire-permanent.md](08-stock-inventaire-permanent.md) — inventaire permanent, CMP, comptes 31/601/6031
+- [09-validations-onecca.md](09-validations-onecca.md) — réponses aux 8 points « à valider ONECCA » (sous-comptes MoMo, écarts, RRR/escomptes, clôture 8xx, CAC/IS/secteurs Réel, FEC/DSF, CMP vs PEPS)
 
 ## Discipline de maintenance
 - Chaque règle porte : **valeur + article source + date de validité**.

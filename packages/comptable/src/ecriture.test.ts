@@ -16,14 +16,14 @@ describe('Génération d\'écritures — partie double', () => {
     expect(estEquilibree(e)).toBe(true);
   });
 
-  it('recette MTN MoMo : débit 552', () => {
+  it('recette MTN MoMo : débit 5522 (sous-compte du 552 Téléphone portable, validation ONECCA)', () => {
     const e = genererRecette({
       montantHT: 5_000,
       modePaiement: 'mtn_momo',
       compteProduit: '706',
       libelle: 'Service',
     });
-    expect(e.lignes[0]!.compteNumero).toBe('552');
+    expect(e.lignes[0]!.compteNumero).toBe('5522');
     expect(estEquilibree(e)).toBe(true);
   });
 

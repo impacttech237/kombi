@@ -653,15 +653,34 @@ Chaque write DOIT chaîner `requirePermission` + `validerBody` (aujourd'hui inco
 
 ---
 
-# Annexe A — Points à valider par l'ONECCA (avant « la compta est juste »)
-1. Sous-comptes Mobile Money (551/552/553/554) et rôle du **585** (transit).
-2. Traitement des écarts de rapprochement et d'inventaire (47 / 603x / 658-758).
-3. Comptes RRR, escomptes (773/673), frais MoMo (6312).
+# Annexe A — Points ONECCA : ✅ validés le 2026-09-03
+
+Les 8 points ci-dessous sont **résolus** — réponses complètes dans
+`docs/reference/09-validations-onecca.md`, décision journalisée en `DECISIONS.md` D14.
+Résumé (✅ = confirmé conforme au code existant, 🔧 = correctif appliqué/à appliquer,
+⏳ = référence prête pour une fonctionnalité pas encore construite) :
+
+1. Sous-comptes Mobile Money (551/552/553/554) et rôle du **585** (transit). → 🔧 MTN/Orange
+   partagent le compte racine 552 (`5521`/`5522`), pas deux racines distinctes ; 585 = transit
+   uniquement, pas encore mouvementé (virement interne = Phase P1).
+2. Traitement des écarts de rapprochement et d'inventaire (47 / 603x / 658-756). → ⏳ 6031 (déjà
+   en place) reste la base correcte ; 658 pour les cas anormaux/significatifs = amélioration
+   future, pas un correctif urgent.
+3. Comptes RRR, escomptes (773/673), frais MoMo (6312). → ⏳ aucune fonctionnalité RRR/escompte
+   construite ; comptes réservés pour plus tard.
 4. Regroupement **8xx** à la clôture (SMT vs Normal) ; forme de l'écriture d'à-nouveau de reprise.
-5. Base du **CAC sur l'IGS** ; périodicité et forme de la **liquidation TVA**.
-6. Base du **minimum de perception IS** ; périmètre des réintégrations/déductions ; liste des secteurs « toujours au Réel ».
-7. Structure **FEC** et **DSF** attendues par la DGI camerounaise ; mentions minimales d'un reçu de caisse vs facture normalisée.
-8. Choix **CMP vs PEPS** pour les entités au SMT.
+   → ⏳ compte 890 pour l'à-nouveau ; référence prête pour la future clôture d'exercice.
+5. Base du **CAC sur l'IGS** ; périodicité et forme de la **liquidation TVA**. → ✅ CAC 10 % déjà
+   correctement appliqué dans `igs.ts` ; liquidation TVA mensuelle (15 du mois suivant) reste à
+   construire (Phase P2).
+6. Base du **minimum de perception IS** ; réintégrations/déductions ; secteurs « toujours au
+   Réel ». → ✅ minimum 2 %/2,2 % déjà correct dans `is.ts` (pas encore branché à une route) ;
+   `SECTEURS_TOUJOURS_REEL` déjà conforme dans `regime.ts`.
+7. Structure **FEC** et **DSF** ; mentions minimales d'un reçu de caisse vs facture normalisée.
+   → 🔧 le reçu de caisse doit porter le NIU du vendeur (confirmé mention minimale) — absent
+   aujourd'hui, à ajouter ; facture PDF déjà conforme ; FEC/DSF restent à construire (P3/V1).
+8. Choix **CMP vs PEPS** pour les entités au SMT. → ✅ CMP déjà le choix retenu depuis l'origine
+   (décision D7), confirmé conforme.
 
 # Annexe B — Priorités P0 (fondations bloquantes)
 1. **Versioning du schéma DO** (§III-9) — *prérequis technique de tout le reste du modèle de données.*

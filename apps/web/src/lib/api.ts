@@ -24,6 +24,7 @@ export async function api<T = unknown>(
 export interface EntrepriseResume {
   id: string;
   raison_sociale: string;
+  niu: string | null;
   secteur: string;
   regime_fiscal: string;
   assujetti_tva: number;

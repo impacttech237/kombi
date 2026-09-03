@@ -25,8 +25,11 @@ export const PLAN_COMPTABLE_DEFAUT: readonly CompteDefaut[] = [
   // Classe 5 — Trésorerie
   { numero: '521', libelle: 'Banques locales', classe: 5, type: 'actif' },
   { numero: '531', libelle: 'Chèques postaux', classe: 5, type: 'actif' },
-  { numero: '552', libelle: 'Mobile Money MTN MoMo', classe: 5, type: 'actif' }, // choix modélisation
-  { numero: '553', libelle: 'Mobile Money Orange Money', classe: 5, type: 'actif' }, // choix modélisation
+  // 552 = Téléphone portable (SYSCOHADA), sous-compte par opérateur — validé ONECCA,
+  // voir docs/reference/09-validations-onecca.md §1 (corrige 552 vs 553 = deux comptes racine
+  // distincts, faux : 553 est en réalité « carte péage », sans rapport avec le Mobile Money).
+  { numero: '5521', libelle: 'Mobile Money — Orange Money', classe: 5, type: 'actif' },
+  { numero: '5522', libelle: 'Mobile Money — MTN MoMo', classe: 5, type: 'actif' },
   { numero: '571', libelle: 'Caisse', classe: 5, type: 'actif' },
   { numero: '585', libelle: 'Virements de fonds (transit)', classe: 5, type: 'actif' },
   // Classe 6 — Charges (dépenses)
@@ -58,7 +61,7 @@ export const COMPTE_TRESORERIE_PAR_MODE: Record<string, string> = {
   especes: '571',
   virement: '521',
   cheque: '521',
-  mtn_momo: '552',
-  orange_money: '553',
+  mtn_momo: '5522',
+  orange_money: '5521',
   autre: '571',
 };

@@ -275,10 +275,10 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   (`mouvement_stock` type `ajustement`, déjà prévu au schéma mais jamais exposé) et génère
   l'écriture symétrique de l'inventaire permanent — perte = débit 6031 / crédit 311, surplus =
   débit 311 / crédit 6031, au CMP courant (le CMP n'est pas recalculé, un écart n'est pas une
-  nouvelle entrée à un coût différent). Le compte précis (6031 vs 658) reste **« à valider
-  ONECCA »** selon `docs/reference/08-stock-inventaire-permanent.md` — 6031 retenu par cohérence
-  avec le mécanisme déjà en place, à corriger si le comptable tranche autrement. Écran dans
-  `Stock.tsx` (bouton « Ajuster » par produit, perte/surplus + motif).
+  nouvelle entrée à un coût différent). Compte 6031 **validé ONECCA**
+  (`docs/reference/09-validations-onecca.md` §2) : router les cas anormaux/significatifs (vol
+  notamment) vers 658 en plus resterait une amélioration future, pas un correctif requis. Écran
+  dans `Stock.tsx` (bouton « Ajuster » par produit, perte/surplus + motif).
 - ⬜ 🟡 Unités réelles (sac/carton/kg) + variantes
 - ⬜ ⚪ Code-barres · multi-entrepôts
 
@@ -301,6 +301,10 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   **assujetties TVA au régime réel** (`regime_fiscal !== 'igs' && assujetti_tva === 1`) —
   conforme à `docs/reference/07-ventes-facturation.md` : l'obligation de facture normalisée pèse
   sur les assujettis TVA, pas sur les TPE à l'IGS (qui peuvent facturer un client anonyme).
+- ✅ NIU vendeur sur le reçu de caisse (mentions minimales, `docs/reference/09-validations-
+  onecca.md` §7) : `EntrepriseResume` ne portait pas le NIU (seule la facture l'exposait) — le
+  reçu WhatsApp et le reçu imprimé de `Caisse.tsx` n'affichaient jamais le NIU de l'entreprise.
+  Ajouté au `SELECT` de `GET /api/entreprises`, à l'interface TS, et aux deux rendus du reçu.
 - ⬜ ⚪ Vrai brouillon modifiable (émission non forcée)
 
 ## Paramètres entreprise
@@ -335,7 +339,7 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 ## Pilotage / tableau de bord
 - ✅ Retirer le faux graphe (`FauxGraphe`) → vraies données (`tendance7Jours`, 7 derniers jours)
 - ✅ Trésorerie du jour (espèces + MoMo/Orange) : `tresorerieDuJour()` agrège le mouvement net
-  (débit − crédit) des comptes 571/552/553/521 pour les écritures datées aujourd'hui — capture
+  (débit − crédit) des comptes 571/5521/5522/521 pour les écritures datées aujourd'hui — capture
   toute opération qui les mouvemente (vente comptant, dépense, encaissement de créance, règlement
   de dette), peu importe sa source, puisqu'elles postent toutes sur ces mêmes comptes. Carte
   dashboard réservée à `compta:read`.
@@ -444,10 +448,22 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ⬜ 🟡 Import bancaire / mobile money — réintégrer
 - ⬜ ⚪ Version anglaise (Cameroun anglophone)
 
-## ⚖️ À valider ONECCA avant « la compta est juste »
-Base du CAC sur l'IGS · base du minimum de perception IS · assiette exacte du CA IGS ·
-réintégrations/déductions IS · CMP vs PEPS pour SMT · écarts d'inventaire · mentions minimales
-reçu vs facture · liste des secteurs « toujours au Réel ».
+## ✅ Validation ONECCA des 8 points ouverts (2026-09-03)
+Réponses transmises par le porteur du projet (SYSCOHADA révisé + CGI Cameroun + pratiques
+DGI/ONECCA) sur les 8 points listés ci-dessus. Détail des 8 réponses et de l'impact code par
+point : `docs/reference/09-validations-onecca.md` (voir aussi `DECISIONS.md` D14). Un seul point
+reste réellement ouvert : le décompte exact des « 2 ans » de maintien de régime (exercices civils
+vs glissants). Ce qui a changé dans le code suite à cette validation :
+- 🔧 **Comptes Mobile Money corrigés** : `552`/`553` étaient traités à tort comme deux comptes
+  racine distincts (un par opérateur) ; en réalité 552 « Téléphone portable » est le compte racine
+  unique du Mobile Money, à subdiviser par opérateur, et 553 est sans rapport (carte péage).
+  Introduit `5521` (Orange Money) / `5522` (MTN MoMo), migration DO v9 (backfill des entreprises
+  déjà créées, `initialiser()` ne s'exécutant qu'une fois), `COMPTE_TRESORERIE_PAR_MODE` et
+  `tresorerieDuJour()` mis à jour. Voir `packages/comptable/src/plan-comptable.ts` et
+  `apps/api/src/do/entreprise-do.ts`.
+- ✅ Le reste (ajustement de stock sur 6031, base de l'IS = CA HT exercice précédent, CAC sur IGS
+  et TVA, secteurs toujours au Réel) confirme le code existant sans changement requis, seuls les
+  commentaires « à valider ONECCA » ont été retirés.
 
 ---
 

@@ -133,7 +133,7 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
 
   if (succes !== null) {
     const texteRecu = [
-      entreprise.raison_sociale, '',
+      entreprise.raison_sociale, entreprise.niu ? `NIU : ${entreprise.niu}` : null, '',
       ...succes.lignes.map((l) => `${l.quantite} × ${l.designation} — ${formaterFCFA(l.quantite * l.prixUnitaire)}`),
       '', succes.tvaApplicable ? `Total HT : ${formaterFCFA(succes.totalHt)}` : null,
       succes.tvaApplicable ? `TVA 19,25% : ${formaterFCFA(succes.totalTva)}` : null,
@@ -165,7 +165,8 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
           )}
 
           <div className="carte" id="recu-impression" style={{ textAlign: 'left', margin: '16px 0', fontSize: 13 }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>{entreprise.raison_sociale}</div>
+            <div style={{ fontWeight: 700 }}>{entreprise.raison_sociale}</div>
+            {entreprise.niu && <div className="muet" style={{ marginBottom: 6 }}>NIU : {entreprise.niu}</div>}
             {succes.client && <div className="muet" style={{ marginBottom: 6 }}>Client : {succes.client}</div>}
             {succes.lignes.map((l, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
