@@ -14,7 +14,9 @@ const zVente = z.object({
 }).refine((v) => v.aCredit || v.modePaiement, { message: 'Mode de paiement requis (ou vente à crédit)' })
   .refine((v) => !v.aCredit || v.tiersId, { message: 'Un client est requis pour une vente à crédit' });
 
-const zPaiementVente = z.object({ montant: zMontantPositif, modePaiement: zModePaiement });
+const zPaiementVente = z.object({
+  montant: zMontantPositif, modePaiement: zModePaiement, clientUuid: z.string().nullish(),
+});
 
 export const ventes = new Hono<AppEnv>();
 
@@ -43,7 +45,7 @@ ventes.post('/:id/payer', requirePermission('vente:create'), async (c) => {
   if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);
   const res = await stubEntreprise(c.env, c.get('entrepriseId')).payerVente(
     c.req.param('id'), corps.data.montant, corps.data.modePaiement,
-    { utilisateurId: c.get('utilisateurId'), role: c.get('role') },
+    { utilisateurId: c.get('utilisateurId'), role: c.get('role') }, corps.data.clientUuid ?? null,
   );
   return c.json(res);
 });

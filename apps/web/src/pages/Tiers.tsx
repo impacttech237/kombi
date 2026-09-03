@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA } from '@kombi/shared';
 import {
-  listerTiers, creerTiers, getTiersDetail,
+  listerTiers, getTiersDetail,
   type EntrepriseResume, type Tiers as TiersType, type TiersDetail,
 } from '../lib/api.js';
+import { enfilerMutation, nouvelUuid } from '../offline/db.js';
+import { synchroniser } from '../offline/sync.js';
 import { Bouton, Champ, Icon } from '../components/ui.js';
 
 const STATUT_LIBELLE: Record<string, string> = {
@@ -17,7 +19,7 @@ export function Tiers({ entreprise, onRetour }: { entreprise: EntrepriseResume; 
   const [vue, setVue] = useState<'liste' | 'nouveau'>('liste');
   const [selectionne, setSelectionne] = useState<string | null>(null);
 
-  function recharger() { listerTiers(entreprise.id).then(setListe).catch(() => setListe([])); }
+  function recharger() { listerTiers(entreprise.id).then(setListe).catch(() => setListe((p) => p ?? [])); }
   useEffect(recharger, [entreprise.id]);
 
   if (selectionne)
@@ -91,10 +93,16 @@ function NouveauTiers({ entreprise, onFait, onAnnuler }: {
     if (!nom.trim()) { setErreur('Nom requis'); return; }
     setCharge(true); setErreur('');
     try {
-      await creerTiers(entreprise.id, {
-        nom: nom.trim(), type, telephone: telephone || undefined, niu: niu || undefined,
-        email: email || undefined, adresse: adresse || undefined,
+      // Offline-first : enregistré localement (marche sans réseau), synchronisé dès que possible.
+      const clientUuid = nouvelUuid();
+      await enfilerMutation({
+        clientUuid, entrepriseId: entreprise.id, type: 'tiers',
+        payload: {
+          nom: nom.trim(), type, telephone: telephone || undefined, niu: niu || undefined,
+          email: email || undefined, adresse: adresse || undefined,
+        },
       });
+      void synchroniser();
       onFait();
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur');

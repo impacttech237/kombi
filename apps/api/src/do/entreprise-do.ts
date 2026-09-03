@@ -218,11 +218,16 @@ export class EntrepriseDO extends DurableObject {
   // ── Tiers (exemple d'accès aux données de l'entreprise) ──
   async creerTiers(t: {
     type: string; nom: string; niu?: string; telephone?: string; email?: string; adresse?: string;
+    clientUuid?: string | null;
   }): Promise<string> {
+    if (t.clientUuid) {
+      const ex = this.sql.exec('SELECT id FROM tiers WHERE client_uuid = ?', t.clientUuid).toArray()[0] as { id: string } | undefined;
+      if (ex) return ex.id;
+    }
     const id = uid();
     this.sql.exec(
-      'INSERT INTO tiers (id, type, nom, niu, telephone, email, adresse) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      id, t.type, t.nom, t.niu ?? null, t.telephone ?? null, t.email ?? null, t.adresse ?? null,
+      'INSERT INTO tiers (id, type, nom, niu, telephone, email, adresse, client_uuid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      id, t.type, t.nom, t.niu ?? null, t.telephone ?? null, t.email ?? null, t.adresse ?? null, t.clientUuid ?? null,
     );
     return id;
   }
@@ -430,8 +435,16 @@ export class EntrepriseDO extends DurableObject {
   /** Encaisse (total ou partiel) une vente à crédit : trésorerie / créance client 411. */
   async payerVente(
     venteId: string, montant: number, modePaiement: string,
-    acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
+    acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }, clientUuid?: string | null,
   ): Promise<{ statut: string; regle: number }> {
+    if (clientUuid) {
+      const ex = this.sql.exec('SELECT statut FROM vente WHERE id = ? AND EXISTS (SELECT 1 FROM paiement_vente WHERE client_uuid = ?)', venteId, clientUuid)
+        .toArray()[0] as { statut: string } | undefined;
+      if (ex) {
+        const regleRow = this.sql.exec('SELECT COALESCE(SUM(montant),0) AS p FROM paiement_vente WHERE vente_id = ?', venteId).toArray()[0] as { p: number };
+        return { statut: ex.statut, regle: regleRow.p };
+      }
+    }
     const vente = this.sql.exec('SELECT total_ttc, exercice_id, statut FROM vente WHERE id = ?', venteId)
       .toArray()[0] as { total_ttc: number; exercice_id: string; statut: string } | undefined;
     if (!vente) throw new Error('Vente introuvable');
@@ -456,8 +469,8 @@ export class EntrepriseDO extends DurableObject {
       this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
 
       this.sql.exec(
-        "INSERT INTO paiement_vente (id, vente_id, date, montant, mode_paiement, ecriture_id) VALUES (?, ?, date('now'), ?, ?, ?)",
-        uid(), venteId, montant, modePaiement, ecritureId,
+        "INSERT INTO paiement_vente (id, vente_id, date, montant, mode_paiement, ecriture_id, client_uuid) VALUES (?, ?, date('now'), ?, ?, ?, ?)",
+        uid(), venteId, montant, modePaiement, ecritureId, clientUuid ?? null,
       );
       const statut = regle >= vente.total_ttc ? 'payee' : 'payee_partiellement';
       this.sql.exec('UPDATE vente SET statut = ? WHERE id = ?', statut, venteId);
@@ -629,8 +642,16 @@ export class EntrepriseDO extends DurableObject {
   async entrerStock(a: {
     produitId: string; quantite: number; coutUnitaire: number; modePaiement?: string | null;
     aCredit?: boolean; tiersId?: string | null; tauxTva?: number; regimeFiscal?: string | null;
-    dateOperation?: string | null;
+    dateOperation?: string | null; clientUuid?: string | null;
   }, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }): Promise<{ nouveauStock: number; nouveauCmp: number }> {
+    if (a.clientUuid) {
+      const ex = this.sql.exec('SELECT id FROM mouvement_stock WHERE client_uuid = ?', a.clientUuid).toArray()[0];
+      if (ex) {
+        const prodEx = this.sql.exec('SELECT stock_actuel, cout_moyen_pondere FROM produit WHERE id = ?', a.produitId)
+          .toArray()[0] as { stock_actuel: number; cout_moyen_pondere: number };
+        return { nouveauStock: prodEx.stock_actuel, nouveauCmp: prodEx.cout_moyen_pondere };
+      }
+    }
     const prod = this.sql
       .exec('SELECT stock_actuel, cout_moyen_pondere FROM produit WHERE id = ?', a.produitId)
       .toArray()[0] as { stock_actuel: number; cout_moyen_pondere: number } | undefined;
@@ -658,9 +679,9 @@ export class EntrepriseDO extends DurableObject {
         etat.quantite, etat.cmp, a.produitId,
       );
       this.sql.exec(
-        `INSERT INTO mouvement_stock (id, produit_id, type, quantite, cout_unitaire, motif)
-         VALUES (?, ?, 'entree', ?, ?, 'Approvisionnement')`,
-        uid(), a.produitId, a.quantite, Math.floor(a.coutUnitaire),
+        `INSERT INTO mouvement_stock (id, produit_id, type, quantite, cout_unitaire, motif, client_uuid)
+         VALUES (?, ?, 'entree', ?, ?, 'Approvisionnement', ?)`,
+        uid(), a.produitId, a.quantite, Math.floor(a.coutUnitaire), a.clientUuid ?? null,
       );
 
       // Écriture : achat (601) [+ TVA récupérable 4452] réglé par trésorerie, ou par dette
@@ -769,8 +790,16 @@ export class EntrepriseDO extends DurableObject {
   /** Encaisse (total ou partiel) une dette fournisseur : dette 401 débitée / trésorerie créditée. */
   async payerAchat(
     achatId: string, montant: number, modePaiement: string,
-    acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
+    acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }, clientUuid?: string | null,
   ): Promise<{ statut: string; regle: number }> {
+    if (clientUuid) {
+      const ex = this.sql.exec('SELECT statut FROM achat_fournisseur WHERE id = ? AND EXISTS (SELECT 1 FROM paiement_achat WHERE client_uuid = ?)', achatId, clientUuid)
+        .toArray()[0] as { statut: string } | undefined;
+      if (ex) {
+        const regleRow = this.sql.exec('SELECT COALESCE(SUM(montant),0) AS p FROM paiement_achat WHERE achat_id = ?', achatId).toArray()[0] as { p: number };
+        return { statut: ex.statut, regle: regleRow.p };
+      }
+    }
     const achat = this.sql.exec('SELECT total_ttc, exercice_id, statut FROM achat_fournisseur WHERE id = ?', achatId)
       .toArray()[0] as { total_ttc: number; exercice_id: string; statut: string } | undefined;
     if (!achat) throw new Error('Achat introuvable');
@@ -795,8 +824,8 @@ export class EntrepriseDO extends DurableObject {
       this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
 
       this.sql.exec(
-        "INSERT INTO paiement_achat (id, achat_id, date, montant, mode_paiement, ecriture_id) VALUES (?, ?, date('now'), ?, ?, ?)",
-        uid(), achatId, montant, modePaiement, ecritureId,
+        "INSERT INTO paiement_achat (id, achat_id, date, montant, mode_paiement, ecriture_id, client_uuid) VALUES (?, ?, date('now'), ?, ?, ?, ?)",
+        uid(), achatId, montant, modePaiement, ecritureId, clientUuid ?? null,
       );
       const statut = regle >= achat.total_ttc ? 'regle' : 'payee_partiellement';
       this.sql.exec('UPDATE achat_fournisseur SET statut = ? WHERE id = ?', statut, achatId);
@@ -1030,8 +1059,16 @@ export class EntrepriseDO extends DurableObject {
   /** Encaisse (total ou partiel) une facture : trésorerie / créance client 411, met à jour le statut. */
   async payerFacture(
     factureId: string, montant: number, modePaiement: string,
-    acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
+    acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }, clientUuid?: string | null,
   ): Promise<{ statut: string; regle: number }> {
+    if (clientUuid) {
+      const ex = this.sql.exec('SELECT statut FROM facture WHERE id = ? AND EXISTS (SELECT 1 FROM paiement_facture WHERE client_uuid = ?)', factureId, clientUuid)
+        .toArray()[0] as { statut: string } | undefined;
+      if (ex) {
+        const regleRow = this.sql.exec('SELECT COALESCE(SUM(montant),0) AS p FROM paiement_facture WHERE facture_id = ?', factureId).toArray()[0] as { p: number };
+        return { statut: ex.statut, regle: regleRow.p };
+      }
+    }
     const f = this.sql.exec('SELECT total_ttc, exercice_id FROM facture WHERE id = ?', factureId)
       .toArray()[0] as { total_ttc: number; exercice_id: string } | undefined;
     if (!f) throw new Error('Facture introuvable');
@@ -1053,8 +1090,8 @@ export class EntrepriseDO extends DurableObject {
       this.sql.exec("UPDATE ecriture SET statut = 'validee' WHERE id = ?", ecritureId);
 
       this.sql.exec(
-        "INSERT INTO paiement_facture (id, facture_id, date, montant, mode_paiement, ecriture_id) VALUES (?, ?, date('now'), ?, ?, ?)",
-        uid(), factureId, montant, modePaiement, ecritureId,
+        "INSERT INTO paiement_facture (id, facture_id, date, montant, mode_paiement, ecriture_id, client_uuid) VALUES (?, ?, date('now'), ?, ?, ?, ?)",
+        uid(), factureId, montant, modePaiement, ecritureId, clientUuid ?? null,
       );
       const statut = regle >= f.total_ttc ? 'payee' : 'payee_partiellement';
       this.sql.exec('UPDATE facture SET statut = ? WHERE id = ?', statut, factureId);

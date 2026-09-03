@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { formaterFCFA } from '@kombi/shared';
 import { TAUX_TVA_EFFECTIF } from '@kombi/fiscal';
 import {
-  listerProduits, creerProduit, approvisionner, listerTiers, creerTiers, ajusterStock,
+  listerProduits, creerProduit, listerTiers, creerTiers, ajusterStock,
   type EntrepriseResume, type Produit, type Tiers,
 } from '../lib/api.js';
+import { enfilerMutation, nouvelUuid } from '../offline/db.js';
+import { synchroniser } from '../offline/sync.js';
 import { Bouton, Champ, Icon } from '../components/ui.js';
 
 export function Stock({ entreprise }: { entreprise: EntrepriseResume }) {
@@ -13,7 +15,7 @@ export function Stock({ entreprise }: { entreprise: EntrepriseResume }) {
   const [appro, setAppro] = useState<Produit | null>(null);
   const [ajust, setAjust] = useState<Produit | null>(null);
 
-  function recharger() { listerProduits(entreprise.id).then(setProduits).catch(() => setProduits([])); }
+  function recharger() { listerProduits(entreprise.id).then(setProduits).catch(() => setProduits((p) => p ?? [])); }
   useEffect(recharger, [entreprise.id]);
 
   if (vue === 'nouveau')
@@ -144,11 +146,18 @@ function Approvisionner({ entreprise, produit, onFait }: {
         tiersId = (await creerTiers(entreprise.id, { nom: nouveauFournisseur.trim(), type: 'fournisseur' })).tiersId;
       }
       if (aCredit && !tiersId) { setErreur('Choisissez ou créez un fournisseur'); setCharge(false); return; }
-      await approvisionner(entreprise.id, produit.id, {
-        quantite: Number(qte), coutUnitaire: Number(cout),
-        modePaiement: aCredit ? null : mode, aCredit, tiersId: aCredit ? tiersId : null,
-        tauxTva: avecTva ? TAUX_TVA_EFFECTIF : 0,
+      // Offline-first : enregistrée localement (marche sans réseau), synchronisée dès que possible.
+      // (créer un nouveau fournisseur à la volée reste en ligne uniquement, voir ci-dessus.)
+      const clientUuid = nouvelUuid();
+      await enfilerMutation({
+        clientUuid, entrepriseId: entreprise.id, type: 'stock_entree',
+        payload: {
+          produitId: produit.id, quantite: Number(qte), coutUnitaire: Number(cout),
+          modePaiement: aCredit ? null : mode, aCredit, tiersId: aCredit ? tiersId : null,
+          tauxTva: avecTva ? TAUX_TVA_EFFECTIF : 0,
+        },
       });
+      void synchroniser();
       onFait();
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur');

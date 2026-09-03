@@ -382,7 +382,18 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
 - ✅ Validation Zod sur les bodies à risque financier (ventes, dépenses, produits, factures) —
   montants entiers positifs, taux TVA bornés 0–1, dates ISO strictes
 - ✅ Rate limiting sur `/api/auth/*` (POST) : 10 req/min/IP, fenêtre fixe en D1
-- ⬜ 🟠 Offline étendu (factures/tiers/produits/encaissements) + cache lecture
+- ✅ Offline étendu (Phase P1 spec §5.2 : dépense, encaissement, tiers, produit) : la file de
+  mutations (`offline/db.ts`/`sync.ts`, jusqu'ici réservée à la vente) couvre maintenant la
+  création de dépense, la création de tiers (écran dédié — pas la création rapide en ligne
+  ailleurs, qui a besoin de l'ID immédiatement), l'entrée de stock comptant/à crédit (hors
+  création d'un nouveau fournisseur à la volée), et les trois encaissements (vente à crédit,
+  facture, dette fournisseur). Idempotence côté DO via `client_uuid` (migration v8 : colonnes +
+  index uniques partiels sur `paiement_vente`/`paiement_facture`/`paiement_achat`/`tiers`/
+  `mouvement_stock`, sur le même principe que vente/dépense). Les écrans de liste ne vident plus
+  leur contenu affiché si un rechargement échoue hors-ligne (`setListe(p => p ?? [])` au lieu de
+  `setListe([])`) — dégradation propre plutôt qu'un faux état vide. Cache lecture complet (revoir
+  des données déjà chargées sans réseau) volontairement hors scope de ce lot : un chantier
+  distinct plus large que le P1 « écriture hors-ligne » ciblé ici.
 - ⬜ 🟡 Cache session (rôle + entreprises) pour soulager D1 à l'échelle
 - ✅ Icônes PWA (installabilité) : `apps/web/public/icon-192.png`/`icon-512.png` générées (le
   manifeste les référençait déjà mais les fichiers n'existaient pas → PWA non installable/icône

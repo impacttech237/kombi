@@ -15,6 +15,7 @@ const zCreationFacture = z.object({
 const zPaiementFacture = z.object({
   montant: zMontantPositif,
   modePaiement: zModePaiement,
+  clientUuid: z.string().nullish(),
 });
 
 export const factures = new Hono<AppEnv>();
@@ -116,7 +117,7 @@ factures.post('/:id/payer', requirePermission('facture:manage'), async (c) => {
   if (!corps.success) return c.json({ erreur: messageErreurZod(corps.error) }, 400);
   const res = await stubEntreprise(c.env, c.get('entrepriseId')).payerFacture(
     c.req.param('id'), corps.data.montant, corps.data.modePaiement,
-    { utilisateurId: c.get('utilisateurId'), role: c.get('role') },
+    { utilisateurId: c.get('utilisateurId'), role: c.get('role') }, corps.data.clientUuid ?? null,
   );
   return c.json(res);
 });

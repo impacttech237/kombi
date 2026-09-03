@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA, CATEGORIES_DEPENSE } from '@kombi/shared';
-import { listerDepenses, creerDepense, type EntrepriseResume, type Depense } from '../lib/api.js';
+import { listerDepenses, type EntrepriseResume, type Depense } from '../lib/api.js';
+import { enfilerMutation, nouvelUuid } from '../offline/db.js';
+import { synchroniser } from '../offline/sync.js';
 import { Bouton, Champ, Icon } from '../components/ui.js';
 
 const MODES_PAIEMENT = [
@@ -19,7 +21,7 @@ export function Depenses({ entreprise, onRetour }: { entreprise: EntrepriseResum
   const [liste, setListe] = useState<Depense[] | null>(null);
   const [vue, setVue] = useState<'liste' | 'nouveau'>('liste');
 
-  function recharger() { listerDepenses(entreprise.id).then(setListe).catch(() => setListe([])); }
+  function recharger() { listerDepenses(entreprise.id).then(setListe).catch(() => setListe((p) => p ?? [])); }
   useEffect(recharger, [entreprise.id]);
 
   if (vue === 'nouveau')
@@ -88,10 +90,16 @@ function NouvelleDepense({ entreprise, onFait, onRetour }: {
   async function creer() {
     setCharge(true); setErreur('');
     try {
-      await creerDepense(entreprise.id, {
-        categorie, libelle: libelle.trim() || labelCategorie(categorie), montant: Number(montant),
-        modePaiement: mode, recurrente,
+      // Offline-first : enregistrée localement (marche sans réseau), synchronisée dès que possible.
+      const clientUuid = nouvelUuid();
+      await enfilerMutation({
+        clientUuid, entrepriseId: entreprise.id, type: 'depense',
+        payload: {
+          categorie, libelle: libelle.trim() || labelCategorie(categorie), montant: Number(montant),
+          modePaiement: mode, recurrente,
+        },
       });
+      void synchroniser();
       onFait();
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur');

@@ -336,6 +336,35 @@ const MIGRATION_V7_DEVIS = `
 ALTER TABLE facture ADD COLUMN devis_id TEXT REFERENCES facture(id)
 `;
 
+/**
+ * v8 — Idempotence offline pour les encaissements (spec §5.2 : dépense, encaissement, tiers,
+ * produit hors-ligne, Phase P1). `client_uuid` existait déjà sur tiers/vente/facture/
+ * achat_fournisseur/depense (créations) mais pas sur les paiements — un encaissement rejoué par
+ * la file offline aurait créé un doublon. Index unique partiel (NULL autorisé pour les paiements
+ * historiques et les appels internes sans clientUuid).
+ */
+const MIGRATION_V8_IDEMPOTENCE_PAIEMENTS = `
+ALTER TABLE paiement_vente ADD COLUMN client_uuid TEXT
+--##
+ALTER TABLE paiement_facture ADD COLUMN client_uuid TEXT
+--##
+ALTER TABLE paiement_achat ADD COLUMN client_uuid TEXT
+--##
+ALTER TABLE tiers ADD COLUMN client_uuid TEXT
+--##
+ALTER TABLE mouvement_stock ADD COLUMN client_uuid TEXT
+--##
+CREATE UNIQUE INDEX idx_paiement_vente_client_uuid ON paiement_vente(client_uuid) WHERE client_uuid IS NOT NULL
+--##
+CREATE UNIQUE INDEX idx_paiement_facture_client_uuid ON paiement_facture(client_uuid) WHERE client_uuid IS NOT NULL
+--##
+CREATE UNIQUE INDEX idx_paiement_achat_client_uuid ON paiement_achat(client_uuid) WHERE client_uuid IS NOT NULL
+--##
+CREATE UNIQUE INDEX idx_tiers_client_uuid ON tiers(client_uuid) WHERE client_uuid IS NOT NULL
+--##
+CREATE UNIQUE INDEX idx_mouvement_stock_client_uuid ON mouvement_stock(client_uuid) WHERE client_uuid IS NOT NULL
+`;
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -383,7 +412,9 @@ export const MIGRATIONS_DO: readonly MigrationDO[] = [
   { v: 6, statements: statementsDe(MIGRATION_V6_DETTES) },
   // v7 — conversion devis → facture (facture.devis_id).
   { v: 7, statements: statementsDe(MIGRATION_V7_DEVIS) },
-  // v8… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v8 — idempotence offline des encaissements (client_uuid sur paiement_vente/facture/achat).
+  { v: 8, statements: statementsDe(MIGRATION_V8_IDEMPOTENCE_PAIEMENTS) },
+  // v9… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */

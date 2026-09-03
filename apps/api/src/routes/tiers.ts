@@ -19,6 +19,7 @@ tiers.post('/', requirePermission('tiers:manage'), async (c) => {
     telephone: body?.telephone ? String(body.telephone).trim() : undefined,
     email: body?.email ? String(body.email).trim() : undefined,
     adresse: body?.adresse ? String(body.adresse).trim() : undefined,
+    clientUuid: body?.clientUuid ? String(body.clientUuid).trim() : undefined,
   });
   return c.json({ tiersId: id }, 201);
 });

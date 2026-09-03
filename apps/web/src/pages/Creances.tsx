@@ -1,10 +1,24 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA } from '@kombi/shared';
 import {
-  listerVentesACredit, listerFacturesImpayees, payerVente, payerFacture,
+  listerVentesACredit, listerFacturesImpayees,
   type EntrepriseResume, type VenteACredit, type FactureImpayee,
 } from '../lib/api.js';
+import { enfilerMutation, nouvelUuid } from '../offline/db.js';
+import { synchroniser } from '../offline/sync.js';
 import { Bouton, Icon } from '../components/ui.js';
+
+/** Offline-first : encaissement mis en file localement, synchronisé dès que possible. */
+async function encaisserOffline(
+  entrepriseId: string, type: 'paiement_vente' | 'paiement_facture', idField: string, id: string,
+  montant: number, modePaiement: string,
+): Promise<void> {
+  const clientUuid = nouvelUuid();
+  await enfilerMutation({
+    clientUuid, entrepriseId, type, payload: { [idField]: id, montant, modePaiement },
+  });
+  void synchroniser();
+}
 
 const MODES = [
   { value: 'especes', label: 'Espèces' }, { value: 'mtn_momo', label: 'MTN MoMo' },
@@ -53,13 +67,13 @@ export function Creances({ entreprise, onRetour }: { entreprise: EntrepriseResum
             {ventes!.map((v) => (
               <LigneCreance key={v.id} entreprise={entreprise} titre={v.tiers_nom ?? 'Client'}
                 sousTitre="Vente à crédit" du={v.total_ttc - v.regle}
-                onPayer={(montant, mode) => payerVente(entreprise.id, v.id, { montant, modePaiement: mode })}
+                onPayer={(montant, mode) => encaisserOffline(entreprise.id, 'paiement_vente', 'venteId', v.id, montant, mode)}
                 onFait={recharger} />
             ))}
             {factures!.map((f) => (
               <LigneCreance key={f.id} entreprise={entreprise} titre={f.tiers_nom ?? 'Client'}
                 sousTitre={f.numero} du={f.montantDu} enRetard={f.enRetard}
-                onPayer={(montant, mode) => payerFacture(entreprise.id, f.id, { montant, modePaiement: mode })}
+                onPayer={(montant, mode) => encaisserOffline(entreprise.id, 'paiement_facture', 'factureId', f.id, montant, mode)}
                 onFait={recharger} />
             ))}
           </div>

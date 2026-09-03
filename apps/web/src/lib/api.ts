@@ -60,8 +60,9 @@ export const enregistrerVente = (
   },
 ) => api<{ venteId: string; totalTtc: number; enSurvente: boolean }>('/api/ventes', { method: 'POST', body: data, entrepriseId });
 
-export const payerVente = (entrepriseId: string, venteId: string, data: { montant: number; modePaiement: string }) =>
-  api<{ statut: string; regle: number }>(`/api/ventes/${venteId}/payer`, { method: 'POST', body: data, entrepriseId });
+export const payerVente = (
+  entrepriseId: string, venteId: string, data: { montant: number; modePaiement: string; clientUuid?: string },
+) => api<{ statut: string; regle: number }>(`/api/ventes/${venteId}/payer`, { method: 'POST', body: data, entrepriseId });
 
 export interface VenteACredit {
   id: string; date: string; total_ttc: number; statut: string; tiers_nom: string | null; regle: number;
@@ -125,7 +126,7 @@ export const approvisionner = (
   produitId: string,
   data: {
     quantite: number; coutUnitaire: number; modePaiement?: string | null; aCredit?: boolean;
-    tiersId?: string | null; tauxTva?: number;
+    tiersId?: string | null; tauxTva?: number; clientUuid?: string;
   },
 ) => api<{ nouveauStock: number; nouveauCmp: number }>(
   `/api/produits/${produitId}/entree`, { method: 'POST', body: data, entrepriseId },
@@ -137,8 +138,9 @@ export interface DetteFournisseur {
 }
 export const listerDettesFournisseurs = (entrepriseId: string) =>
   api<{ dettes: DetteFournisseur[] }>('/api/achats/dettes', { entrepriseId }).then((r) => r.dettes);
-export const payerAchat = (entrepriseId: string, achatId: string, data: { montant: number; modePaiement: string }) =>
-  api<{ statut: string; regle: number }>(`/api/achats/${achatId}/payer`, { method: 'POST', body: data, entrepriseId });
+export const payerAchat = (
+  entrepriseId: string, achatId: string, data: { montant: number; modePaiement: string; clientUuid?: string },
+) => api<{ statut: string; regle: number }>(`/api/achats/${achatId}/payer`, { method: 'POST', body: data, entrepriseId });
 
 // ── Tiers ──
 export interface Tiers {
@@ -151,7 +153,7 @@ export const creerTiers = (
   entrepriseId: string,
   data: {
     nom: string; telephone?: string; niu?: string; email?: string; adresse?: string;
-    type?: 'client' | 'fournisseur';
+    type?: 'client' | 'fournisseur'; clientUuid?: string;
   },
 ) => api<{ tiersId: string }>('/api/tiers', { method: 'POST', body: { ...data, type: data.type ?? 'client' }, entrepriseId });
 
@@ -191,8 +193,9 @@ export const creerAvoir = (entrepriseId: string, id: string) =>
   api<{ avoirId: string; numero: string }>(`/api/factures/${id}/avoir`, { method: 'POST', entrepriseId });
 export const convertirDevisEnFacture = (entrepriseId: string, id: string) =>
   api<{ factureId: string }>(`/api/factures/${id}/convertir`, { method: 'POST', entrepriseId });
-export const payerFacture = (entrepriseId: string, id: string, data: { montant: number; modePaiement: string }) =>
-  api<{ statut: string; regle: number }>(`/api/factures/${id}/payer`, { method: 'POST', body: data, entrepriseId });
+export const payerFacture = (
+  entrepriseId: string, id: string, data: { montant: number; modePaiement: string; clientUuid?: string },
+) => api<{ statut: string; regle: number }>(`/api/factures/${id}/payer`, { method: 'POST', body: data, entrepriseId });
 
 // ── États financiers ──
 export interface LigneEtat { numero: string; libelle: string; montant: number; }
@@ -238,8 +241,11 @@ export const listerDepenses = (entrepriseId: string) =>
   api<{ depenses: Depense[] }>('/api/depenses', { entrepriseId }).then((r) => r.depenses);
 export const creerDepense = (
   entrepriseId: string,
-  data: { categorie: string; libelle: string; montant: number; modePaiement: string; recurrente?: boolean },
-) => api<{ depenseId: string }>('/api/depenses', { method: 'POST', body: data, entrepriseId });
+  data: {
+    categorie: string; libelle: string; montant: number; modePaiement: string; recurrente?: boolean;
+    clientUuid?: string;
+  },
+) => api<{ depenseId: string; deja: boolean }>('/api/depenses', { method: 'POST', body: data, entrepriseId });
 
 /** Récupère le PDF de la facture (avec en-têtes d'auth) sous forme de blob brut. */
 async function blobPdfFacture(entrepriseId: string, id: string): Promise<Blob> {

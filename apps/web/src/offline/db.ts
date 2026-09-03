@@ -8,8 +8,13 @@
 
 import Dexie, { type Table } from 'dexie';
 
-/** Types de mutations pouvant être créées hors-ligne. */
-export type TypeMutation = 'vente';
+/**
+ * Types de mutations pouvant être créées hors-ligne (spec §5.2, Phase P1 : dépense, encaissement,
+ * tiers, produit — en plus de la vente, déjà offline depuis l'origine).
+ */
+export type TypeMutation =
+  | 'vente' | 'depense' | 'tiers' | 'stock_entree'
+  | 'paiement_vente' | 'paiement_facture' | 'paiement_achat';
 
 export interface Mutation {
   clientUuid: string;

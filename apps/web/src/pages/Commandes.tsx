@@ -17,7 +17,7 @@ export function Commandes({ entreprise, onRetour }: { entreprise: EntrepriseResu
   const [liste, setListe] = useState<Commande[] | null>(null);
   const [vue, setVue] = useState<'liste' | 'nouveau'>('liste');
 
-  function recharger() { listerCommandes(entreprise.id).then(setListe).catch(() => setListe([])); }
+  function recharger() { listerCommandes(entreprise.id).then(setListe).catch(() => setListe((p) => p ?? [])); }
   useEffect(recharger, [entreprise.id]);
 
   async function avancer(c: Commande, statut: string) {

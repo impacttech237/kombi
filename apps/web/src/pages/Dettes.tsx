@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA } from '@kombi/shared';
-import { listerDettesFournisseurs, payerAchat, type EntrepriseResume, type DetteFournisseur } from '../lib/api.js';
+import { listerDettesFournisseurs, type EntrepriseResume, type DetteFournisseur } from '../lib/api.js';
+import { enfilerMutation, nouvelUuid } from '../offline/db.js';
+import { synchroniser } from '../offline/sync.js';
 import { Bouton, Icon } from '../components/ui.js';
 
 const MODES = [
@@ -62,7 +64,13 @@ function LigneDette({ entreprise, dette, onFait }: {
   async function regler() {
     setCharge(true);
     try {
-      await payerAchat(entreprise.id, dette.id, { montant: Math.min(du, Number(montant) || 0), modePaiement: mode });
+      // Offline-first : réglé localement (marche sans réseau), synchronisé dès que possible.
+      const clientUuid = nouvelUuid();
+      await enfilerMutation({
+        clientUuid, entrepriseId: entreprise.id, type: 'paiement_achat',
+        payload: { achatId: dette.id, montant: Math.min(du, Number(montant) || 0), modePaiement: mode },
+      });
+      void synchroniser();
       setOuvert(false); onFait();
     } finally { setCharge(false); }
   }

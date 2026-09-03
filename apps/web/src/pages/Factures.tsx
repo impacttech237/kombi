@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA } from '@kombi/shared';
 import {
-  listerFactures, creerFacture, emettreFacture, creerAvoir, payerFacture, urlPdfFacture, fichierPdfFacture,
+  listerFactures, creerFacture, emettreFacture, creerAvoir, urlPdfFacture, fichierPdfFacture,
   convertirDevisEnFacture, listerTiers, creerTiers,
   type EntrepriseResume, type FactureResume, type Tiers, type LigneFacture,
 } from '../lib/api.js';
+import { enfilerMutation, nouvelUuid } from '../offline/db.js';
+import { synchroniser } from '../offline/sync.js';
 
 /** Numéro au format attendu par wa.me (chiffres seulement, indicatif CEMAC 237 par défaut). */
 function numeroWhatsApp(telephone: string): string {
@@ -28,7 +30,7 @@ export function Factures({ entreprise }: { entreprise: EntrepriseResume }) {
   const [liste, setListe] = useState<FactureResume[] | null>(null);
   const [vue, setVue] = useState<'liste' | 'nouveau'>('liste');
 
-  function recharger() { listerFactures(entreprise.id).then(setListe).catch(() => setListe([])); }
+  function recharger() { listerFactures(entreprise.id).then(setListe).catch(() => setListe((p) => p ?? [])); }
   useEffect(recharger, [entreprise.id]);
 
   if (vue === 'nouveau')
@@ -82,7 +84,13 @@ function CarteFacture({ entreprise, f, onMaj }: { entreprise: EntrepriseResume; 
     window.open(lien, '_blank');
   }
   async function payer() {
-    await payerFacture(entreprise.id, f.id, { montant: Number(montant), modePaiement });
+    // Offline-first : encaissement mis en file localement, synchronisé dès que possible.
+    const clientUuid = nouvelUuid();
+    await enfilerMutation({
+      clientUuid, entrepriseId: entreprise.id, type: 'paiement_facture',
+      payload: { factureId: f.id, montant: Number(montant), modePaiement },
+    });
+    void synchroniser();
     setPayMode(false); onMaj();
   }
   async function avoir() {
