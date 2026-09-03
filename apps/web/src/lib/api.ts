@@ -157,7 +157,7 @@ export const approvisionner = (
 // ── Dettes fournisseurs (« ce que je dois ») ──
 export interface DetteFournisseur {
   id: string; date: string; total_ttc: number; statut: string; tiers_nom: string | null; regle: number;
-  date_echeance: string | null; enRetard: boolean;
+  date_echeance: string | null; enRetard: boolean; piece_cle: string | null;
 }
 export const listerDettesFournisseurs = (entrepriseId: string) =>
   api<{ dettes: DetteFournisseur[] }>('/api/achats/dettes', { entrepriseId }).then((r) => r.dettes);
@@ -269,29 +269,45 @@ export interface Depense {
 export const listerDepenses = (entrepriseId: string) =>
   api<{ depenses: Depense[] }>('/api/depenses', { entrepriseId }).then((r) => r.depenses);
 
-/** Pièce justificative (photo/scan) attachée à une dépense — fichier stocké dans R2. */
-export async function televerserPieceDepense(entrepriseId: string, depenseId: string, fichier: File): Promise<void> {
-  const res = await fetch(`${BASE}/api/depenses/${depenseId}/piece`, {
-    method: 'POST',
-    headers: { 'x-entreprise-id': entrepriseId, 'content-type': fichier.type },
-    credentials: 'include',
-    body: fichier,
-  });
-  if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { erreur?: string };
-    throw new Error(err.erreur ?? `Erreur ${res.status}`);
+/**
+ * Pièce justificative (photo/scan ou PDF) attachée à une dépense/un achat/une vente — fichier
+ * stocké dans R2, même mécanique partout (voir apps/api/src/services/pieces.ts).
+ */
+function creerAidesPiece(base: string) {
+  async function televerser(entrepriseId: string, id: string, fichier: File): Promise<void> {
+    const res = await fetch(`${BASE}${base}/${id}/piece`, {
+      method: 'POST',
+      headers: { 'x-entreprise-id': entrepriseId, 'content-type': fichier.type },
+      credentials: 'include',
+      body: fichier,
+    });
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { erreur?: string };
+      throw new Error(err.erreur ?? `Erreur ${res.status}`);
+    }
   }
+  async function url(entrepriseId: string, id: string): Promise<string> {
+    const res = await fetch(`${BASE}${base}/${id}/piece`, {
+      headers: { 'x-entreprise-id': entrepriseId },
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error('Pièce indisponible');
+    return URL.createObjectURL(await res.blob());
+  }
+  const supprimer = (entrepriseId: string, id: string) =>
+    api<{ ok: boolean }>(`${base}/${id}/piece`, { method: 'DELETE', entrepriseId });
+  return { televerser, url, supprimer };
 }
-export async function urlPieceDepense(entrepriseId: string, depenseId: string): Promise<string> {
-  const res = await fetch(`${BASE}/api/depenses/${depenseId}/piece`, {
-    headers: { 'x-entreprise-id': entrepriseId },
-    credentials: 'include',
-  });
-  if (!res.ok) throw new Error('Pièce indisponible');
-  return URL.createObjectURL(await res.blob());
-}
-export const supprimerPieceDepense = (entrepriseId: string, depenseId: string) =>
-  api<{ ok: boolean }>(`/api/depenses/${depenseId}/piece`, { method: 'DELETE', entrepriseId });
+
+const aidesPieceDepense = creerAidesPiece('/api/depenses');
+export const televerserPieceDepense = aidesPieceDepense.televerser;
+export const urlPieceDepense = aidesPieceDepense.url;
+export const supprimerPieceDepense = aidesPieceDepense.supprimer;
+
+const aidesPieceAchat = creerAidesPiece('/api/achats');
+export const televerserPieceAchat = aidesPieceAchat.televerser;
+export const urlPieceAchat = aidesPieceAchat.url;
+export const supprimerPieceAchat = aidesPieceAchat.supprimer;
 export const creerDepense = (
   entrepriseId: string,
   data: {

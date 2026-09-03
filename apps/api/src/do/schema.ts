@@ -414,6 +414,14 @@ ALTER TABLE vente ADD COLUMN date_echeance TEXT
 ALTER TABLE achat_fournisseur ADD COLUMN date_echeance TEXT
 `;
 
+/**
+ * v13 — Pièce justificative (scan de la facture fournisseur) attachée à un achat fournisseur —
+ * même mécanique que v11 pour les dépenses (voir routes/achats.ts, services/pieces.ts).
+ */
+const MIGRATION_V13_PIECE_ACHAT = `
+ALTER TABLE achat_fournisseur ADD COLUMN piece_cle TEXT
+`;
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -471,7 +479,9 @@ export const MIGRATIONS_DO: readonly MigrationDO[] = [
   { v: 11, statements: statementsDe(MIGRATION_V11_PIECE_DEPENSE) },
   // v12 — date d'échéance sur une créance/dette née d'une vente/achat à crédit (hors facture).
   { v: 12, statements: statementsDe(MIGRATION_V12_ECHEANCE_CREDIT) },
-  // v13… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v13 — pièce justificative (scan facture fournisseur) attachée à un achat fournisseur.
+  { v: 13, statements: statementsDe(MIGRATION_V13_PIECE_ACHAT) },
+  // v14… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */

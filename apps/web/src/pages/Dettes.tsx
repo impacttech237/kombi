@@ -5,10 +5,13 @@
  */
 import { useEffect, useState } from 'react';
 import { formaterFCFA as fmt } from '@kombi/shared';
-import { listerDettesFournisseurs, type EntrepriseResume, type DetteFournisseur } from '../lib/api.js';
+import {
+  listerDettesFournisseurs, televerserPieceAchat, urlPieceAchat, supprimerPieceAchat,
+  type EntrepriseResume, type DetteFournisseur,
+} from '../lib/api.js';
 import { enfilerMutation, nouvelUuid } from '../offline/db.js';
 import { synchroniser } from '../offline/sync.js';
-import { IcoChevR } from '../components/icons.js';
+import { IcoChevR, IcoFile } from '../components/icons.js';
 
 const MODES = [
   { value: 'especes', label: 'Espèces' }, { value: 'mtn_momo', label: 'MTN MoMo' },
@@ -67,6 +70,9 @@ function LigneDette({ entreprise, dette, onFait }: {
   const [montant, setMontant] = useState(String(du));
   const [mode, setMode] = useState('especes');
   const [charge, setCharge] = useState(false);
+  const [chargePiece, setChargePiece] = useState(false);
+  const [erreurPiece, setErreurPiece] = useState('');
+  const pieceInputId = `piece-achat-${dette.id}`;
 
   async function regler() {
     setCharge(true);
@@ -81,6 +87,24 @@ function LigneDette({ entreprise, dette, onFait }: {
     } finally { setCharge(false); }
   }
 
+  async function ajouterPiece(fichier: File) {
+    setChargePiece(true); setErreurPiece('');
+    try {
+      await televerserPieceAchat(entreprise.id, dette.id, fichier);
+      onFait();
+    } catch (e) {
+      setErreurPiece(e instanceof Error ? e.message : 'Erreur');
+    } finally { setChargePiece(false); }
+  }
+  async function voirPiece() {
+    try { window.open(await urlPieceAchat(entreprise.id, dette.id), '_blank'); } catch { /* ignore */ }
+  }
+  async function retirerPiece() {
+    if (!confirm('Retirer la pièce jointe de cet achat ?')) return;
+    setChargePiece(true);
+    try { await supprimerPieceAchat(entreprise.id, dette.id); onFait(); } finally { setChargePiece(false); }
+  }
+
   return (
     <div className="bg-[#162419] rounded-2xl p-4">
       <div className="flex items-center gap-3">
@@ -91,6 +115,7 @@ function LigneDette({ entreprise, dette, onFait }: {
             {dette.date_echeance ? ` · échéance ${dette.date_echeance}` : ''}
           </p>
         </div>
+        {dette.piece_cle && <IcoFile cls="w-4 h-4 text-[#b4e033] shrink-0" />}
         <div className="text-right shrink-0">
           <p className="text-[#f87171] font-mono font-semibold text-sm">{fmt(du)}</p>
           {dette.enRetard && <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-[#f87171]/15 text-[#f87171] mt-0.5 inline-block">En retard</span>}
@@ -114,6 +139,25 @@ function LigneDette({ entreprise, dette, onFait }: {
           </button>
         </div>
       )}
+      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-[#1e3222] flex-wrap">
+        {dette.piece_cle ? (
+          <>
+            <button onClick={voirPiece} className="bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-2 text-xs font-medium border border-[#2a4230]">Voir la facture fournisseur</button>
+            <button onClick={() => document.getElementById(pieceInputId)?.click()} disabled={chargePiece}
+              className="bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-2 text-xs font-medium border border-[#2a4230] disabled:opacity-40">Remplacer</button>
+            <button onClick={retirerPiece} disabled={chargePiece}
+              className="text-[#f87171] text-xs font-medium px-3 py-2 hover:bg-[#f87171]/8 rounded-xl transition-colors disabled:opacity-40">Retirer</button>
+          </>
+        ) : (
+          <button onClick={() => document.getElementById(pieceInputId)?.click()} disabled={chargePiece}
+            className="bg-[#1e3222] text-[#b4e033] rounded-xl px-3 py-2 text-xs font-medium border border-[#b4e033]/20 disabled:opacity-40">
+            {chargePiece ? 'Envoi…' : 'Joindre la facture fournisseur (photo/PDF)'}
+          </button>
+        )}
+        <input id={pieceInputId} type="file" accept="image/*,application/pdf" capture="environment" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) void ajouterPiece(f); e.target.value = ''; }} />
+      </div>
+      {erreurPiece && <p className="text-[#f87171] text-xs mt-2">{erreurPiece}</p>}
     </div>
   );
 }

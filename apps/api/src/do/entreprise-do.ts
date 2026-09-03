@@ -962,7 +962,7 @@ export class EntrepriseDO extends DurableObject {
   /** Dettes fournisseurs non soldées (« ce que je dois »). */
   async listerDettesFournisseurs(): Promise<Record<string, unknown>[]> {
     const rows = this.sql.exec(
-      `SELECT a.id, a.date, a.total_ttc, a.statut, a.date_echeance, t.nom AS tiers_nom,
+      `SELECT a.id, a.date, a.total_ttc, a.statut, a.date_echeance, a.piece_cle, t.nom AS tiers_nom,
               COALESCE((SELECT SUM(montant) FROM paiement_achat WHERE achat_id = a.id), 0) AS regle
          FROM achat_fournisseur a LEFT JOIN tiers t ON t.id = a.tiers_id
         WHERE a.statut IN ('a_credit', 'payee_partiellement')
@@ -970,6 +970,25 @@ export class EntrepriseDO extends DurableObject {
     ).toArray() as (Record<string, unknown> & { date_echeance: string | null })[];
     const aujourdhui = this.dateCourante();
     return rows.map((r) => ({ ...r, enRetard: r.date_echeance !== null && r.date_echeance < aujourdhui }));
+  }
+
+  async achatExiste(achatId: string): Promise<boolean> {
+    return !!this.sql.exec('SELECT 1 FROM achat_fournisseur WHERE id = ?', achatId).toArray()[0];
+  }
+
+  /** Attache (ou retire, si `pieceCle` est null) la clé R2 de la pièce justificative d'un achat fournisseur. */
+  async attacherPieceAchat(achatId: string, pieceCle: string | null): Promise<void> {
+    const existe = this.sql.exec('SELECT 1 FROM achat_fournisseur WHERE id = ?', achatId).toArray()[0];
+    if (!existe) throw new Error('Achat introuvable');
+    this.sql.exec('UPDATE achat_fournisseur SET piece_cle = ? WHERE id = ?', pieceCle, achatId);
+  }
+
+  /** Clé R2 de la pièce justificative d'un achat fournisseur, si elle existe. */
+  async getPieceAchat(achatId: string): Promise<string | null> {
+    const row = this.sql.exec('SELECT piece_cle FROM achat_fournisseur WHERE id = ?', achatId).toArray()[0] as
+      | { piece_cle: string | null }
+      | undefined;
+    return row?.piece_cle ?? null;
   }
 
   // ══════════════ Facturation & devis ══════════════
