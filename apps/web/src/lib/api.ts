@@ -313,6 +313,18 @@ const aidesPieceVente = creerAidesPiece('/api/ventes');
 export const televerserPieceVente = aidesPieceVente.televerser;
 export const urlPieceVente = aidesPieceVente.url;
 export const supprimerPieceVente = aidesPieceVente.supprimer;
+
+// ── Pièces justificatives (écran centralisé — dépenses + achats + ventes) ──
+export interface PieceJustificative {
+  type: 'depense' | 'achat' | 'vente';
+  id: string; date: string; libelle: string; montant: number; piece_cle: string; tiers_nom: string | null;
+}
+export const listerPiecesJustificatives = (entrepriseId: string) =>
+  api<{ pieces: PieceJustificative[] }>('/api/pieces', { entrepriseId }).then((r) => r.pieces);
+
+const AIDES_PIECE_PAR_TYPE = { depense: aidesPieceDepense, achat: aidesPieceAchat, vente: aidesPieceVente };
+export const urlPiece = (type: PieceJustificative['type'], entrepriseId: string, id: string) =>
+  AIDES_PIECE_PAR_TYPE[type].url(entrepriseId, id);
 export const creerDepense = (
   entrepriseId: string,
   data: {

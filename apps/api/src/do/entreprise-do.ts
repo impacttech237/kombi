@@ -633,6 +633,33 @@ export class EntrepriseDO extends DurableObject {
     return row?.piece_cle ?? null;
   }
 
+  /**
+   * Toutes les pièces justificatives jointes (dépenses + achats fournisseurs + ventes à crédit),
+   * pour l'écran centralisé « Pièces justificatives ». Contrairement à listerDettesFournisseurs/
+   * listerVentesACredit (filtrées sur le solde restant dû), inclut aussi les achats/ventes déjà
+   * soldés — une pièce jointe avant paiement ne doit pas devenir introuvable une fois réglée.
+   */
+  async listerPiecesJustificatives(): Promise<Record<string, unknown>[]> {
+    return this.sql.exec(
+      `SELECT 'depense' AS type, d.id, d.date, d.libelle, d.montant, d.piece_cle, t.nom AS tiers_nom
+         FROM depense d LEFT JOIN tiers t ON t.id = d.tiers_id
+        WHERE d.piece_cle IS NOT NULL
+       UNION ALL
+       SELECT 'achat' AS type, a.id, a.date,
+              ('Achat fournisseur' || CASE WHEN t.nom IS NOT NULL THEN ' — ' || t.nom ELSE '' END) AS libelle,
+              a.total_ttc AS montant, a.piece_cle, t.nom AS tiers_nom
+         FROM achat_fournisseur a LEFT JOIN tiers t ON t.id = a.tiers_id
+        WHERE a.piece_cle IS NOT NULL
+       UNION ALL
+       SELECT 'vente' AS type, v.id, v.date,
+              ('Vente à crédit' || CASE WHEN t.nom IS NOT NULL THEN ' — ' || t.nom ELSE '' END) AS libelle,
+              v.total_ttc AS montant, v.piece_cle, t.nom AS tiers_nom
+         FROM vente v LEFT JOIN tiers t ON t.id = v.tiers_id
+        WHERE v.piece_cle IS NOT NULL
+       ORDER BY date DESC`,
+    ).toArray() as never;
+  }
+
   /** Historique des ventes récentes (écran caisse — pour retrouver une vente à annuler). */
   async listerVentesRecentes(limite = 50): Promise<Record<string, unknown>[]> {
     return this.sql.exec(

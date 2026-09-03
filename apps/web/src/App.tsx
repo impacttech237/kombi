@@ -14,6 +14,7 @@ import { Commandes } from './pages/Commandes.js';
 import { Depenses } from './pages/Depenses.js';
 import { Creances } from './pages/Creances.js';
 import { Dettes } from './pages/Dettes.js';
+import { PiecesJustificatives } from './pages/PiecesJustificatives.js';
 import { Equipe } from './pages/Equipe.js';
 import { Tiers } from './pages/Tiers.js';
 import { Parametres } from './pages/Parametres.js';
@@ -141,6 +142,7 @@ function Espace() {
     ...(peut(role, 'depense:read') ? [] : ['depenses']),
     ...(peut(role, 'vente:read') ? [] : ['creances']),
     ...(peut(role, 'achat:read') ? [] : ['dettes']),
+    ...(peut(role, 'compta:read') ? [] : ['pieces']),
   ];
   const nomUtilisateur = session?.user?.name?.trim() || active.raison_sociale;
 
@@ -160,6 +162,7 @@ function Espace() {
           : onglet === 'depenses' ? <Depenses entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'creances' ? <Creances entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'dettes' ? <Dettes entreprise={active} onRetour={() => setOnglet('dashboard')} />
+          : onglet === 'pieces' ? <PiecesJustificatives entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'equipe' ? <Equipe entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'parametres' ? <Parametres entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'tiers' ? <Tiers entreprise={active} onRetour={() => setOnglet('dashboard')} onNav={setOnglet} />

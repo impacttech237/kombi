@@ -20,6 +20,7 @@ import { depenses } from './routes/depenses.js';
 import { abonnement } from './routes/abonnement.js';
 import { notifications } from './routes/notifications.js';
 import { etats } from './routes/etats.js';
+import { pieces } from './routes/pieces.js';
 import { sauvegarderToutesLesEntreprises } from './services/sauvegarde.js';
 
 const app = new Hono<AppEnv>();
@@ -92,6 +93,9 @@ app.route('/api/depenses', depenses);
 
 app.use('/api/etats/*', authentifier, tenant, requireModule('comptabilite'));
 app.route('/api/etats', etats);
+
+app.use('/api/pieces/*', authentifier, tenant, requireModule('comptabilite'));
+app.route('/api/pieces', pieces);
 
 app.use('/api/abonnement/*', authentifier, tenant);
 app.use('/api/abonnement', authentifier, tenant);

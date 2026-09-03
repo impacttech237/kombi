@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { listerNotifications, type NotificationActive } from '../lib/api.js';
 import {
   IcoHome, IcoCart, IcoFile, IcoBox, IcoWlt, IcoBell, IcoLayers, IcoX, IcoChevR, IcoGrid,
-  IcoUser, IcoUsers, IcoClipboard, IcoBarChart, IcoSettings, IcoTrendDown, IcoHandCoins, IcoLogOut, Avatar,
+  IcoUser, IcoUsers, IcoClipboard, IcoBarChart, IcoSettings, IcoTrendDown, IcoHandCoins, IcoLogOut, IcoFolder, Avatar,
 } from './icons.js';
 
 export interface NavItem {
@@ -43,6 +43,7 @@ const MENU_FINANCES: NavItem[] = [
   { code: 'depenses', label: 'Dépenses', short: 'Dépenses', Icon: IcoTrendDown },
   { code: 'creances', label: 'Créances (on me doit)', short: 'Créances', Icon: IcoHandCoins },
   { code: 'dettes', label: 'Dettes (je dois)', short: 'Dettes', Icon: IcoHandCoins },
+  { code: 'pieces', label: 'Pièces justificatives', short: 'Pièces', Icon: IcoFolder },
 ];
 
 const MENU_ADMIN: NavItem[] = [

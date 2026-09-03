@@ -39,6 +39,7 @@ export const IcoSettings = ({ cls }: { cls?: string }) => <Ico cls={cls} ch={<><
 export const IcoTrendDown = ({ cls }: { cls?: string }) => <Ico cls={cls} ch={<><polyline points="23 18 13.5 8.5 8.5 13.5 1 6" /><polyline points="17 18 23 18 23 12" /></>} />;
 export const IcoHandCoins = ({ cls }: { cls?: string }) => <Ico cls={cls} ch={<><circle cx="12" cy="8" r="4" /><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" /></>} />;
 export const IcoLogOut = ({ cls }: { cls?: string }) => <Ico cls={cls} ch={<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>} />;
+export const IcoFolder = ({ cls }: { cls?: string }) => <Ico cls={cls} ch={<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />} />;
 
 const AVATAR_PALETTE: [string, string][] = [
   ['#b4e033', '#0e1c0f'], // lime brand
