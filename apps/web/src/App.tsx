@@ -87,7 +87,7 @@ function Espace() {
       nomUtilisateur={nomUtilisateur} entrepriseId={active.id} isOnline={navigator.onLine} masquer={masquer}>
       <div className="px-4 pt-4 md:px-8 md:pt-6">
         <OfflineBanner />
-        {onglet === 'dashboard' ? <Dashboard entreprise={active} onCaisse={() => setOnglet('caisse')} onCommandes={() => setOnglet('commandes')} onDepenses={() => setOnglet('depenses')} onCreances={() => setOnglet('creances')} onDettes={() => setOnglet('dettes')} />
+        {onglet === 'dashboard' ? <Dashboard entreprise={active} onCaisse={() => setOnglet('caisse')} onNav={setOnglet} />
           : onglet === 'caisse' ? <Caisse entreprise={active} onHistorique={() => setOnglet('ventes')} />
           : onglet === 'ventes' ? <Ventes entreprise={active} role={role} onRetour={() => setOnglet('caisse')} />
           : onglet === 'stock' ? <Stock entreprise={active} />

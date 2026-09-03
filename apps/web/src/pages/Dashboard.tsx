@@ -1,11 +1,20 @@
+/**
+ * Tableau de bord — porté fidèlement du prototype Figma Make (docs/Interface application
+ * gestion PME/src/App.tsx, fonction Dashboard) avec les vraies données Kombi à la place des
+ * tableaux mock. Voir docs/parcours.md « Refonte design system ».
+ */
 import { useEffect, useState } from 'react';
-import { formaterFCFA, TERMINOLOGIE, peut, type Secteur, type RoleMembre } from '@kombi/shared';
+import { formaterFCFA, peut, type RoleMembre } from '@kombi/shared';
 import {
-  api, statsJour, tendance7Jours, listerCommandes, listerDepenses, listerVentesACredit,
-  listerFacturesImpayees, listerDettesFournisseurs, margeCumulee, meilleuresVentes, depensesDuJour,
-  tresorerieDuJour, listerProduits, type EntrepriseResume, type MeilleureVente, type TresorerieJour,
+  api, statsJour, tendance7Jours, listerDepenses, listerFacturesImpayees, meilleuresVentes,
+  depensesDuJour, tresorerieDuJour, listerProduits, listerVentesRecentes,
+  type EntrepriseResume, type MeilleureVente, type TresorerieJour, type FactureImpayee,
 } from '../lib/api.js';
-import { Bouton, CarteStat, Icon } from '../components/ui.js';
+import {
+  IcoTrend, IcoWlt, IcoAlert, IcoCart, IcoFile, IcoUser, IcoBox, IcoChevR, IcoDn, IcoUp,
+} from '../components/icons.js';
+import { Avatar } from '../components/icons.js';
+import { DashboardIllustration, SalesAreaChart, CashFlowRing, MODE_PAIEMENT_LABEL, MODE_PAIEMENT_COULEUR } from '../components/charts.js';
 
 interface IgsResp {
   caCumule: number;
@@ -13,29 +22,25 @@ interface IgsResp {
   igs: { igsAnnuel: number; classe: number } | null;
 }
 
-export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses, onCreances, onDettes }: {
-  entreprise: EntrepriseResume; onCaisse?: () => void; onCommandes?: () => void; onDepenses?: () => void;
-  onCreances?: () => void; onDettes?: () => void;
+function fmt(n: number) { return formaterFCFA(n); }
+
+export function Dashboard({ entreprise, onCaisse, onNav }: {
+  entreprise: EntrepriseResume; onCaisse?: () => void; onNav?: (code: string) => void;
 }) {
-  const term = TERMINOLOGIE[(entreprise.secteur as Secteur) ?? 'commerce'];
   const [igs, setIgs] = useState<IgsResp | null>(null);
   const [jour, setJour] = useState<{ nbVentes: number; totalJour: number } | null>(null);
-  const [nbCmd, setNbCmd] = useState<number | null>(null);
-  const [totalDepenses, setTotalDepenses] = useState<number | null>(null);
-  const [totalCreances, setTotalCreances] = useState<number | null>(null);
-  const [totalDettes, setTotalDettes] = useState<number | null>(null);
   const [tendance, setTendance] = useState<{ jour: string; total: number }[] | null>(null);
-  const [marge, setMarge] = useState<number | null>(null);
   const [top, setTop] = useState<MeilleureVente[] | null>(null);
   const [depensesJour, setDepensesJour] = useState<number | null>(null);
-  const [alertesStock, setAlertesStock] = useState<number | null>(null);
+  const [alertesStockListe, setAlertesStockListe] = useState<{ nom: string; stock: number; seuil: number; rupture: boolean }[] | null>(null);
   const [tresorerie, setTresorerie] = useState<TresorerieJour | null>(null);
+  const [facturesImpayees, setFacturesImpayees] = useState<FactureImpayee[] | null>(null);
+  const [mouvements, setMouvements] = useState<{ id: string; libelle: string; montant: number; sens: 'in' | 'out'; date: string; mode: string; client: string | null }[] | null>(null);
   const [erreur, setErreur] = useState('');
   const role = entreprise.role as RoleMembre;
   const voitCompta = peut(role, 'compta:read');
   const voitDepenses = peut(role, 'depense:read');
   const voitCreances = peut(role, 'vente:read') || peut(role, 'facture:read');
-  const voitDettes = peut(role, 'achat:read');
   const voitVentes = peut(role, 'vente:read');
   const voitStock = entreprise.secteur !== 'service' && peut(role, 'stock:read');
 
@@ -47,176 +52,283 @@ export function Dashboard({ entreprise, onCaisse, onCommandes, onDepenses, onCre
     }
     statsJour(entreprise.id).then(setJour).catch(() => {});
     tendance7Jours(entreprise.id).then(setTendance).catch(() => {});
-    listerCommandes(entreprise.id)
-      .then((cs) => setNbCmd(cs.filter((c) => c.statut === 'en_attente' || c.statut === 'en_cours').length))
-      .catch(() => {});
-    if (voitDepenses) {
-      listerDepenses(entreprise.id)
-        .then((ds) => setTotalDepenses(ds.reduce((s, d) => s + d.montant, 0)))
-        .catch(() => {});
-    }
-    if (voitCreances) {
-      Promise.all([
-        listerVentesACredit(entreprise.id).catch(() => []),
-        listerFacturesImpayees(entreprise.id).catch(() => []),
-      ]).then(([ventes, factures]) => {
-        setTotalCreances(
-          ventes.reduce((s, v) => s + (v.total_ttc - v.regle), 0)
-          + factures.reduce((s, f) => s + f.montantDu, 0),
-        );
-      });
-    }
-    if (voitDettes) {
-      listerDettesFournisseurs(entreprise.id)
-        .then((ds) => setTotalDettes(ds.reduce((s, d) => s + (d.total_ttc - d.regle), 0)))
-        .catch(() => {});
-    }
-    if (voitCompta) margeCumulee(entreprise.id).then(setMarge).catch(() => {});
+    if (voitCreances) listerFacturesImpayees(entreprise.id).then(setFacturesImpayees).catch(() => {});
     if (voitCompta) tresorerieDuJour(entreprise.id).then(setTresorerie).catch(() => {});
     if (voitVentes) meilleuresVentes(entreprise.id).then(setTop).catch(() => {});
     if (voitDepenses) depensesDuJour(entreprise.id).then(setDepensesJour).catch(() => {});
     if (voitStock) {
       listerProduits(entreprise.id)
-        .then((ps) => setAlertesStock(ps.filter((p) => p.en_alerte === 1).length))
+        .then((ps) => setAlertesStockListe(
+          ps.filter((p) => p.en_alerte === 1)
+            .map((p) => ({ nom: p.nom, stock: p.stock_actuel, seuil: p.seuil_alerte, rupture: p.en_rupture === 1 })),
+        ))
         .catch(() => {});
     }
-  }, [entreprise.id, voitCompta, voitDepenses, voitCreances, voitDettes, voitVentes, voitStock]);
+    if (voitVentes) {
+      Promise.all([
+        listerVentesRecentes(entreprise.id).catch(() => []),
+        voitDepenses ? listerDepenses(entreprise.id).catch(() => []) : Promise.resolve([]),
+      ]).then(([ventes, depenses]) => {
+        const v = ventes.filter((x) => x.statut !== 'annulee').map((x) => ({
+          id: x.id, libelle: x.tiers_nom ?? 'Vente au comptant', montant: x.total_ttc,
+          sens: 'in' as const, date: x.date, mode: x.mode_paiement ?? 'especes', client: x.tiers_nom,
+        }));
+        const d = depenses.map((x) => ({
+          id: x.id, libelle: x.libelle, montant: x.montant, sens: 'out' as const,
+          date: x.date, mode: x.mode_paiement, client: null,
+        }));
+        setMouvements([...v, ...d].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5));
+      });
+    }
+  }, [entreprise.id, voitCompta, voitDepenses, voitCreances, voitVentes, voitStock]);
+
+  const regimeIgs = entreprise.regime_fiscal === 'igs';
+  const nomUtilisateur = entreprise.raison_sociale;
+  const dateAujourdhui = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const facturesEnRetard = (facturesImpayees ?? []).filter((f) => f.enRetard);
+  const totalImpayees = (facturesImpayees ?? []).reduce((s, f) => s + f.montantDu, 0);
+  const tresorerieTotal = tresorerie ? tresorerie.especes + tresorerie.mtnMomo + tresorerie.orangeMoney + tresorerie.banque : 0;
 
   return (
-    <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 2px 14px' }}>
-        <div>
-          <p className="muet" style={{ margin: 0, fontSize: 13 }}>Bonjour 👋</p>
-          <h1 className="titre-page">Tableau de bord</h1>
+    <div className="max-w-5xl">
+      {/* Header */}
+      <div className="pb-4 flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2.5 mb-1">
+            <Avatar name={nomUtilisateur} size="sm" />
+            <p className="text-[#6b9165] text-sm font-medium">Bonjour 👋</p>
+          </div>
+          <h1 className="text-[#edf5ea] text-2xl font-semibold">{entreprise.raison_sociale}</h1>
+          <p className="text-[#4a6b4a] text-xs mt-1 capitalize">{dateAujourdhui}</p>
         </div>
-        <Bouton onClick={onCaisse}><Icon name="plus" size={18} /> Vente</Bouton>
+        <div className="shrink-0 opacity-90 hidden sm:block">
+          <DashboardIllustration />
+        </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      {/* KPI Row */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="bg-[#162419] rounded-2xl overflow-hidden">
+          <div className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[#6b9165] text-xs font-medium uppercase tracking-wide">Ventes du jour</span>
+              <div className="w-8 h-8 rounded-full bg-[#b4e033]/10 flex items-center justify-center text-[#b4e033]"><IcoTrend /></div>
+            </div>
+            <p className="text-[#edf5ea] text-2xl font-mono font-semibold">{jour ? fmt(jour.totalJour) : '—'}</p>
+          </div>
+          <div className="bg-[#1e3222] px-4 py-2">
+            <span className="text-[#6b9165] text-xs">{jour ? `${jour.nbVentes} vente${jour.nbVentes > 1 ? 's' : ''}` : '…'}</span>
+          </div>
+        </div>
+
         {voitCompta && (
-          <>
-            <CarteStat titre="Chiffre d'affaires" icone="argent"
-              valeur={igs ? formaterFCFA(igs.caCumule) : '—'} delta="Exercice" positif />
-            <CarteStat titre="Marge brute" icone="graph"
-              valeur={marge !== null ? formaterFCFA(marge) : '—'} delta="Exercice" positif />
-            <CarteStat titre="IGS estimé" icone="graph"
-              valeur={igs?.igs ? formaterFCFA(igs.igs.igsAnnuel) : (igs ? 'Régime réel' : '—')}
-              delta={igs?.igs ? `Classe ${igs.igs.classe}` : undefined} positif />
-          </>
+          <div className="bg-[#162419] rounded-2xl overflow-hidden border border-[#b4e033]/20">
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[#6b9165] text-xs font-medium uppercase tracking-wide">Trésorerie</span>
+                <div className="w-8 h-8 rounded-full bg-[#b4e033]/10 flex items-center justify-center text-[#b4e033]"><IcoWlt /></div>
+              </div>
+              <p className="text-[#b4e033] text-2xl font-mono font-semibold">{tresorerie ? fmt(tresorerieTotal) : '—'}</p>
+            </div>
+            <div className="bg-[#1e3222] px-4 py-2">
+              <span className="text-[#6b9165] text-xs">Disponible aujourd'hui</span>
+            </div>
+          </div>
         )}
-        <CarteStat titre="Ventes du jour" icone="caisse"
-          valeur={jour ? formaterFCFA(jour.totalJour) : '—'}
-          delta={jour ? `${jour.nbVentes} vente${jour.nbVentes > 1 ? 's' : ''}` : undefined} positif />
-        <button onClick={onCommandes} style={{ all: 'unset', cursor: 'pointer' }}>
-          <CarteStat titre={term.commandes[0]!.toUpperCase() + term.commandes.slice(1)} icone="boite"
-            valeur={nbCmd !== null ? String(nbCmd) : '—'} delta="en cours" positif />
-        </button>
-        {voitDepenses && (
-          <button onClick={onDepenses} style={{ all: 'unset', cursor: 'pointer' }}>
-            <CarteStat titre="Dépenses" icone="baisse"
-              valeur={totalDepenses !== null ? formaterFCFA(totalDepenses) : '—'} delta="Exercice" positif={false} />
-          </button>
-        )}
-        {voitDepenses && (
-          <button onClick={onDepenses} style={{ all: 'unset', cursor: 'pointer' }}>
-            <CarteStat titre="Dépenses du jour" icone="baisse"
-              valeur={depensesJour !== null ? formaterFCFA(depensesJour) : '—'} delta="Aujourd'hui" positif={false} />
-          </button>
-        )}
-        {voitStock && (
-          <CarteStat titre="Alertes stock" icone="stock"
-            valeur={alertesStock !== null ? String(alertesStock) : '—'}
-            delta={alertesStock === 0 ? 'RAS' : 'à réapprovisionner'} positif={alertesStock === 0} />
-        )}
+
         {voitCreances && (
-          <button onClick={onCreances} style={{ all: 'unset', cursor: 'pointer' }}>
-            <CarteStat titre="On me doit" icone="argent"
-              valeur={totalCreances !== null ? formaterFCFA(totalCreances) : '—'} delta="à encaisser" positif />
-          </button>
-        )}
-        {voitDettes && (
-          <button onClick={onDettes} style={{ all: 'unset', cursor: 'pointer' }}>
-            <CarteStat titre="Ce que je dois" icone="boite"
-              valeur={totalDettes !== null ? formaterFCFA(totalDettes) : '—'} delta="à régler" positif={false} />
+          <button onClick={onNav ? () => onNav('tresorerie') : undefined} className="text-left bg-[#162419] rounded-2xl overflow-hidden">
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[#6b9165] text-xs font-medium uppercase tracking-wide">Factures impayées</span>
+                <div className="w-8 h-8 rounded-full bg-[#f87171]/10 flex items-center justify-center text-[#f87171]"><IcoAlert /></div>
+              </div>
+              <p className="text-[#f87171] text-2xl font-mono font-semibold">{facturesImpayees ? fmt(totalImpayees) : '—'}</p>
+            </div>
+            <div className="bg-[#1e3222] px-4 py-2">
+              <span className="text-[#4a6b4a] text-xs">
+                {facturesImpayees ? `${facturesImpayees.length} facture${facturesImpayees.length > 1 ? 's' : ''}${facturesEnRetard.length > 0 ? ` · dont ${facturesEnRetard.length} en retard` : ''}` : '…'}
+              </span>
+            </div>
           </button>
         )}
       </div>
 
-      <div className="carte" style={{ marginTop: 14 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <strong>Ventes des 7 derniers jours</strong>
-          <span className="chip chip-ok">{entreprise.regime_fiscal === 'igs' ? 'Régime IGS' : 'Régime réel'}</span>
+      {/* Quick Actions */}
+      <div className="mt-4">
+        <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-wide mb-2">Actions rapides</p>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <button onClick={onCaisse}
+            className="bg-[#b4e033] text-[#0e1c0f] rounded-2xl p-4 flex items-center gap-3 active:scale-95 transition-all">
+            <div className="w-9 h-9 rounded-full bg-[#0e1c0f]/15 flex items-center justify-center shrink-0"><IcoCart /></div>
+            <span className="text-sm font-semibold text-left leading-tight">Nouvelle vente</span>
+          </button>
+          {peut(role, 'facture:manage') && (
+            <button onClick={onNav ? () => onNav('factures') : undefined}
+              className="bg-[#1e3222] text-[#edf5ea] rounded-2xl p-4 flex items-center gap-3 active:scale-95 transition-all border border-[#2a4230]">
+              <div className="w-9 h-9 rounded-full bg-[#2a4230] flex items-center justify-center shrink-0"><IcoFile /></div>
+              <span className="text-sm font-medium text-left leading-tight">Nouvelle facture</span>
+            </button>
+          )}
+          {peut(role, 'tiers:read') && (
+            <button onClick={onNav ? () => onNav('tiers') : undefined}
+              className="bg-[#1e3222] text-[#edf5ea] rounded-2xl p-4 flex items-center gap-3 active:scale-95 transition-all border border-[#2a4230]">
+              <div className="w-9 h-9 rounded-full bg-[#2a4230] flex items-center justify-center shrink-0"><IcoUser /></div>
+              <span className="text-sm font-medium text-left leading-tight">Clients &amp; Fourns.</span>
+            </button>
+          )}
+          {voitStock && (
+            <button onClick={onNav ? () => onNav('stock') : undefined}
+              className="bg-[#1e3222] text-[#edf5ea] rounded-2xl p-4 flex items-center gap-3 active:scale-95 transition-all border border-[#2a4230]">
+              <div className="w-9 h-9 rounded-full bg-[#2a4230] flex items-center justify-center shrink-0"><IcoBox /></div>
+              <span className="text-sm font-medium text-left leading-tight">Saisie stock</span>
+            </button>
+          )}
         </div>
-        {tendance === null ? <p className="muet" style={{ fontSize: 13 }}>Chargement…</p>
-          : tendance.every((t) => t.total === 0) ? (
-            <p className="muet" style={{ fontSize: 13, marginBottom: 0 }}>
-              Enregistrez votre première vente pour voir vos statistiques s'animer.
-            </p>
-          ) : <GrapheTendance donnees={tendance} />}
       </div>
 
-      {voitCompta && tresorerie !== null && (
-        tresorerie.especes !== 0 || tresorerie.mtnMomo !== 0 || tresorerie.orangeMoney !== 0 || tresorerie.banque !== 0
-      ) && (
-        <div className="carte" style={{ marginTop: 14 }}>
-          <strong style={{ display: 'block', marginBottom: 10 }}>Trésorerie du jour</strong>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {[
-              ['Espèces', tresorerie.especes], ['MTN MoMo', tresorerie.mtnMomo],
-              ['Orange Money', tresorerie.orangeMoney], ['Banque', tresorerie.banque],
-            ].filter(([, v]) => (v as number) !== 0).map(([label, v]) => (
-              <div key={label as string} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
-                <span className="muet">{label}</span>
-                <span className="chiffre" style={{ fontWeight: 600, color: (v as number) >= 0 ? 'var(--vert)' : 'var(--danger)' }}>
-                  {formaterFCFA(v as number)}
+      {/* Fiscal card */}
+      {voitCompta && igs && (
+        <div className="mt-4">
+          <button onClick={onNav ? () => onNav('compta') : undefined}
+            className="w-full bg-[#162419] rounded-2xl overflow-hidden text-left border border-[#fbbf24]/15 active:scale-[0.99] transition-transform">
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[#6b9165] text-xs font-medium uppercase tracking-wide">
+                  {regimeIgs ? 'IGS estimé' : 'Régime fiscal'}
                 </span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${regimeIgs ? 'bg-[#fbbf24]/10 text-[#fbbf24]' : 'bg-[#60a5fa]/10 text-[#60a5fa]'}`}>
+                    {regimeIgs ? `Classe ${igs.igs?.classe ?? '—'}` : 'Régime réel'}
+                  </span>
+                  <IcoChevR cls="w-4 h-4 text-[#4a6b4a]" />
+                </div>
+              </div>
+              <p className="text-[#fbbf24] text-2xl font-mono font-semibold">
+                {regimeIgs ? fmt(igs.igs?.igsAnnuel ?? 0) : '—'}
+              </p>
+            </div>
+            <div className="bg-[#1e3222] px-4 py-2">
+              <span className="text-[#4a6b4a] text-xs">
+                CA cumulé : <span className="text-[#6b9165] font-mono font-medium">{fmt(igs.caCumule)}</span>
+                {regimeIgs && ' · Déclaration avant le 15 avr.'}
+              </span>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* Charts row */}
+      <div className="mt-4 flex gap-3 items-stretch">
+        <div className="flex-1 min-w-0 bg-[#162419] rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <h3 className="text-[#edf5ea] font-semibold text-sm">Ventes — 7 jours</h3>
+              <p className="text-[#4a6b4a] text-xs mt-0.5">{tendance ? fmt(tendance.reduce((a, b) => a + b.total, 0)) : '…'}</p>
+            </div>
+            {onNav && (
+              <button onClick={() => onNav('tresorerie')} className="text-[#b4e033] text-xs font-medium flex items-center gap-0.5">
+                Détails <IcoChevR cls="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          {tendance && tendance.length > 0 ? (
+            <SalesAreaChart
+              data={tendance.map((t) => t.total)}
+              days={tendance.map((t) => new Date(t.jour + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', ''))}
+            />
+          ) : <p className="text-[#4a6b4a] text-xs py-8 text-center">Pas encore de données.</p>}
+        </div>
+        {voitCompta && jour && (
+          <div className="w-36 shrink-0 bg-[#162419] rounded-2xl p-3.5">
+            <CashFlowRing totalIn={jour.totalJour} totalOut={depensesJour ?? 0} />
+          </div>
+        )}
+      </div>
+
+      {/* Alerts */}
+      {((alertesStockListe && alertesStockListe.length > 0) || facturesEnRetard.length > 0) && (
+        <div className="mt-4">
+          <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-wide mb-2">Alertes</p>
+          <div className="space-y-2">
+            {(alertesStockListe ?? []).map((p) => {
+              const color = p.rupture ? '#f87171' : '#fbbf24';
+              const label = p.rupture ? 'rupture de stock' : 'stock bas';
+              return (
+                <div key={p.nom} className="rounded-xl px-4 py-3 flex items-center gap-3"
+                  style={{ background: `${color}0d`, border: `1px solid ${color}33` }}>
+                  <IcoAlert cls={`w-4 h-4 shrink-0 ${p.rupture ? 'text-[#f87171]' : 'text-[#fbbf24]'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[#edf5ea] text-sm font-medium">{p.nom} — {label}</p>
+                    <p className="text-[#4a6b4a] text-xs">{p.stock} restant{p.stock !== 1 ? 's' : ''} · seuil : {p.seuil}</p>
+                  </div>
+                  {onNav && <button onClick={() => onNav('stock')} className={`text-xs font-semibold shrink-0 ${p.rupture ? 'text-[#f87171]' : 'text-[#fbbf24]'}`}>Gérer →</button>}
+                </div>
+              );
+            })}
+            {facturesEnRetard.map((f) => (
+              <div key={f.id} className="bg-[#f87171]/5 border border-[#f87171]/20 rounded-xl px-4 py-3 flex items-center gap-3">
+                <IcoAlert cls="w-4 h-4 text-[#f87171] shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[#edf5ea] text-sm font-medium">{f.numero} — en retard</p>
+                  <p className="text-[#4a6b4a] text-xs">{f.tiers_nom ?? '—'} · {fmt(f.montantDu)}</p>
+                </div>
+                {onNav && <button onClick={() => onNav('factures')} className="text-[#f87171] text-xs font-semibold shrink-0">Voir →</button>}
               </div>
             ))}
           </div>
         </div>
       )}
 
+      {/* Meilleures ventes */}
       {voitVentes && top !== null && top.length > 0 && (
-        <div className="carte" style={{ marginTop: 14 }}>
-          <strong style={{ display: 'block', marginBottom: 10 }}>Meilleures ventes</strong>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="mt-4 bg-[#162419] rounded-2xl p-4">
+          <h3 className="text-[#edf5ea] font-semibold text-sm mb-3">Meilleures ventes</h3>
+          <div className="space-y-2">
             {top.map((t, i) => (
-              <div key={t.designation} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span className="muet" style={{ fontSize: 13, width: 16 }}>{i + 1}</span>
-                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {t.designation}
-                </span>
-                <span className="muet" style={{ fontSize: 13 }}>×{t.quantite}</span>
-                <span className="chiffre" style={{ fontWeight: 600, fontSize: 14 }}>{formaterFCFA(t.montant_ht)}</span>
+              <div key={t.designation} className="flex items-center gap-2.5">
+                <span className="text-[#4a6b4a] text-xs w-4">{i + 1}</span>
+                <span className="flex-1 min-w-0 truncate text-[#edf5ea] text-sm">{t.designation}</span>
+                <span className="text-[#4a6b4a] text-xs">×{t.quantite}</span>
+                <span className="text-[#edf5ea] text-sm font-mono font-semibold">{fmt(t.montant_ht)}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {erreur && <p style={{ color: 'var(--danger)', fontSize: 13, marginTop: 10 }}>{erreur}</p>}
-    </>
-  );
-}
+      {/* Recent Transactions */}
+      {mouvements && mouvements.length > 0 && (
+        <div className="mt-4 mb-24 md:mb-8">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-wide">Derniers mouvements</p>
+          </div>
+          <div className="bg-[#162419] rounded-2xl overflow-hidden">
+            {mouvements.map((m, i) => (
+              <div key={m.id} className={`flex items-center gap-3 px-4 py-3.5 ${i < mouvements.length - 1 ? 'border-b border-[#1e3222]' : ''}`}>
+                {m.client
+                  ? <Avatar name={m.client} size="sm" />
+                  : (
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${m.sens === 'in' ? 'bg-[#4ade80]/10 text-[#4ade80]' : 'bg-[#f87171]/10 text-[#f87171]'}`}>
+                      {m.sens === 'in' ? <IcoDn cls="w-4 h-4" /> : <IcoUp cls="w-4 h-4" />}
+                    </div>
+                  )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-[#edf5ea] text-sm font-medium truncate">{m.libelle}</p>
+                  <p className="text-[#4a6b4a] text-xs">
+                    {new Date(m.date).toLocaleDateString('fr-FR')} · <span className={MODE_PAIEMENT_COULEUR[m.mode] ?? 'text-[#6b9165]'}>{MODE_PAIEMENT_LABEL[m.mode] ?? m.mode}</span>
+                  </p>
+                </div>
+                <span className={`font-mono text-sm font-semibold shrink-0 ${m.sens === 'in' ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
+                  {m.sens === 'in' ? '+' : '−'}{fmt(m.montant)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-/** Vrai graphe (données réelles des 7 derniers jours), plus de décor statique. */
-function GrapheTendance({ donnees }: { donnees: { jour: string; total: number }[] }) {
-  const largeur = 300, hauteur = 110, pas = largeur / (donnees.length - 1 || 1);
-  const max = Math.max(...donnees.map((d) => d.total), 1);
-  const y = (v: number) => hauteur - 10 - (v / max) * (hauteur - 20);
-  const points = donnees.map((d, i) => `${i * pas},${y(d.total)}`).join(' ');
-  const libelleJour = (iso: string) =>
-    new Date(iso + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '');
-
-  return (
-    <div>
-      <svg viewBox={`0 0 ${largeur} ${hauteur}`} style={{ width: '100%', height: hauteur }} aria-hidden>
-        <polyline fill="none" stroke="var(--vert)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={points} />
-        <polygon fill="var(--vert-clair)" opacity="0.6" points={`${points} ${largeur},${hauteur} 0,${hauteur}`} />
-      </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--muet)', marginTop: 4 }}>
-        {donnees.map((d) => <span key={d.jour}>{libelleJour(d.jour)}</span>)}
-      </div>
+      {erreur && <p className="text-[#f87171] text-xs mt-3">{erreur}</p>}
     </div>
   );
 }
