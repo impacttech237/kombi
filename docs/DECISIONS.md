@@ -151,5 +151,26 @@ simultanés (D11). Décisions de conception :
   une session expirée/révoquée par better-auth) — seule la résolution du profil métier qui en
   découle l'est.
 
+## D17 — Bascule IGS↔Réel : persistée, réévaluée une fois par exercice, pas de cron de clôture (2026-09-03)
+Point 3 de l'audit fiscal du 2026-09-03 : `determinerRegime()` (correcte, testée dans
+`packages/fiscal`) n'était jamais appelée avec `regimePrecedent`/`ansSousSeuil` côté API — la
+règle de maintien 2 ans (CGI Art. 93 quinquies) ne s'appliquait donc jamais. Décisions :
+- **Le régime se décide sur le CA de l'exercice CLOS précédent**, pas sur le CA en cours
+  d'accumulation de l'exercice courant (celui déjà affiché en direct dans `caCumule`/le
+  dashboard). Nouvelle méthode DO `caCumuleAnnee(annee)` pour lire le CA d'un exercice précis.
+- **Réévaluation lazy, une fois par année civile**, marquée par la nouvelle colonne
+  `entreprise.regime_annee_maj` — pas à chaque requête (le régime légal ne change pas en cours
+  d'année). Déclenchée au premier appel de l'année à `GET /api/fiscalite/igs`, sur le même motif
+  que la création paresseuse d'exercice (`exercicePourAnnee`).
+- **Pas de cron de clôture d'exercice dédié.** Une vraie « clôture » (à-nouveaux, verrouillage de
+  l'exercice précédent) est une fonctionnalité distincte, encore à construire (`docs/parcours.md`
+  § États financiers). Ce correctif se limite à ce que l'audit a identifié : rendre la bascule
+  réellement effective, pas construire la clôture complète. Limite acceptée : si personne ne
+  consulte l'écran fiscalité pendant toute une année, la bascule de cette année-là ne se
+  déclenche qu'au prochain appel (rattrapage automatique dès qu'il a lieu, aucune donnée perdue).
+- **`ansSousSeuil` remis à 0 dans deux cas distincts** : bascule effective en IGS (maintien
+  épuisé) OU CA repassé solidement au-dessus du seuil (Réel de plein droit, plus besoin de
+  maintien). Les deux sont sémantiquement différents mais aboutissent au même compteur à 0.
+
 ## Décisions ouvertes (restantes)
 - Décompte exact des « 2 ans » de maintien de régime (exercices civils vs glissants).

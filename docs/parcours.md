@@ -424,7 +424,18 @@ artefact « Audit Kombi ». Sévérité : 🔴 Bloquant/Critique · 🟠 Élevé
   (§6.1 : « alerte 85 % + liquidation TVA + par-établissement P2 »), reporté avec le point ci-dessus.
 - ⬜ 🟡 Assiette IGS précise (produits accessoires ? dé-doublonnage)
 - ⬜ 🟡 IS / DSF : passage résultat comptable → fiscal, acomptes/AIR
-- ⬜ 🟡 Bascule IGS↔Réel câblée (persister `ansSousSeuil`, exécuter à la clôture)
+- ✅ 🟡 **Bascule IGS↔Réel câblée** (audit produit/fiscal 2026-09-03) : `determinerRegime()`
+  (correcte depuis le début) n'était jamais appelée avec `regimePrecedent`/`ansSousSeuil` — la
+  règle de maintien 2 ans (CGI Art. 93 quinquies) ne s'appliquait donc jamais en pratique, une
+  entreprise repassant sous le seuil basculait immédiatement en IGS. Migration D1 `0006` ajoute
+  `ans_sous_seuil`/`regime_annee_maj` sur `entreprise` ; `services/bascule-regime.ts` réévalue et
+  persiste la bascule une seule fois par changement d'année civile (pas à chaque requête), sur le
+  CA de l'exercice CLOS précédent (`caCumuleAnnee`, nouvelle méthode DO) — pas le CA en cours
+  d'accumulation. Déclenché paresseusement au premier appel de l'année à `GET /api/fiscalite/
+  igs` (même motif que la création paresseuse d'exercice, `exercicePourAnnee`) : pas de cron de
+  clôture d'exercice dédié, qui reste une fonctionnalité distincte à construire (voir point
+  ci-dessous). Testé (`test/bascule-regime.test.ts`) : maintien 1ère année, bascule IGS au bout de
+  2 ans, remise à 0 si le CA repasse solidement au-dessus du seuil, idempotence intra-année.
 - ⬜ 🟡 Séparer `regimeFiscal {igs,reel}` et `systemeOhada {smt,normal}`
 
 ## États financiers

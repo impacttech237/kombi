@@ -1551,6 +1551,22 @@ export class EntrepriseDO extends DurableObject {
 
   /** Chiffre d'affaires cumulé de l'exercice (crédits classe 7, écritures validées) — pour l'IGS. */
   async caCumule(): Promise<number> {
+    return this.caCumuleExercice(this.exerciceOuvert());
+  }
+
+  /**
+   * CA net d'un exercice précis par année (pas forcément l'exercice courant) — utilisé pour la
+   * bascule IGS↔Réel, qui se décide sur le CA de l'exercice CLOS précédent, pas sur le CA en
+   * cours d'accumulation de l'exercice courant. Retourne 0 si l'exercice n'existe pas encore
+   * (aucune opération n'y a jamais été enregistrée).
+   */
+  async caCumuleAnnee(annee: number): Promise<number> {
+    const ex = this.sql.exec('SELECT id FROM exercice WHERE annee = ?', annee).toArray()[0] as { id: string } | undefined;
+    if (!ex) return 0;
+    return this.caCumuleExercice(ex.id);
+  }
+
+  private caCumuleExercice(exerciceId: string): number {
     // Net (crédits − débits) : un avoir débite le compte de produit pour contre-passer une vente
     // sans la supprimer (immuabilité) — le CA doit refléter ce net, pas le seul brut crédité.
     const row = this.sql
@@ -1560,7 +1576,7 @@ export class EntrepriseDO extends DurableObject {
            JOIN compte_comptable c ON c.id = l.compte_id
            JOIN ecriture e ON e.id = l.ecriture_id
           WHERE c.classe = 7 AND e.statut = 'validee' AND e.exercice_id = ?`,
-        this.exerciceOuvert(),
+        exerciceId,
       )
       .toArray()[0] as { ca: number };
     return row.ca;

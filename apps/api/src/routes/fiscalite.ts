@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
-import { calculerIGS, determinerRegime, projeterFranchissement } from '@kombi/fiscal';
+import { calculerIGS, projeterFranchissement } from '@kombi/fiscal';
 import type { NatureActivite } from '@kombi/shared';
+import { regimeActuelDe } from '../services/bascule-regime.js';
 import { stubEntreprise, type AppEnv } from '../types.js';
 
 export const fiscalite = new Hono<AppEnv>();
@@ -10,17 +11,20 @@ fiscalite.get('/igs', async (c) => {
   const entrepriseId = c.get('entrepriseId');
 
   const ent = await c.env.DB.prepare(
-    'SELECT adherent_cga, nature_activite FROM entreprise WHERE id = ?',
+    'SELECT adherent_cga FROM entreprise WHERE id = ?',
   )
     .bind(entrepriseId)
-    .first<{ adherent_cga: number; nature_activite: NatureActivite }>();
+    .first<{ adherent_cga: number }>();
   if (!ent) return c.json({ erreur: 'Entreprise introuvable' }, 404);
 
   const caCumule = await stubEntreprise(c.env, entrepriseId).caCumule();
   const igs = calculerIGS(caCumule, { adherentCGA: ent.adherent_cga === 1 });
-  const regime = determinerRegime({ caAnnuelHT: caCumule, natureActivite: ent.nature_activite });
+  // Régime légal de l'exercice courant (décidé sur le CA de l'exercice clos précédent, avec
+  // maintien 2 ans si applicable — voir services/bascule-regime.ts), pas le régime « au pas »
+  // recalculé sur le CA en cours d'accumulation.
+  const { regime, ansSousSeuil } = await regimeActuelDe(c.env, entrepriseId);
 
-  return c.json({ caCumule, regime, igs });
+  return c.json({ caCumule, regime, ansSousSeuil, igs });
 });
 
 /** Alerte de franchissement projeté sur l'exercice. */
