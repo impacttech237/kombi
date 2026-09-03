@@ -2,16 +2,18 @@
  * Trésorerie — porté fidèlement du prototype Figma Make (Treasury() + BankChip/ContactlessIcon,
  * lignes 2057-2276). Pile de cartes swipeable par mode de paiement, solde total, flux de
  * transactions filtrable.
- * Adaptations : 4 comptes réels (espèces/Orange Money/MTN MoMo/banque, via tresorerieDuJour) au
- * lieu des 3 mock du prototype ; pas de variation « +8.2% » (aucune donnée historique pour la
- * calculer, plutôt que d'inventer un chiffre) ; le flux fusionne ventes + dépenses réelles (les
- * achats payés et les Créances/Dettes — argent pas encore encaissé/payé — restent sur leurs
- * écrans dédiés, accessibles depuis le tableau de bord).
+ * Adaptations : 4 comptes réels (espèces/Orange Money/MTN MoMo/banque, via soldesTresorerie — le
+ * solde réel cumulé depuis l'ouverture de l'exercice, PAS tresorerieDuJour qui ne donne que le
+ * mouvement du jour et faisait apparaître des soldes incohérents) au lieu des 3 mock du
+ * prototype ; pas de variation « +8.2% » (aucune donnée historique pour la calculer, plutôt que
+ * d'inventer un chiffre) ; le flux fusionne ventes + dépenses réelles (les achats payés et les
+ * Créances/Dettes — argent pas encore encaissé/payé — restent sur leurs écrans dédiés,
+ * accessibles depuis le tableau de bord).
  */
 import { useEffect, useMemo, useState } from 'react';
 import { formaterFCFA as fmt } from '@kombi/shared';
 import {
-  tresorerieDuJour, listerVentesRecentes, listerDepenses,
+  soldesTresorerie, listerVentesRecentes, listerDepenses,
   type EntrepriseResume, type TresorerieJour, type VenteRecente, type Depense,
 } from '../lib/api.js';
 import { MODE_PAIEMENT_LABEL, MODE_PAIEMENT_COULEUR } from '../components/charts.js';
@@ -70,7 +72,7 @@ export function Tresorerie({ entreprise, onCaisse, onDepenses }: {
   const [frontCard, setFrontCard] = useState(0);
 
   useEffect(() => {
-    tresorerieDuJour(entreprise.id).then(setTresor).catch(() => {});
+    soldesTresorerie(entreprise.id).then(setTresor).catch(() => {});
     listerVentesRecentes(entreprise.id).then(setVentes).catch(() => {});
     listerDepenses(entreprise.id).then(setDepenses).catch(() => {});
   }, [entreprise.id]);

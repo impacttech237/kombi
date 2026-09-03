@@ -16,6 +16,12 @@ etats.get('/tresorerie-jour', requirePermission('compta:read'), async (c) => {
   return c.json(t);
 });
 
+/** Soldes réels de trésorerie par mode (cumul depuis l'ouverture de l'exercice) — écran Trésorerie. */
+etats.get('/tresorerie-solde', requirePermission('compta:read'), async (c) => {
+  const t = await stubEntreprise(c.env, c.get('entrepriseId')).soldesTresorerie();
+  return c.json(t);
+});
+
 /** Journal d'audit immuable : entrées + preuve d'intégrité de la chaîne de hash. */
 etats.get('/audit', requirePermission('audit:read'), async (c) => {
   const e = stubEntreprise(c.env, c.get('entrepriseId'));

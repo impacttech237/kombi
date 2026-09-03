@@ -1660,6 +1660,25 @@ export class EntrepriseDO extends DurableObject {
     return { especes: net('571'), mtnMomo: net('5522'), orangeMoney: net('5521'), banque: net('521') };
   }
 
+  /**
+   * Soldes réels de trésorerie par mode (espèces, MTN MoMo, Orange Money, banque) : cumul
+   * débit − crédit depuis l'ouverture de l'exercice, PAS seulement les mouvements du jour
+   * (contrairement à `tresorerieDuJour`). C'est le montant réellement disponible aujourd'hui.
+   */
+  async soldesTresorerie(): Promise<{ especes: number; mtnMomo: number; orangeMoney: number; banque: number }> {
+    const exerciceId = this.exerciceOuvert();
+    const solde = (numero: string) => {
+      const row = this.sql.exec(
+        `SELECT COALESCE(SUM(CASE WHEN l.sens = 'debit' THEN l.montant ELSE -l.montant END), 0) AS solde
+           FROM ligne_ecriture l JOIN compte_comptable c ON c.id = l.compte_id JOIN ecriture e ON e.id = l.ecriture_id
+          WHERE c.numero = ? AND e.statut = 'validee' AND e.exercice_id = ?`,
+        numero, exerciceId,
+      ).toArray()[0] as { solde: number };
+      return row.solde;
+    };
+    return { especes: solde('571'), mtnMomo: solde('5522'), orangeMoney: solde('5521'), banque: solde('521') };
+  }
+
   /** Journal général : liste des écritures validées, la plus récente en premier. */
   async listerEcritures(): Promise<Record<string, unknown>[]> {
     return this.sql.exec(

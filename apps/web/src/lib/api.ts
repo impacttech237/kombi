@@ -115,6 +115,9 @@ export const depensesDuJour = (entrepriseId: string) =>
 export interface TresorerieJour { especes: number; mtnMomo: number; orangeMoney: number; banque: number; }
 export const tresorerieDuJour = (entrepriseId: string) =>
   api<TresorerieJour>('/api/etats/tresorerie-jour', { entrepriseId });
+/** Soldes réels (cumul depuis l'ouverture de l'exercice, pas seulement le jour). */
+export const soldesTresorerie = (entrepriseId: string) =>
+  api<TresorerieJour>('/api/etats/tresorerie-solde', { entrepriseId });
 
 export interface NotificationActive { type: string; gravite: 'attention' | 'critique'; libelle: string; }
 export const listerNotifications = (entrepriseId: string) =>

@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { formaterFCFA, peut, type RoleMembre } from '@kombi/shared';
 import {
   api, statsJour, tendance7Jours, listerDepenses, listerFacturesImpayees, meilleuresVentes,
-  depensesDuJour, tresorerieDuJour, listerProduits, listerVentesRecentes,
+  depensesDuJour, soldesTresorerie, listerProduits, listerVentesRecentes,
   type EntrepriseResume, type MeilleureVente, type TresorerieJour, type FactureImpayee,
 } from '../lib/api.js';
 import {
@@ -53,7 +53,7 @@ export function Dashboard({ entreprise, onCaisse, onNav }: {
     statsJour(entreprise.id).then(setJour).catch(() => {});
     tendance7Jours(entreprise.id).then(setTendance).catch(() => {});
     if (voitCreances) listerFacturesImpayees(entreprise.id).then(setFacturesImpayees).catch(() => {});
-    if (voitCompta) tresorerieDuJour(entreprise.id).then(setTresorerie).catch(() => {});
+    if (voitCompta) soldesTresorerie(entreprise.id).then(setTresorerie).catch(() => {});
     if (voitVentes) meilleuresVentes(entreprise.id).then(setTop).catch(() => {});
     if (voitDepenses) depensesDuJour(entreprise.id).then(setDepensesJour).catch(() => {});
     if (voitStock) {
