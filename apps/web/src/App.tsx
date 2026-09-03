@@ -18,6 +18,7 @@ import { Equipe } from './pages/Equipe.js';
 import { Tiers } from './pages/Tiers.js';
 import { Parametres } from './pages/Parametres.js';
 import { Comptabilite } from './pages/Comptabilite.js';
+import { Tresorerie } from './pages/Tresorerie.js';
 import { AppShell } from './components/Shell.js';
 import { OfflineBanner } from './components/OfflineBanner.js';
 import { Bouton, Logo } from './components/ui.js';
@@ -99,8 +100,8 @@ function Espace() {
           : onglet === 'equipe' ? <Equipe entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'parametres' ? <Parametres entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'tiers' ? <Tiers entreprise={active} onRetour={() => setOnglet('dashboard')} />
-          // 'tresorerie' et 'compta' pointent temporairement vers le même écran : Trésorerie
-          // n'est pas encore portée (voir docs/parcours.md « Refonte design system »).
+          : onglet === 'tresorerie'
+            ? <Tresorerie entreprise={active} onCaisse={() => setOnglet('caisse')} onDepenses={() => setOnglet('depenses')} />
           : <Comptabilite entreprise={active} />}
 
         {/* Temporaire : Dépenses/Créances/Dettes rejoindront Trésorerie (voir commentaire plus
