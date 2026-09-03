@@ -604,7 +604,7 @@ export class EntrepriseDO extends DurableObject {
   /** Ventes à crédit non soldées (« on me doit ») — pour l'écran créances. */
   async listerVentesACredit(): Promise<Record<string, unknown>[]> {
     const rows = this.sql.exec(
-      `SELECT v.id, v.date, v.total_ttc, v.statut, v.date_echeance, t.nom AS tiers_nom,
+      `SELECT v.id, v.date, v.total_ttc, v.statut, v.date_echeance, v.piece_cle, t.nom AS tiers_nom,
               COALESCE((SELECT SUM(montant) FROM paiement_vente WHERE vente_id = v.id), 0) AS regle
          FROM vente v LEFT JOIN tiers t ON t.id = v.tiers_id
         WHERE v.statut IN ('a_credit', 'payee_partiellement')
@@ -612,6 +612,25 @@ export class EntrepriseDO extends DurableObject {
     ).toArray() as (Record<string, unknown> & { date_echeance: string | null })[];
     const aujourdhui = this.dateCourante();
     return rows.map((r) => ({ ...r, enRetard: r.date_echeance !== null && r.date_echeance < aujourdhui }));
+  }
+
+  async venteExiste(venteId: string): Promise<boolean> {
+    return !!this.sql.exec('SELECT 1 FROM vente WHERE id = ?', venteId).toArray()[0];
+  }
+
+  /** Attache (ou retire, si `pieceCle` est null) la clé R2 de la pièce justificative d'une vente. */
+  async attacherPieceVente(venteId: string, pieceCle: string | null): Promise<void> {
+    const existe = this.sql.exec('SELECT 1 FROM vente WHERE id = ?', venteId).toArray()[0];
+    if (!existe) throw new Error('Vente introuvable');
+    this.sql.exec('UPDATE vente SET piece_cle = ? WHERE id = ?', pieceCle, venteId);
+  }
+
+  /** Clé R2 de la pièce justificative d'une vente, si elle existe. */
+  async getPieceVente(venteId: string): Promise<string | null> {
+    const row = this.sql.exec('SELECT piece_cle FROM vente WHERE id = ?', venteId).toArray()[0] as
+      | { piece_cle: string | null }
+      | undefined;
+    return row?.piece_cle ?? null;
   }
 
   /** Historique des ventes récentes (écran caisse — pour retrouver une vente à annuler). */

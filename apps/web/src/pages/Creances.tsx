@@ -6,12 +6,12 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA as fmt } from '@kombi/shared';
 import {
-  listerVentesACredit, listerFacturesImpayees,
+  listerVentesACredit, listerFacturesImpayees, televerserPieceVente, urlPieceVente, supprimerPieceVente,
   type EntrepriseResume, type VenteACredit, type FactureImpayee,
 } from '../lib/api.js';
 import { enfilerMutation, nouvelUuid } from '../offline/db.js';
 import { synchroniser } from '../offline/sync.js';
-import { IcoChevR } from '../components/icons.js';
+import { IcoChevR, IcoFile } from '../components/icons.js';
 
 /** Offline-first : encaissement mis en file localement, synchronisé dès que possible. */
 async function encaisserOffline(
@@ -75,7 +75,13 @@ export function Creances({ entreprise, onRetour }: { entreprise: EntrepriseResum
                 sousTitre={v.date_echeance ? `Vente à crédit · échéance ${v.date_echeance}` : 'Vente à crédit'}
                 du={v.total_ttc - v.regle} enRetard={v.enRetard}
                 onPayer={(montant, mode) => encaisserOffline(entreprise.id, 'paiement_vente', 'venteId', v.id, montant, mode)}
-                onFait={recharger} />
+                onFait={recharger}
+                piece={{
+                  id: v.id, cle: v.piece_cle,
+                  televerser: (f) => televerserPieceVente(entreprise.id, v.id, f),
+                  url: () => urlPieceVente(entreprise.id, v.id),
+                  retirer: () => supprimerPieceVente(entreprise.id, v.id),
+                }} />
             ))}
             {factures!.map((f) => (
               <LigneCreance key={f.id} titre={f.tiers_nom ?? 'Client'} sousTitre={f.numero} du={f.montantDu} enRetard={f.enRetard}
@@ -89,14 +95,27 @@ export function Creances({ entreprise, onRetour }: { entreprise: EntrepriseResum
   );
 }
 
-function LigneCreance({ titre, sousTitre, du, enRetard, onPayer, onFait }: {
+interface PieceControles {
+  id: string;
+  cle: string | null;
+  televerser: (fichier: File) => Promise<void>;
+  url: () => Promise<string>;
+  retirer: () => Promise<unknown>;
+}
+
+function LigneCreance({ titre, sousTitre, du, enRetard, onPayer, onFait, piece }: {
   titre: string; sousTitre: string; du: number; enRetard?: boolean;
   onPayer: (montant: number, mode: string) => Promise<unknown>; onFait: () => void;
+  /** Absent pour les factures (déjà régénérées en PDF à la demande) — seules les ventes en ont besoin. */
+  piece?: PieceControles;
 }) {
   const [ouvert, setOuvert] = useState(false);
   const [montant, setMontant] = useState(String(du));
   const [mode, setMode] = useState('especes');
   const [charge, setCharge] = useState(false);
+  const [chargePiece, setChargePiece] = useState(false);
+  const [erreurPiece, setErreurPiece] = useState('');
+  const pieceInputId = `piece-creance-${piece?.id ?? 'na'}`;
 
   async function encaisser() {
     setCharge(true);
@@ -106,6 +125,26 @@ function LigneCreance({ titre, sousTitre, du, enRetard, onPayer, onFait }: {
     } finally { setCharge(false); }
   }
 
+  async function ajouterPiece(fichier: File) {
+    if (!piece) return;
+    setChargePiece(true); setErreurPiece('');
+    try {
+      await piece.televerser(fichier);
+      onFait();
+    } catch (e) {
+      setErreurPiece(e instanceof Error ? e.message : 'Erreur');
+    } finally { setChargePiece(false); }
+  }
+  async function voirPiece() {
+    if (!piece) return;
+    try { window.open(await piece.url(), '_blank'); } catch { /* ignore */ }
+  }
+  async function retirerPiece() {
+    if (!piece || !confirm('Retirer la pièce jointe de cette vente ?')) return;
+    setChargePiece(true);
+    try { await piece.retirer(); onFait(); } finally { setChargePiece(false); }
+  }
+
   return (
     <div className="bg-[#162419] rounded-2xl p-4">
       <div className="flex items-center gap-3">
@@ -113,6 +152,7 @@ function LigneCreance({ titre, sousTitre, du, enRetard, onPayer, onFait }: {
           <p className="text-[#edf5ea] font-medium text-sm truncate">{titre}</p>
           <p className="text-[#4a6b4a] text-xs mt-0.5">{sousTitre}</p>
         </div>
+        {piece?.cle && <IcoFile cls="w-4 h-4 text-[#b4e033] shrink-0" />}
         <div className="text-right shrink-0">
           <p className="text-[#fbbf24] font-mono font-semibold text-sm">{fmt(du)}</p>
           {enRetard && <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-[#f87171]/15 text-[#f87171] mt-0.5 inline-block">En retard</span>}
@@ -136,6 +176,27 @@ function LigneCreance({ titre, sousTitre, du, enRetard, onPayer, onFait }: {
           </button>
         </div>
       )}
+      {piece && (
+        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-[#1e3222] flex-wrap">
+          {piece.cle ? (
+            <>
+              <button onClick={voirPiece} className="bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-2 text-xs font-medium border border-[#2a4230]">Voir la pièce</button>
+              <button onClick={() => document.getElementById(pieceInputId)?.click()} disabled={chargePiece}
+                className="bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-2 text-xs font-medium border border-[#2a4230] disabled:opacity-40">Remplacer</button>
+              <button onClick={retirerPiece} disabled={chargePiece}
+                className="text-[#f87171] text-xs font-medium px-3 py-2 hover:bg-[#f87171]/8 rounded-xl transition-colors disabled:opacity-40">Retirer</button>
+            </>
+          ) : (
+            <button onClick={() => document.getElementById(pieceInputId)?.click()} disabled={chargePiece}
+              className="bg-[#1e3222] text-[#b4e033] rounded-xl px-3 py-2 text-xs font-medium border border-[#b4e033]/20 disabled:opacity-40">
+              {chargePiece ? 'Envoi…' : 'Joindre un justificatif (photo/PDF)'}
+            </button>
+          )}
+          <input id={pieceInputId} type="file" accept="image/*,application/pdf" capture="environment" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void ajouterPiece(f); e.target.value = ''; }} />
+        </div>
+      )}
+      {erreurPiece && <p className="text-[#f87171] text-xs mt-2">{erreurPiece}</p>}
     </div>
   );
 }

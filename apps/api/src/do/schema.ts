@@ -422,6 +422,14 @@ const MIGRATION_V13_PIECE_ACHAT = `
 ALTER TABLE achat_fournisseur ADD COLUMN piece_cle TEXT
 `;
 
+/**
+ * v14 — Pièce justificative attachée à une vente à crédit (bon de livraison signé, commande du
+ * client...) — symétrique de v13 pour les dettes fournisseurs (voir routes/ventes.ts).
+ */
+const MIGRATION_V14_PIECE_VENTE = `
+ALTER TABLE vente ADD COLUMN piece_cle TEXT
+`;
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -481,7 +489,9 @@ export const MIGRATIONS_DO: readonly MigrationDO[] = [
   { v: 12, statements: statementsDe(MIGRATION_V12_ECHEANCE_CREDIT) },
   // v13 — pièce justificative (scan facture fournisseur) attachée à un achat fournisseur.
   { v: 13, statements: statementsDe(MIGRATION_V13_PIECE_ACHAT) },
-  // v14… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v14 — pièce justificative attachée à une vente à crédit.
+  { v: 14, statements: statementsDe(MIGRATION_V14_PIECE_VENTE) },
+  // v15… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */

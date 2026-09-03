@@ -79,7 +79,7 @@ export const payerVente = (
 
 export interface VenteACredit {
   id: string; date: string; total_ttc: number; statut: string; tiers_nom: string | null; regle: number;
-  date_echeance: string | null; enRetard: boolean;
+  date_echeance: string | null; enRetard: boolean; piece_cle: string | null;
 }
 export const listerVentesACredit = (entrepriseId: string) =>
   api<{ ventes: VenteACredit[] }>('/api/ventes/credit', { entrepriseId }).then((r) => r.ventes);
@@ -308,6 +308,11 @@ const aidesPieceAchat = creerAidesPiece('/api/achats');
 export const televerserPieceAchat = aidesPieceAchat.televerser;
 export const urlPieceAchat = aidesPieceAchat.url;
 export const supprimerPieceAchat = aidesPieceAchat.supprimer;
+
+const aidesPieceVente = creerAidesPiece('/api/ventes');
+export const televerserPieceVente = aidesPieceVente.televerser;
+export const urlPieceVente = aidesPieceVente.url;
+export const supprimerPieceVente = aidesPieceVente.supprimer;
 export const creerDepense = (
   entrepriseId: string,
   data: {

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { zModePaiement, zMontantPositif, zLigneMontant, zDateISO, messageErreurZod } from '@kombi/shared';
 import { requirePermission } from '../middleware/permission.js';
 import { stubEntreprise, regimeFiscalDe, type AppEnv } from '../types.js';
+import { monterRoutesPiece } from '../services/pieces.js';
 
 const zVente = z.object({
   modePaiement: zModePaiement.nullish(),
@@ -95,4 +96,13 @@ ventes.get('/marge', requirePermission('compta:read'), async (c) => {
 ventes.get('/top', requirePermission('vente:read'), async (c) => {
   const top = await stubEntreprise(c.env, c.get('entrepriseId')).meilleuresVentes(5);
   return c.json({ top });
+});
+
+// ── Pièce justificative (bon de livraison, commande client...) ──
+monterRoutesPiece(ventes, {
+  segment: 'vente', permissionLire: 'vente:read', permissionGerer: 'vente:create',
+  introuvable: 'Vente introuvable',
+  existe: (stub, id) => stub.venteExiste(id),
+  attacher: (stub, id, cle) => stub.attacherPieceVente(id, cle),
+  lireCle: (stub, id) => stub.getPieceVente(id),
 });
