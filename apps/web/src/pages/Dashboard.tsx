@@ -69,9 +69,12 @@ export function Dashboard({ entreprise, onCaisse, onNav }: {
         listerVentesRecentes(entreprise.id).catch(() => []),
         voitDepenses ? listerDepenses(entreprise.id).catch(() => []) : Promise.resolve([]),
       ]).then(([ventes, depenses]) => {
-        const v = ventes.filter((x) => x.statut !== 'annulee').map((x) => ({
+        // Une vente à crédit (mode_paiement null) n'est pas un encaissement à sa date de création —
+        // seul son règlement (payerVente, non listé ici) en est un. L'exclure pour ne pas laisser
+        // croire qu'un montant a été encaissé en espèces alors qu'il reste dû.
+        const v = ventes.filter((x) => x.statut !== 'annulee' && x.mode_paiement).map((x) => ({
           id: x.id, libelle: x.tiers_nom ?? 'Vente au comptant', montant: x.total_ttc,
-          sens: 'in' as const, date: x.date, mode: x.mode_paiement ?? 'especes', client: x.tiers_nom,
+          sens: 'in' as const, date: x.date, mode: x.mode_paiement!, client: x.tiers_nom,
         }));
         const d = depenses.map((x) => ({
           id: x.id, libelle: x.libelle, montant: x.montant, sens: 'out' as const,

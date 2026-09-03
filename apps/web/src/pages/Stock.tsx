@@ -2,6 +2,9 @@
  * Stock — porté fidèlement du prototype Figma Make (Stock(), lignes 1934-2053).
  * Adaptations : pas de catégories de produits ni de palier « critique » distinct dans le modèle
  * Produit de Kombi (seulement en_alerte/en_rupture) — 3 états (ok/faible/rupture) au lieu de 4.
+ * « Valeur stock » utilise le coût moyen pondéré (comme le prototype utilisait `price`, le prix
+ * de VENTE) — sinon ce chiffre ne recoupe jamais la ligne « Marchandises » du Bilan (qui valorise
+ * au coût, seule base reconnue en comptabilité), ce qui a déjà fait croire à une incohérence.
  * Les écrans Nouveau produit / Approvisionner / Ajuster (absents du prototype) sont reskinnés
  * dans le même langage visuel plutôt que dans l'ancien style clair.
  */
@@ -37,7 +40,7 @@ export function Stock({ entreprise }: { entreprise: EntrepriseResume }) {
   const enAlerte = liste.filter((p) => statutProduit(p) !== 'ok');
   const enRupture = enAlerte.filter((p) => statutProduit(p) === 'rupture');
   const enFaible = enAlerte.filter((p) => statutProduit(p) === 'faible');
-  const totalValue = liste.reduce((s, p) => s + p.prix_vente * p.stock_actuel, 0);
+  const totalValue = liste.reduce((s, p) => s + p.cout_moyen_pondere * p.stock_actuel, 0);
 
   return (
     <div className="-mx-4 -mt-4 md:-mx-8 md:-mt-6 flex-1 flex flex-col overflow-hidden">

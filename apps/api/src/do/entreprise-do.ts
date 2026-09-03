@@ -1294,15 +1294,28 @@ export class EntrepriseDO extends DurableObject {
     return row.n;
   }
 
+  /**
+   * Liste complète des factures/devis. `regle` et `enRetard` sont dérivés à la volée comme dans
+   * `listerFacturesImpayees()` (aucun statut `en_retard` n'est jamais persisté en base — voir son
+   * commentaire) : sans eux, un client de cet appel ne peut pas savoir combien reste réellement dû
+   * ni distinguer une facture en retard d'une facture simplement en attente.
+   */
   async listerFactures(): Promise<Record<string, unknown>[]> {
-    return this.sql.exec(
+    const rows = this.sql.exec(
       `SELECT f.id, f.type, f.numero, f.statut, f.total_ttc, f.date_emission, f.date_echeance, f.avoir_de_id,
               t.nom AS tiers_nom, t.telephone AS tiers_telephone,
               EXISTS (SELECT 1 FROM facture av WHERE av.avoir_de_id = f.id) AS a_un_avoir,
-              EXISTS (SELECT 1 FROM facture cv WHERE cv.devis_id = f.id) AS a_ete_converti
+              EXISTS (SELECT 1 FROM facture cv WHERE cv.devis_id = f.id) AS a_ete_converti,
+              COALESCE((SELECT SUM(montant) FROM paiement_facture WHERE facture_id = f.id), 0) AS regle
          FROM facture f LEFT JOIN tiers t ON t.id = f.tiers_id
         ORDER BY f.created_at DESC`,
-    ).toArray() as never;
+    ).toArray() as (Record<string, unknown> & { statut: string; total_ttc: number; date_echeance: string | null; regle: number })[];
+    const aujourdhui = this.dateCourante();
+    return rows.map((r) => ({
+      ...r, montantDu: r.total_ttc - r.regle,
+      enRetard: (r.statut === 'envoyee' || r.statut === 'payee_partiellement')
+        && r.date_echeance !== null && r.date_echeance < aujourdhui,
+    }));
   }
 
   /**

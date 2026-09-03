@@ -60,19 +60,21 @@ export function Factures({ entreprise }: { entreprise: EntrepriseResume }) {
 
   const factures = useMemo(() => (docs ?? []).filter((d) => d.type === 'facture'), [docs]);
   const devis = useMemo(() => (docs ?? []).filter((d) => d.type === 'devis'), [docs]);
-  const pending = useMemo(() => factures.filter((d) => d.statut === 'envoyee' || d.statut === 'payee_partiellement'), [factures]);
-  const overdue = useMemo(() => factures.filter((d) => d.statut === 'en_retard'), [factures]);
+  // Aucun statut `en_retard` n'est jamais persisté en base (voir le commentaire de
+  // listerFactures() côté API) — le retard est le booléen `enRetard`, dérivé de date_echeance à
+  // chaque appel, indépendamment du statut envoyee/payee_partiellement sous-jacent.
+  const pending = useMemo(() => factures.filter((d) => (d.statut === 'envoyee' || d.statut === 'payee_partiellement') && !d.enRetard), [factures]);
+  const overdue = useMemo(() => factures.filter((d) => d.enRetard), [factures]);
   const paid = useMemo(() => factures.filter((d) => d.statut === 'payee'), [factures]);
 
   const filtered = useMemo(() => {
     if (!docs) return [];
     if (filtre === 'devis') return devis;
     if (filtre === 'all') return docs;
-    const statuts: Record<Filtre, string[]> = {
-      all: [], devis: [], pending: ['envoyee', 'payee_partiellement'], overdue: ['en_retard'], paid: ['payee'],
-    };
-    return factures.filter((d) => statuts[filtre].includes(d.statut));
-  }, [docs, filtre, factures, devis]);
+    if (filtre === 'pending') return pending;
+    if (filtre === 'overdue') return overdue;
+    return paid;
+  }, [docs, filtre, devis, pending, overdue, paid]);
 
   const tabCount: Record<Filtre, number> = {
     all: docs?.length ?? 0, pending: pending.length, overdue: overdue.length, paid: paid.length, devis: devis.length,
@@ -98,11 +100,11 @@ export function Factures({ entreprise }: { entreprise: EntrepriseResume }) {
         <div className="bg-[#162419] rounded-2xl p-4 grid grid-cols-3 gap-4">
           <div>
             <p className="text-[#4a6b4a] text-xs">À encaisser</p>
-            <p className="text-[#fbbf24] font-mono font-semibold text-sm mt-0.5">{fmt(pending.reduce((s, i) => s + i.total_ttc, 0))}</p>
+            <p className="text-[#fbbf24] font-mono font-semibold text-sm mt-0.5">{fmt(pending.reduce((s, i) => s + i.montantDu, 0))}</p>
           </div>
           <div>
             <p className="text-[#4a6b4a] text-xs">En retard</p>
-            <p className="text-[#f87171] font-mono font-semibold text-sm mt-0.5">{fmt(overdue.reduce((s, i) => s + i.total_ttc, 0))}</p>
+            <p className="text-[#f87171] font-mono font-semibold text-sm mt-0.5">{fmt(overdue.reduce((s, i) => s + i.montantDu, 0))}</p>
           </div>
           <div>
             <p className="text-[#4a6b4a] text-xs">Encaissé</p>
@@ -122,12 +124,14 @@ export function Factures({ entreprise }: { entreprise: EntrepriseResume }) {
             const isAvoir = !!d.avoir_de_id;
             const isConverted = isDevis && !!d.a_ete_converti;
             const isBrouillon = d.statut === 'brouillon';
-            const canAvoir = !isDevis && !isAvoir && !isBrouillon && !d.a_un_avoir && (d.statut === 'payee' || d.statut === 'envoyee' || d.statut === 'en_retard' || d.statut === 'payee_partiellement');
+            const canAvoir = !isDevis && !isAvoir && !isBrouillon && !d.a_un_avoir && d.statut !== 'brouillon';
             const canPay = !isDevis && !isAvoir && !isBrouillon && d.statut !== 'payee';
+            const partiel = d.regle > 0 && d.montantDu > 0;
             const badge = isAvoir ? { label: 'Avoir', cls: 'bg-[#a78bfa]/15 text-[#a78bfa]' }
               : isConverted ? { label: 'Convertie', cls: 'bg-[#4ade80]/10 text-[#4ade80]' }
+              : !isDevis && d.enRetard ? { label: 'En retard', cls: 'bg-[#f87171]/15 text-[#f87171]' }
               : BADGE[d.statut] ?? { label: d.statut, cls: 'bg-[#4a6b4a]/20 text-[#6b9165]' };
-            const montantCls = isAvoir ? 'text-[#a78bfa]' : !isDevis && d.statut === 'payee' ? 'text-[#4ade80]' : !isDevis && d.statut === 'en_retard' ? 'text-[#f87171]' : 'text-[#edf5ea]';
+            const montantCls = isAvoir ? 'text-[#a78bfa]' : !isDevis && d.statut === 'payee' ? 'text-[#4ade80]' : !isDevis && d.enRetard ? 'text-[#f87171]' : 'text-[#edf5ea]';
             return (
               <div key={d.id} className="bg-[#162419] rounded-2xl p-4">
                 <div className="flex items-start gap-3">
@@ -141,7 +145,10 @@ export function Factures({ entreprise }: { entreprise: EntrepriseResume }) {
                     <p className="text-[#edf5ea] font-medium text-sm">{d.tiers_nom ?? '—'}</p>
                     <p className="text-[#4a6b4a] text-xs mt-1.5">{isDevis ? 'Créé le' : 'Émis le'} {courte(d.date_emission)}</p>
                   </div>
-                  <p className={`font-mono font-semibold shrink-0 ${montantCls}`}>{fmt(d.total_ttc)}</p>
+                  <div className="text-right shrink-0">
+                    <p className={`font-mono font-semibold ${montantCls}`}>{fmt(d.total_ttc)}</p>
+                    {partiel && <p className="text-[#4a6b4a] text-[11px] mt-0.5">reste {fmt(d.montantDu)}</p>}
+                  </div>
                 </div>
                 <div className="flex gap-2 mt-3 pt-3 border-t border-[#1e3222] flex-wrap">
                   <button onClick={() => setDetailId(d.id)} className="flex-1 bg-[#1e3222] text-[#edf5ea] rounded-xl py-2 text-xs font-medium hover:bg-[#2a4230] transition-colors">
@@ -232,9 +239,11 @@ function DetailOverlay({ entreprise, doc, onClose, onEmettre, onEncaisser, onAvo
   const tvaApplicable = entreprise.regime_fiscal !== 'igs' && entreprise.assujetti_tva === 1;
   const ht = tvaApplicable ? Math.round(doc.total_ttc / (1 + TAUX_TVA_EFFECTIF)) : doc.total_ttc;
   const tva = doc.total_ttc - ht;
+  const partiel = doc.regle > 0 && doc.montantDu > 0;
   const badge = isAvoir ? { label: 'Avoir', cls: 'bg-[#a78bfa]/15 text-[#a78bfa]' }
     : isBrouillon ? { label: 'Brouillon', cls: 'bg-[#6b9165]/15 text-[#6b9165]' }
     : isDevis ? { label: 'Devis', cls: 'bg-[#4a6b4a]/20 text-[#6b9165]' }
+    : doc.enRetard ? { label: 'En retard', cls: 'bg-[#f87171]/15 text-[#f87171]' }
     : BADGE[doc.statut] ?? { label: doc.statut, cls: 'bg-[#4a6b4a]/20 text-[#6b9165]' };
 
   async function voirPdf() {
@@ -300,10 +309,16 @@ function DetailOverlay({ entreprise, doc, onClose, onEmettre, onEncaisser, onAvo
           )}
           <div className="flex justify-between">
             <span className="text-[#edf5ea] font-semibold text-sm">{tvaApplicable ? 'Total TTC' : 'Total'}</span>
-            <span className={`font-mono font-bold text-base ${isAvoir ? 'text-[#a78bfa]' : doc.statut === 'payee' && !isDevis ? 'text-[#4ade80]' : doc.statut === 'en_retard' && !isDevis ? 'text-[#f87171]' : 'text-[#edf5ea]'}`}>
+            <span className={`font-mono font-bold text-base ${isAvoir ? 'text-[#a78bfa]' : doc.statut === 'payee' && !isDevis ? 'text-[#4ade80]' : doc.enRetard && !isDevis ? 'text-[#f87171]' : 'text-[#edf5ea]'}`}>
               {fmt(doc.total_ttc)}
             </span>
           </div>
+          {!isDevis && partiel && (
+            <div className="flex justify-between text-sm pt-1 border-t border-[#1e3222]">
+              <span className="text-[#6b9165]">Déjà réglé · reste dû</span>
+              <span className="font-mono text-[#fbbf24]">{fmt(doc.regle)} · {fmt(doc.montantDu)}</span>
+            </div>
+          )}
         </div>
 
         {!isBrouillon && (
@@ -346,7 +361,7 @@ function DetailOverlay({ entreprise, doc, onClose, onEmettre, onEncaisser, onAvo
 function PaySheet({ doc, onClose, onConfirm }: {
   doc: FactureResume; onClose: () => void; onConfirm: (montant: number, mode: string) => Promise<void>;
 }) {
-  const [montant, setMontant] = useState(String(doc.total_ttc));
+  const [montant, setMontant] = useState(String(doc.montantDu));
   const [mode, setMode] = useState('especes');
   const [charge, setCharge] = useState(false);
   const val = parseFloat(montant.replace(/\s/g, '').replace(',', '.')) || 0;
@@ -356,12 +371,15 @@ function PaySheet({ doc, onClose, onConfirm }: {
       <div className="bg-[#162419] rounded-t-3xl p-5 space-y-4 max-w-lg mx-auto w-full" onClick={(e) => e.stopPropagation()}>
         <div className="w-10 h-1 bg-[#2a4230] rounded-full mx-auto mb-1" />
         <h3 className="text-[#edf5ea] font-semibold text-base">Encaissement</h3>
+        {doc.regle > 0 && (
+          <p className="text-[#4a6b4a] text-xs -mt-2">Déjà réglé : {fmt(doc.regle)} sur {fmt(doc.total_ttc)}</p>
+        )}
         <div>
           <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Montant à encaisser (F)</label>
           <input type="text" inputMode="numeric" value={montant} onChange={(e) => setMontant(e.target.value)}
             className="w-full bg-[#1e3222] text-[#edf5ea] font-mono text-lg rounded-xl px-4 py-3 border border-[#2a4230] focus:border-[#b4e033] focus:outline-none" />
-          {val > 0 && val < doc.total_ttc && (
-            <p className="text-[#fbbf24] text-xs mt-1.5">Paiement partiel — solde restant : {fmt(doc.total_ttc - val)}</p>
+          {val > 0 && val < doc.montantDu && (
+            <p className="text-[#fbbf24] text-xs mt-1.5">Paiement partiel — solde restant : {fmt(doc.montantDu - val)}</p>
           )}
         </div>
         <div>

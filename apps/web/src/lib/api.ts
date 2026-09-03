@@ -188,8 +188,10 @@ export const getTiersDetail = (entrepriseId: string, id: string) =>
 // ── Factures ──
 export interface FactureResume {
   id: string; type: string; numero: string | null; statut: string;
-  total_ttc: number; date_emission: string | null; tiers_nom: string | null; tiers_telephone: string | null;
+  total_ttc: number; date_emission: string | null; date_echeance: string | null;
+  tiers_nom: string | null; tiers_telephone: string | null;
   avoir_de_id: string | null; a_un_avoir: number; a_ete_converti: number;
+  regle: number; montantDu: number; enRetard: boolean;
 }
 export interface LigneFacture { designation: string; quantite: number; prixUnitaire: number; }
 
