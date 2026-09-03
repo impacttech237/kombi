@@ -1,86 +1,202 @@
+/**
+ * Comptabilité — porté fidèlement du prototype Figma Make (Accounting(), lignes 2390-2606).
+ * Adaptations : pas de bascule de prévisualisation IGS/Réel (le régime de l'entreprise n'est pas
+ * une simulation ad hoc — voir Paramètres fiscaux) ; les lignes Produits/Charges/Actif/Passif
+ * viennent des vrais comptes SYSCOHADA (numéro + libellé) plutôt que du mock à 2-3 lignes fixes ;
+ * pas de détail TVA collectée/déductible en régime réel (aucun endpoint dédié pour l'instant, State fiscal
+ * réel se limite au résultat net) ; l'écran Journal d'audit (absent du prototype) reste accessible
+ * via un onglet supplémentaire.
+ */
 import { useEffect, useState } from 'react';
-import { formaterFCFA, peut, type RoleMembre } from '@kombi/shared';
-import { etatsFinanciers, type EntrepriseResume, type EtatsFinanciers, type LigneEtat } from '../lib/api.js';
-import { Icon } from '../components/ui.js';
+import { formaterFCFA as fmt, peut, type RoleMembre } from '@kombi/shared';
+import { api, etatsFinanciers, type EntrepriseResume, type EtatsFinanciers, type LigneEtat } from '../lib/api.js';
+import { IcoLayers } from '../components/icons.js';
 import { Journal } from './Journal.js';
+
+interface IgsResp { caCumule: number; regime: string; igs: { igsAnnuel: number; classe: number } | null }
 
 export function Comptabilite({ entreprise }: { entreprise: EntrepriseResume }) {
   const [etats, setEtats] = useState<EtatsFinanciers | null>(null);
-  const [vue, setVue] = useState<'resultat' | 'bilan' | 'journal'>('resultat');
+  const [igs, setIgs] = useState<IgsResp | null>(null);
+  const [vue, setVue] = useState<'etats' | 'journal'>('etats');
   const [erreur, setErreur] = useState('');
   const voitJournal = peut(entreprise.role as RoleMembre, 'audit:read');
+  const regimeIgs = entreprise.regime_fiscal === 'igs';
 
   useEffect(() => {
     etatsFinanciers(entreprise.id).then(setEtats).catch((e) => setErreur(e instanceof Error ? e.message : 'Erreur'));
-  }, [entreprise.id]);
+    if (regimeIgs) api<IgsResp>('/api/fiscalite/igs', { entrepriseId: entreprise.id }).then(setIgs).catch(() => {});
+  }, [entreprise.id, regimeIgs]);
 
+  const profit = etats?.resultat.resultat ?? 0;
+  const passifLines: LigneEtat[] = etats?.bilan.passif ?? [];
+
+  return (
+    <div className="-mx-4 -mt-4 md:-mx-8 md:-mt-6 flex-1 overflow-y-auto pb-24 md:pb-8">
+      <div className="mx-4 md:mx-8 mt-4 bg-[#b4e033]/5 border border-[#b4e033]/20 rounded-2xl p-4 flex items-start gap-3">
+        <IcoLayers cls="w-4 h-4 text-[#b4e033] shrink-0 mt-0.5" />
+        <div>
+          <p className="text-[#b4e033] text-sm font-semibold">Généré automatiquement</p>
+          <p className="text-[#6b9165] text-xs mt-1 leading-relaxed">
+            Ces états sont calculés depuis vos ventes, achats et mouvements de trésorerie. Aucune saisie comptable
+            requise. Conforme à la norme <strong className="text-[#b4e033]/80">SYSCOHADA</strong>.
+          </p>
+        </div>
+      </div>
+
+      <div className="px-4 md:px-8 pt-4 pb-2 flex items-center justify-between">
+        <div>
+          <p className="text-[#edf5ea] font-semibold">États financiers</p>
+          <p className="text-[#4a6b4a] text-xs mt-0.5">{entreprise.raison_sociale}</p>
+        </div>
+        {voitJournal && (
+          <div className="flex items-center gap-1 bg-[#1e3222] rounded-xl p-1 border border-[#2a4230]">
+            <button onClick={() => setVue('etats')}
+              className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all ${vue === 'etats' ? 'bg-[#b4e033] text-[#0e1c0f]' : 'text-[#4a6b4a] hover:text-[#6b9165]'}`}>
+              États
+            </button>
+            <button onClick={() => setVue('journal')}
+              className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all ${vue === 'journal' ? 'bg-[#60a5fa] text-[#0e1c0f]' : 'text-[#4a6b4a] hover:text-[#6b9165]'}`}>
+              Journal
+            </button>
+          </div>
+        )}
+      </div>
+
+      {erreur && <p className="text-[#f87171] text-sm px-4 md:px-8">{erreur}</p>}
+
+      {vue === 'journal' ? (
+        <div className="px-4 md:px-8"><Journal entreprise={entreprise} /></div>
+      ) : !etats ? (
+        <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
+      ) : (
+        <>
+          <div className="mx-4 md:mx-8 mt-2">
+            <div className="bg-[#162419] rounded-2xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-[#1e3222] flex items-center justify-between">
+                <div>
+                  <h3 className="text-[#edf5ea] font-semibold text-sm">Compte de résultat</h3>
+                  <p className="text-[#4a6b4a] text-xs mt-0.5">Produits et charges · Classes 6 &amp; 7</p>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full font-semibold ${profit > 0 ? 'bg-[#4ade80]/10 text-[#4ade80]' : 'bg-[#f87171]/10 text-[#f87171]'}`}>
+                  {profit > 0 ? 'Bénéfice' : 'Déficit'}
+                </span>
+              </div>
+              <div className="p-4 space-y-4">
+                <LigneSection titre="Produits (recettes)" lignes={etats.resultat.detailProduits} total={etats.resultat.produits} couleurMontant="text-[#4ade80]" prefixe="" />
+                <LigneSection titre="Charges (dépenses)" lignes={etats.resultat.detailCharges} total={etats.resultat.charges} couleurMontant="text-[#f87171]" prefixe="−" />
+                <div className={`rounded-xl p-4 flex justify-between items-center ${profit > 0 ? 'bg-[#4ade80]/5 border border-[#4ade80]/15' : 'bg-[#f87171]/5 border border-[#f87171]/15'}`}>
+                  <div>
+                    <p className="text-[#edf5ea] font-semibold text-sm">Résultat net</p>
+                    <p className="text-[#4a6b4a] text-xs mt-0.5">{regimeIgs ? 'Avant IGS' : 'Avant impôt sur les sociétés'}</p>
+                  </div>
+                  <span className={`font-mono font-bold text-xl ${profit > 0 ? 'text-[#b4e033]' : 'text-[#f87171]'}`}>{fmt(profit)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {regimeIgs && igs?.igs && (
+            <div className="mx-4 md:mx-8 mt-3">
+              <div className="bg-[#162419] rounded-2xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-[#1e3222] flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[#edf5ea] font-semibold text-sm">Impôt Général Synthétique</h3>
+                    <p className="text-[#4a6b4a] text-xs mt-0.5">Régime micro-entreprise · Cameroun · art. 45 CGI</p>
+                  </div>
+                  <span className="text-xs px-2 py-1 rounded-full font-semibold bg-[#fbbf24]/10 text-[#fbbf24]">IGS</span>
+                </div>
+                <div className="p-4 space-y-2">
+                  {[
+                    { label: 'CA cumulé exercice', value: fmt(igs.caCumule), color: 'text-[#edf5ea]' },
+                    { label: 'Classe du barème', value: `Classe ${igs.igs.classe}`, color: 'text-[#fbbf24]' },
+                    { label: 'Montant annuel dû', value: fmt(igs.igs.igsAnnuel), color: 'text-[#fbbf24]' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="flex justify-between items-center py-1.5 border-b border-[#1e3222]/50">
+                      <span className="text-[#b3ceac] text-sm">{label}</span>
+                      <span className={`font-mono text-sm font-semibold ${color}`}>{value}</span>
+                    </div>
+                  ))}
+                  <div className="bg-[#fbbf24]/5 border border-[#fbbf24]/20 rounded-xl p-3.5 flex justify-between items-center mt-2">
+                    <div>
+                      <p className="text-[#fbbf24] text-sm font-semibold">Déclaration unique annuelle</p>
+                      <p className="text-[#4a6b4a] text-xs mt-0.5">Au plus tard le 15 avril</p>
+                    </div>
+                    <span className="font-mono font-bold text-[#fbbf24] text-lg">{fmt(igs.igs.igsAnnuel)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="mx-4 md:mx-8 mt-3">
+            <div className="bg-[#162419] rounded-2xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-[#1e3222] flex items-center justify-between">
+                <div>
+                  <h3 className="text-[#edf5ea] font-semibold text-sm">Bilan simplifié</h3>
+                  <p className="text-[#4a6b4a] text-xs mt-0.5">Situation patrimoniale actuelle</p>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full font-semibold ${etats.bilan.equilibre ? 'bg-[#4ade80]/10 text-[#4ade80]' : 'bg-[#f87171]/10 text-[#f87171]'}`}>
+                  {etats.bilan.equilibre ? 'Équilibré' : 'Écart'}
+                </span>
+              </div>
+              <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-[#1e3222]">
+                <div className="p-4">
+                  <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-3">Actif · Ce que possède l'entreprise</p>
+                  <LigneListe lignes={etats.bilan.actif} />
+                  <div className="flex justify-between items-center pt-2">
+                    <span className="text-[#edf5ea] font-medium text-sm">Total actif</span>
+                    <span className="font-mono text-[#edf5ea] font-semibold">{fmt(etats.bilan.totalActif)}</span>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-3">Passif · Ce que doit l'entreprise</p>
+                  <LigneListe lignes={passifLines} />
+                  <div className="flex justify-between items-center pt-2">
+                    <span className="text-[#edf5ea] font-medium text-sm">Total passif</span>
+                    <span className="font-mono text-[#edf5ea] font-semibold">{fmt(etats.bilan.totalPassif)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function LigneSection({ titre, lignes, total, couleurMontant, prefixe }: {
+  titre: string; lignes: LigneEtat[]; total: number; couleurMontant: string; prefixe: string;
+}) {
   return (
     <div>
-      <h1 className="titre-page" style={{ marginBottom: 4 }}>Comptabilité</h1>
-      <p className="muet" style={{ marginTop: 0, fontSize: 14 }}>Générée automatiquement depuis vos opérations.</p>
-
-      <div style={{ display: 'flex', gap: 8, margin: '12px 0' }}>
-        {(['resultat', 'bilan', ...(voitJournal ? ['journal'] as const : [])] as const).map((v) => (
-          <button key={v} onClick={() => setVue(v)} className={`btn ${vue === v ? 'btn-primaire' : 'btn-clair'}`} style={{ flex: 1 }}>
-            {v === 'resultat' ? 'Résultat' : v === 'bilan' ? 'Bilan' : 'Journal'}
-          </button>
-        ))}
-      </div>
-
-      {erreur && <p style={{ color: 'var(--danger)' }}>{erreur}</p>}
-      {vue === 'journal' ? <Journal entreprise={entreprise} />
-        : !etats ? <p className="muet">Chargement…</p>
-        : vue === 'resultat' ? <Resultat e={etats} /> : <Bilan e={etats} />}
-    </div>
-  );
-}
-
-function Resultat({ e }: { e: EtatsFinanciers }) {
-  const r = e.resultat;
-  const positif = r.resultat >= 0;
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div className="carte" style={{ textAlign: 'center' }}>
-        <div className="muet" style={{ fontSize: 13 }}>Résultat de l'exercice</div>
-        <div className="chiffre" style={{ fontSize: 34, fontWeight: 700, color: positif ? 'var(--vert)' : 'var(--danger)' }}>
-          {positif ? '' : '−'}{formaterFCFA(Math.abs(r.resultat)).replace('-', '')}
-        </div>
-        <span className={`chip ${positif ? 'chip-ok' : 'chip-bas'}`}>{positif ? 'Bénéfice' : 'Perte'}</span>
-      </div>
-      <Section titre="Produits" total={r.produits} lignes={r.detailProduits} couleur="var(--vert)" />
-      <Section titre="Charges" total={r.charges} lignes={r.detailCharges} couleur="var(--danger)" />
-    </div>
-  );
-}
-
-function Bilan({ e }: { e: EtatsFinanciers }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div className="carte" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 600 }}>Équilibre du bilan</span>
-        <span className={`chip ${e.bilan.equilibre ? 'chip-ok' : 'chip-bas'}`}>
-          <Icon name={e.bilan.equilibre ? 'check' : 'baisse'} size={13} /> {e.bilan.equilibre ? 'Équilibré' : 'Écart'}
-        </span>
-      </div>
-      <Section titre="Actif (ce que possède l'entreprise)" total={e.bilan.totalActif} lignes={e.bilan.actif} couleur="var(--vert)" />
-      <Section titre="Passif (ressources et dettes)" total={e.bilan.totalPassif} lignes={e.bilan.passif} couleur="var(--vert-fonce)" />
-    </div>
-  );
-}
-
-function Section({ titre, total, lignes, couleur }: { titre: string; total: number; lignes: LigneEtat[]; couleur: string }) {
-  return (
-    <div className="carte">
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: lignes.length ? 10 : 0 }}>
-        <strong>{titre}</strong>
-        <span className="chiffre" style={{ fontWeight: 700, color: couleur }}>{formaterFCFA(total)}</span>
-      </div>
-      {lignes.map((l, i) => (
-        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 14 }}>
-          <span className="muet">{l.numero} · {l.libelle}</span>
-          <span className="chiffre">{formaterFCFA(l.montant)}</span>
+      <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-2">{titre}</p>
+      {lignes.map((l) => (
+        <div key={l.numero} className="flex justify-between items-center py-1.5 border-b border-[#1e3222]/50">
+          <span className="text-[#b3ceac] text-sm">{l.libelle}</span>
+          <span className={`font-mono text-sm font-medium ${couleurMontant}`}>
+            {l.montant < 0 ? fmt(l.montant) : `${prefixe}${fmt(l.montant)}`}
+          </span>
         </div>
       ))}
+      <div className="flex justify-between items-center pt-2">
+        <span className="text-[#edf5ea] font-medium text-sm">Total {titre.toLowerCase()}</span>
+        <span className={`font-mono font-semibold ${couleurMontant}`}>{prefixe}{fmt(total)}</span>
+      </div>
     </div>
+  );
+}
+
+function LigneListe({ lignes }: { lignes: LigneEtat[] }) {
+  return (
+    <>
+      {lignes.map((l) => (
+        <div key={l.numero} className="flex justify-between items-center py-1.5 border-b border-[#1e3222]/50">
+          <span className="text-[#b3ceac] text-sm">{l.libelle}</span>
+          <span className="font-mono text-[#edf5ea] text-sm">{fmt(l.montant)}</span>
+        </div>
+      ))}
+    </>
   );
 }
