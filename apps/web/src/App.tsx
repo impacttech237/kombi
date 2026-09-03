@@ -18,7 +18,7 @@ import { Equipe } from './pages/Equipe.js';
 import { Tiers } from './pages/Tiers.js';
 import { Parametres } from './pages/Parametres.js';
 import { Comptabilite } from './pages/Comptabilite.js';
-import { Ecran, TopBar, BottomNav } from './components/Layout.js';
+import { AppShell } from './components/Shell.js';
 import { OfflineBanner } from './components/OfflineBanner.js';
 import { Bouton, Logo } from './components/ui.js';
 
@@ -34,6 +34,7 @@ function Splash() {
 }
 
 function Espace() {
+  const { data: session } = useSession();
   const [entreprises, setEntreprises] = useState<EntrepriseResume[] | null>(null);
   const [activeId] = useState<string | null>(() => localStorage.getItem('kombi.entreprise'));
   const [onglet, setOnglet] = useState('dashboard');
@@ -65,17 +66,23 @@ function Espace() {
   }
 
   const role = active.role as RoleMembre;
+  // Codes du nouveau shell (docs/Interface application gestion PME/ — voir Shell.tsx) : le
+  // prototype cible n'a que 5+2 emplacements de nav, pas de place dédiée pour Commandes/
+  // Dépenses/Équipe/Paramètres — la rangée « Autres » ci-dessous reste temporairement le seul
+  // accès à ces écrans tant qu'on n'a pas décidé où ils vont dans la nouvelle IA.
   const masquer = [
     ...(active.secteur === 'service' || !peut(role, 'stock:read') ? ['stock'] : []),
-    ...(peut(role, 'compta:read') ? [] : ['compta']),
+    ...(peut(role, 'compta:read') ? [] : ['compta', 'tresorerie']),
     ...(peut(role, 'vente:create') ? [] : ['caisse']),
     ...(peut(role, 'facture:read') ? [] : ['factures']),
+    ...(peut(role, 'tiers:read') ? [] : ['tiers']),
   ];
+  const nomUtilisateur = session?.user?.name?.trim() || active.raison_sociale;
 
   return (
-    <Ecran nav={<BottomNav actif={onglet} onNaviguer={setOnglet} masquer={masquer} />}>
-      <TopBar nomEntreprise={active.raison_sociale} entrepriseId={active.id} onChangeEntreprise={() => setOnglet('dashboard')} />
-      <div style={{ marginTop: 14 }}>
+    <AppShell active={onglet} onNav={setOnglet} nomEntreprise={active.raison_sociale}
+      nomUtilisateur={nomUtilisateur} entrepriseId={active.id} isOnline={navigator.onLine} masquer={masquer}>
+      <div className="px-4 pt-4 md:px-8 md:pt-6">
         <OfflineBanner />
         {onglet === 'dashboard' ? <Dashboard entreprise={active} onCaisse={() => setOnglet('caisse')} onCommandes={() => setOnglet('commandes')} onDepenses={() => setOnglet('depenses')} onCreances={() => setOnglet('creances')} onDettes={() => setOnglet('dettes')} />
           : onglet === 'caisse' ? <Caisse entreprise={active} onHistorique={() => setOnglet('ventes')} />
@@ -89,33 +96,32 @@ function Espace() {
           : onglet === 'equipe' ? <Equipe entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'parametres' ? <Parametres entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'tiers' ? <Tiers entreprise={active} onRetour={() => setOnglet('dashboard')} />
+          : onglet === 'tresorerie' ? <Comptabilite entreprise={active} />
           : <Comptabilite entreprise={active} />}
+
+        <div className="flex justify-center flex-wrap gap-2 mt-6 mb-24 md:mb-6">
+          {peut(role, 'commande:read') && (
+            <Bouton variante="ghost" onClick={() => setOnglet('commandes')}>Commandes</Bouton>
+          )}
+          {peut(role, 'depense:read') && (
+            <Bouton variante="ghost" onClick={() => setOnglet('depenses')}>Dépenses</Bouton>
+          )}
+          {peut(role, 'vente:read') && (
+            <Bouton variante="ghost" onClick={() => setOnglet('creances')}>Créances</Bouton>
+          )}
+          {peut(role, 'achat:read') && (
+            <Bouton variante="ghost" onClick={() => setOnglet('dettes')}>Dettes</Bouton>
+          )}
+          {peut(role, 'membre:manage') && (
+            <Bouton variante="ghost" onClick={() => setOnglet('equipe')}>Équipe</Bouton>
+          )}
+          {peut(role, 'entreprise:manage') && (
+            <Bouton variante="ghost" onClick={() => setOnglet('parametres')}>Paramètres fiscaux</Bouton>
+          )}
+          <Bouton variante="ghost" onClick={deconnexion}>Se déconnecter</Bouton>
+        </div>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
-        {peut(role, 'commande:read') && (
-          <Bouton variante="ghost" onClick={() => setOnglet('commandes')}>Commandes</Bouton>
-        )}
-        {peut(role, 'depense:read') && (
-          <Bouton variante="ghost" onClick={() => setOnglet('depenses')}>Dépenses</Bouton>
-        )}
-        {peut(role, 'vente:read') && (
-          <Bouton variante="ghost" onClick={() => setOnglet('creances')}>Créances</Bouton>
-        )}
-        {peut(role, 'achat:read') && (
-          <Bouton variante="ghost" onClick={() => setOnglet('dettes')}>Dettes</Bouton>
-        )}
-        {peut(role, 'tiers:read') && (
-          <Bouton variante="ghost" onClick={() => setOnglet('tiers')}>Clients &amp; fournisseurs</Bouton>
-        )}
-        {peut(role, 'membre:manage') && (
-          <Bouton variante="ghost" onClick={() => setOnglet('equipe')}>Équipe</Bouton>
-        )}
-        {peut(role, 'entreprise:manage') && (
-          <Bouton variante="ghost" onClick={() => setOnglet('parametres')}>Paramètres fiscaux</Bouton>
-        )}
-        <Bouton variante="ghost" onClick={deconnexion}>Se déconnecter</Bouton>
-      </div>
-    </Ecran>
+    </AppShell>
   );
 }
 

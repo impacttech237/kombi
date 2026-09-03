@@ -1,79 +1,123 @@
-/* Brand kit Kombi — Space Grotesk + DM Sans, palette émeraude (fontpair.co) */
+/* Design system Kombi v2 — porté fidèlement du prototype Figma Make
+   (docs/Interface application gestion PME/). Thème sombre, accent citron vert #b4e033,
+   Inter + DM Mono. Ne PAS réintroduire l'ancienne identité claire/émeraude. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, 'Courier New', monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #0e1c0f;
+  color: #edf5ea;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a4230;
+  border-radius: 999px;
+}
+
+input,
+button,
+select,
+textarea {
+  font-family: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ── Pont de compatibilité temporaire ──────────────────────────────────────────
+   Les écrans pas encore portés au nouveau design (voir docs/parcours.md) utilisent encore les
+   anciennes classes (.carte, .btn, .chip…) et variables CSS de l'ex-identité claire/émeraude.
+   Le nouveau shell (Shell.tsx) n'en a plus besoin — il utilise Tailwind directement. Ce bloc
+   redéfinit les anciennes variables sur la nouvelle palette sombre pour que ces écrans restent
+   lisibles pendant la migration écran par écran, au lieu d'apparaître cassés. À supprimer une
+   fois TOUS les écrans portés. */
 :root {
-  --vert: #10b981;         /* Primary  */
-  --vert-fonce: #005526;   /* Accent   */
-  --encre: #002303;        /* Text     */
-  --bord: #dbe0dc;         /* Border   */
-  --blanc: #ffffff;        /* Surface / Background */
-  --fond: #f6faf8;         /* canvas app (blanc légèrement teinté) */
-  --vert-clair: #e7f7f0;   /* teinte primaire douce (chips, icônes) */
-  --muet: #5f726a;
-  --danger: #e5533c;
-  --danger-clair: #fdecea;
-  --ok: #059a68;
+  --vert: #b4e033;
+  --vert-fonce: #9bc92e;
+  --vert-clair: rgba(180, 224, 51, 0.15);
+  --encre: #edf5ea;
+  --bord: #2a4230;
+  --blanc: #1e3222;
+  --fond: #0e1c0f;
+  --muet: #6b9165;
+  --danger: #f87171;
+  --danger-clair: rgba(248, 113, 113, 0.15);
+  --ok: #4ade80;
   --r: 22px;
   --r-sm: 14px;
   --pill: 999px;
-  --ombre: 0 10px 30px rgba(0, 35, 3, 0.08);
-  --ombre-sm: 0 4px 14px rgba(0, 35, 3, 0.05);
-  --titre: 'Space Grotesk', system-ui, sans-serif;
-  --sans: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-}
-
-* { box-sizing: border-box; }
-html, body, #root { height: 100%; }
-body {
-  margin: 0;
-  font-family: var(--sans);
-  color: var(--encre);
-  background: var(--fond);
-  -webkit-font-smoothing: antialiased;
+  --ombre: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --ombre-sm: 0 4px 14px rgba(0, 0, 0, 0.25);
+  --titre: 'Inter', system-ui, sans-serif;
+  --sans: 'Inter', system-ui, -apple-system, sans-serif;
 }
 h1, h2, h3, .titre-page, .chiffre { font-family: var(--titre); letter-spacing: -0.02em; }
-button { font-family: var(--sans); cursor: pointer; }
-input, select { font-family: var(--sans); }
-a { color: inherit; text-decoration: none; }
 
-/* Boutons */
 .btn {
   border: 0; border-radius: var(--pill); padding: 13px 22px;
   font-weight: 600; font-size: 15px; display: inline-flex; align-items: center;
   gap: 8px; justify-content: center; transition: transform .05s ease, background .15s ease;
 }
 .btn:active { transform: scale(.98); }
-.btn-primaire { background: var(--vert); color: #fff; }
+.btn-primaire { background: var(--vert); color: #0e1c0f; }
 .btn-primaire:hover { background: var(--vert-fonce); }
 .btn-primaire:disabled { opacity: .55; cursor: default; }
-.btn-clair { background: var(--vert-clair); color: var(--vert-fonce); }
-.btn-ghost { background: transparent; color: var(--vert-fonce); }
+.btn-clair { background: var(--blanc); color: #edf5ea; border: 1px solid var(--bord); }
+.btn-ghost { background: transparent; color: var(--vert); }
 .btn-bloc { width: 100%; }
 
-/* Cartes */
 .carte {
   background: var(--blanc); border-radius: var(--r); padding: 18px;
   box-shadow: var(--ombre-sm); border: 1px solid var(--bord);
 }
 
-/* Champs */
 .champ { margin-bottom: 14px; }
 .champ label { display: block; font-size: 13px; color: var(--muet); margin-bottom: 6px; font-weight: 500; }
 .champ input, .champ select {
   width: 100%; padding: 13px 15px; border: 1px solid var(--bord);
-  border-radius: var(--r-sm); font-size: 15px; background: #fff; outline: none;
+  border-radius: var(--r-sm); font-size: 15px; background: #162419; color: #edf5ea; outline: none;
 }
 .champ input:focus, .champ select:focus { border-color: var(--vert); box-shadow: 0 0 0 3px var(--vert-clair); }
 
-/* Chips */
 .chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px;
   border-radius: var(--pill); font-size: 12px; font-weight: 600; }
 .chip-ok { background: var(--vert-clair); color: var(--ok); }
 .chip-bas { background: var(--danger-clair); color: var(--danger); }
 
-.titre-page { font-size: 26px; font-weight: 700; margin: 0; }
+.titre-page { font-size: 26px; font-weight: 700; margin: 0; color: #edf5ea; }
 .muet { color: var(--muet); }
 .center-ecran { min-height: 100%; display: grid; place-items: center; padding: 20px; }
 
-/* Reçu de caisse : à l'impression, n'affiche que le reçu (voir Caisse.tsx #recu-impression). */
+/* Reçu de caisse : à l'impression, n'affiche que le reçu. */
 @media print {
   body * { visibility: hidden; }
   #recu-impression, #recu-impression * { visibility: visible; }

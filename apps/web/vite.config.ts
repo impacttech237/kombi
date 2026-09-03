@@ -1,11 +1,13 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 // PWA installable + mode hors-ligne (contrainte critique CEMAC).
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
@@ -13,8 +15,8 @@ export default defineConfig({
         short_name: 'Kombi',
         description: "Kombi — l'ami de la gestion d'entreprise (PME zone CEMAC)",
         lang: 'fr',
-        theme_color: '#10b981',
-        background_color: '#ffffff',
+        theme_color: '#b4e033',
+        background_color: '#0e1c0f',
         display: 'standalone',
         start_url: '/',
         icons: [

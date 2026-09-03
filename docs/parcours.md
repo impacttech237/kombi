@@ -8,6 +8,28 @@ Légende : ⬜ à faire · 🚧 en cours · ✅ fait · 🔒 bloqué (dépendanc
 
 ---
 
+## 🎨 Refonte design system (2026-09-03, en cours)
+Décision du porteur du projet après revue de l'interface existante : l'ancienne identité (Space
+Grotesk/DM Sans, palette émeraude claire) est **abandonnée**. Nouvelle cible : le prototype
+Figma Make dans `docs/Interface application gestion PME/` (thème sombre, accent citron vert
+`#b4e033`, Inter + DM Mono) — à reproduire **fidèlement**, écran par écran, sans dévier de son
+design ni de son parcours utilisateur.
+- ✅ **Fondations posées** : Tailwind CSS v4 ajouté à `apps/web` (`@tailwindcss/vite`), nouvelle
+  palette/typo dans `theme.css`, set d'icônes trait fin porté (`components/icons.tsx`), shell de
+  navigation porté fidèlement (`components/Shell.tsx` : Sidebar desktop + TopBar/BottomNav mobile
+  avec sheet de notifications) et branché sur les vraies données (entreprise, rôle, notifications).
+  Pont de compatibilité temporaire dans `theme.css` (anciennes variables/classes remappées sur la
+  nouvelle palette) pour que les écrans pas encore portés restent lisibles pendant la migration.
+- ⬜ **Écrans à porter un par un** depuis le prototype : Dashboard, Ventes/Caisse, Factures,
+  Stock, Trésorerie, Clients, Comptabilité, onboarding (CompanySetup).
+- ⚠️ **Écart de couverture non résolu** : le prototype n'a pas d'emplacement de navigation pour
+  Commandes/Dépenses/Équipe/Paramètres fiscaux (5 primaires + 2 secondaires seulement). En
+  attendant une décision, ces écrans restent accessibles via une rangée de boutons sous le
+  contenu principal (`App.tsx`) — à intégrer proprement à la nouvelle IA au fil du portage.
+- ⬜ Supprimer le pont de compatibilité une fois tous les écrans portés.
+
+---
+
 ## Déjà fait (rappel)
 - ✅ Monorepo, `@kombi/shared`, `@kombi/fiscal` (52 tests), `@kombi/comptable`, config modulaire
 - ✅ Schéma D1 (0001 + 0002) + triggers d'intégrité · API Hono (tenant + requireModule) · onboarding sectoriel
