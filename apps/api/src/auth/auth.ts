@@ -30,6 +30,17 @@ export function creerAuth(db: D1Database, env: AuthEnv) {
       requireEmailVerification: false,
     },
     // Un compte utilisateur ; le rattachement aux entreprises est géré par membre_entreprise.
+    session: {
+      // Audit scalabilité 2026-09-04 : sans ça, CHAQUE requête authentifiée (authentifier(),
+      // middleware/auth.ts) appelle auth.api.getSession() → une lecture D1 de la table `session`,
+      // sans aucun cache — alors que D1 est la SEULE base non shardée (control-plane), donc le
+      // seul vrai goulot d'étranglement à forte concurrence (contrairement au DO par entreprise,
+      // déjà parallèle par nature). Le cookie cache signé de better-auth évite cette lecture D1
+      // tant qu'il n'a pas expiré : la session se valide depuis un cookie signé, pas la base.
+      // maxAge court (comme le cache de rôle 30s, tenant.ts) pour garder une fenêtre de
+      // révocation resserrée — un compte désactivé reste actif au plus ce délai après coup.
+      cookieCache: { enabled: true, maxAge: 60 },
+    },
   });
 }
 

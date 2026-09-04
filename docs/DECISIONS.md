@@ -194,5 +194,28 @@ entreprise et quoi faire. Décisions :
   contredirait un choix produit déjà pris. Une vente en survente devient une alerte a posteriori,
   pas un blocage a priori.
 
+## D19 — Cookie cache better-auth activé : le vrai goulot d'étranglement à l'échelle n'était pas le DO, c'était D1 (2026-09-04)
+Audit de scalabilité demandé (« 10k utilisateurs connectés en même temps, ultra fluide »). Le
+DO par entreprise (D13) isole bien chaque PME et scale horizontalement comme prévu — **ce n'est
+pas** le point faible. Le vrai point faible : `authentifier` (middleware/auth.ts) appelait
+`auth.api.getSession()` sans le cookie cache de better-auth activé → **chaque requête
+authentifiée** (page vue, clic, appel API) lisait la table `session` de **D1**, la seule base
+NON shardée du système (control-plane partagé). Les caches déjà en place (rôle 30s, profil
+5 min, voir D16) protègent la DEUXIÈME et la TROISIÈME lecture D1 par requête, pas la première.
+- **Activé `session.cookieCache`** (`auth/auth.ts`), `maxAge: 60` — la session se valide depuis
+  un cookie signé tant qu'il n'a pas expiré, sans lecture D1. Vérifié en direct (curl) : le
+  cookie `better-auth.session_data` est bien émis avec `Max-Age=60`, et une requête authentifiée
+  ultérieure fonctionne normalement.
+- **`maxAge` volontairement court** (même ordre de grandeur que le cache de rôle 30s, D16) : un
+  compte désactivé/une session révoquée reste valide au plus 60s après coup — compromis assumé
+  entre charge D1 et fraîcheur de la révocation, pas une négligence.
+- **Toujours pas de test de charge réel.** Cette correction lève le goulot le plus évident
+  identifié par lecture de code, mais « tient à 10k utilisateurs » reste une hypothèse de
+  conception tant qu'un vrai test de charge n'a pas été fait (toujours ⬜ dans `docs/parcours.md`).
+- **Secondaire, non traité** : `listerTiers`/`listerProduits`/`listerFactures`/`listerDepenses`
+  n'ont pas de pagination — sans impact au volume de données actuel d'une PME, mais à surveiller
+  pour une entreprise très active après plusieurs années. Pas de D1 read replicas configurés
+  non plus (`wrangler.toml`) — à envisager si D1 redevient un point chaud malgré le cache.
+
 ## Décisions ouvertes (restantes)
 - Décompte exact des « 2 ans » de maintien de régime (exercices civils vs glissants).
