@@ -9,7 +9,10 @@
  */
 import { useEffect, useState } from 'react';
 import { formaterFCFA as fmt, peut, type RoleMembre } from '@kombi/shared';
-import { api, etatsFinanciers, type EntrepriseResume, type EtatsFinanciers, type LigneEtat } from '../lib/api.js';
+import {
+  api, etatsFinanciers, listerClotures, cloturerMois, rouvrirMois,
+  type EntrepriseResume, type EtatsFinanciers, type LigneEtat, type ClotureMensuelle,
+} from '../lib/api.js';
 import { IcoLayers } from '../components/icons.js';
 import { Journal } from './Journal.js';
 
@@ -18,7 +21,7 @@ interface IgsResp { caCumule: number; regime: string; igs: { igsAnnuel: number; 
 export function Comptabilite({ entreprise }: { entreprise: EntrepriseResume }) {
   const [etats, setEtats] = useState<EtatsFinanciers | null>(null);
   const [igs, setIgs] = useState<IgsResp | null>(null);
-  const [vue, setVue] = useState<'etats' | 'journal'>('etats');
+  const [vue, setVue] = useState<'etats' | 'journal' | 'clotures'>('etats');
   const [erreur, setErreur] = useState('');
   const voitJournal = peut(entreprise.role as RoleMembre, 'audit:read');
   const regimeIgs = entreprise.regime_fiscal === 'igs';
@@ -59,6 +62,10 @@ export function Comptabilite({ entreprise }: { entreprise: EntrepriseResume }) {
               className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all ${vue === 'journal' ? 'bg-[#60a5fa] text-[#0e1c0f]' : 'text-[#4a6b4a] hover:text-[#6b9165]'}`}>
               Journal
             </button>
+            <button onClick={() => setVue('clotures')}
+              className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all ${vue === 'clotures' ? 'bg-[#fbbf24] text-[#0e1c0f]' : 'text-[#4a6b4a] hover:text-[#6b9165]'}`}>
+              Clôtures
+            </button>
           </div>
         )}
       </div>
@@ -67,6 +74,8 @@ export function Comptabilite({ entreprise }: { entreprise: EntrepriseResume }) {
 
       {vue === 'journal' ? (
         <div className="px-4 md:px-8"><Journal entreprise={entreprise} /></div>
+      ) : vue === 'clotures' ? (
+        <div className="px-4 md:px-8"><ClotureMensuelleTab entreprise={entreprise} /></div>
       ) : !etats ? (
         <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
       ) : (
@@ -198,5 +207,82 @@ function LigneListe({ lignes }: { lignes: LigneEtat[] }) {
         </div>
       ))}
     </>
+  );
+}
+
+/**
+ * Clôture mensuelle (D18) : verrouille un mois pour empêcher toute nouvelle vente/achat/dépense
+ * daté dedans. Ne couvre que ce verrouillage mois par mois — pas une clôture d'exercice complète
+ * (à-nouveaux etc., voir DECISIONS.md D17, encore à construire).
+ */
+function ClotureMensuelleTab({ entreprise }: { entreprise: EntrepriseResume }) {
+  const [clotures, setClotures] = useState<ClotureMensuelle[] | null>(null);
+  const [moisSaisi, setMoisSaisi] = useState(new Date().toISOString().slice(0, 7));
+  const [charge, setCharge] = useState(false);
+  const [erreur, setErreur] = useState('');
+
+  function recharger() {
+    return listerClotures(entreprise.id).then(setClotures).catch((e) => setErreur(e instanceof Error ? e.message : 'Erreur'));
+  }
+  useEffect(() => { void recharger(); }, [entreprise.id]);
+
+  async function cloturer() {
+    if (!confirm(`Clôturer ${moisSaisi} ? Plus aucune vente, achat ou dépense ne pourra y être daté.`)) return;
+    setCharge(true); setErreur('');
+    try { await cloturerMois(entreprise.id, moisSaisi); await recharger(); }
+    catch (e) { setErreur(e instanceof Error ? e.message : 'Erreur'); }
+    finally { setCharge(false); }
+  }
+
+  async function rouvrir(anneeMois: string) {
+    if (!confirm(`Rouvrir ${anneeMois} ? Les opérations y redeviendront possibles.`)) return;
+    setCharge(true); setErreur('');
+    try { await rouvrirMois(entreprise.id, anneeMois); await recharger(); }
+    catch (e) { setErreur(e instanceof Error ? e.message : 'Erreur'); }
+    finally { setCharge(false); }
+  }
+
+  return (
+    <div className="pt-2">
+      <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230] mb-3">
+        <p className="text-[#edf5ea] text-sm font-medium mb-1">Clôturer un mois</p>
+        <p className="text-[#4a6b4a] text-xs leading-relaxed mb-3">
+          Une fois clôturé, aucune vente, aucun achat et aucune dépense ne peut plus être daté dans ce mois — utile
+          une fois les comptes du mois vérifiés, pour éviter une saisie tardive qui fausserait un résultat déjà validé.
+        </p>
+        <div className="flex gap-2">
+          <input type="month" value={moisSaisi} onChange={(e) => setMoisSaisi(e.target.value)}
+            className="flex-1 bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-2.5 text-sm border border-[#2a4230] focus:border-[#fbbf24] focus:outline-none [color-scheme:dark]" />
+          <button onClick={cloturer} disabled={charge}
+            className="bg-[#fbbf24] text-[#0e1c0f] rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-40">
+            {charge ? '…' : 'Clôturer'}
+          </button>
+        </div>
+      </div>
+
+      {erreur && <p className="text-[#f87171] text-xs mb-3">{erreur}</p>}
+
+      <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-wide mb-2">Mois clôturés</p>
+      {clotures === null ? (
+        <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
+      ) : clotures.length === 0 ? (
+        <p className="text-[#4a6b4a] text-sm text-center py-8">Aucun mois clôturé pour l'instant.</p>
+      ) : (
+        <div className="bg-[#162419] rounded-2xl overflow-hidden">
+          {clotures.map((c, i) => (
+            <div key={c.annee_mois} className={`flex items-center gap-3 px-4 py-3 ${i < clotures.length - 1 ? 'border-b border-[#1e3222]' : ''}`}>
+              <div className="flex-1 min-w-0">
+                <p className="text-[#edf5ea] text-sm font-medium">{c.annee_mois}</p>
+                <p className="text-[#4a6b4a] text-xs mt-0.5">Clôturé le {new Date(c.cloture_le).toLocaleDateString('fr-FR')}</p>
+              </div>
+              <button onClick={() => rouvrir(c.annee_mois)} disabled={charge}
+                className="text-[#f87171] text-xs font-medium px-3 py-1.5 hover:bg-[#f87171]/8 rounded-xl transition-colors disabled:opacity-40">
+                Rouvrir
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

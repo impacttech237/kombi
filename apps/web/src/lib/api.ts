@@ -135,6 +135,7 @@ export interface Cockpit {
   comparaisonMensuelle: ComparaisonMensuelle;
   alertes: AlertePilotage[];
   topProduits: { designation: string; quantite: number; ca_ht: number; cogs: number; marge: number; margePct: number | null }[];
+  delaiMoyenPaiement: { jours: number | null; echantillon: number };
 }
 export const getCockpit = (entrepriseId: string) => api<Cockpit>('/api/pilotage/cockpit', { entrepriseId });
 
@@ -143,6 +144,28 @@ export interface MargeProduit {
 }
 export const listerMargeProduits = (entrepriseId: string) =>
   api<{ produits: MargeProduit[] }>('/api/pilotage/marge-produits', { entrepriseId }).then((r) => r.produits);
+
+export interface MargeClient {
+  tiers_id: string | null; nom: string; nb_ventes: number; ca_ht: number; cogs: number; marge: number; margePct: number | null;
+}
+export const listerMargeClients = (entrepriseId: string) =>
+  api<{ clients: MargeClient[] }>('/api/pilotage/marge-clients', { entrepriseId }).then((r) => r.clients);
+
+// ── Fiabilité des données (D18) : rapprochement de trésorerie, clôture mensuelle ──
+export interface Pointage { id: string; compte: string; date: string; solde_declare: number; solde_calcule: number; ecart: number; }
+export const listerPointages = (entrepriseId: string) =>
+  api<{ pointages: Pointage[] }>('/api/etats/pointages', { entrepriseId }).then((r) => r.pointages);
+export const enregistrerPointage = (
+  entrepriseId: string, compte: 'especes' | 'mtnMomo' | 'orangeMoney' | 'banque', soldeDeclare: number,
+) => api<{ id: string; soldeCalcule: number; ecart: number }>('/api/etats/pointages', { method: 'POST', body: { compte, soldeDeclare }, entrepriseId });
+
+export interface ClotureMensuelle { annee_mois: string; cloture_le: string; cloture_par: string | null; }
+export const listerClotures = (entrepriseId: string) =>
+  api<{ clotures: ClotureMensuelle[] }>('/api/etats/clotures', { entrepriseId }).then((r) => r.clotures);
+export const cloturerMois = (entrepriseId: string, anneeMois: string) =>
+  api<{ ok: boolean }>('/api/etats/clotures', { method: 'POST', body: { anneeMois }, entrepriseId });
+export const rouvrirMois = (entrepriseId: string, anneeMois: string) =>
+  api<{ ok: boolean }>(`/api/etats/clotures/${anneeMois}`, { method: 'DELETE', entrepriseId });
 
 export interface NotificationActive { type: string; gravite: 'attention' | 'critique'; libelle: string; }
 export const listerNotifications = (entrepriseId: string) =>

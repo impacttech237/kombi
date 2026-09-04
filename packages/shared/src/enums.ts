@@ -14,12 +14,13 @@ export const NATURE_ACTIVITE = ['negoce', 'artisanal', 'service', 'liberale'] as
 export type NatureActivite = (typeof NATURE_ACTIVITE)[number];
 
 /**
- * Rôles (mémo de cadrage §4 + extension P0 #5) :
+ * Rôles (mémo de cadrage §4 + extension P0 #5 + D18) :
  * admin = accès total · gérant = gestion quotidienne · caissier = ventes/caisse ·
  * comptable = lecture seule des données financières (revue, sans opérer) ·
- * employé = opérationnel hors caisse/finance (commandes, tiers).
+ * employé = opérationnel hors caisse/finance (commandes, tiers) ·
+ * magasinier = stock uniquement (entrées, ajustements), sans accès caisse/finance.
  */
-export const ROLE_MEMBRE = ['admin', 'gerant', 'caissier', 'comptable', 'employe'] as const;
+export const ROLE_MEMBRE = ['admin', 'gerant', 'caissier', 'comptable', 'employe', 'magasinier'] as const;
 export type RoleMembre = (typeof ROLE_MEMBRE)[number];
 
 export const TYPE_COMMANDE = ['commande', 'mission'] as const;

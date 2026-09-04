@@ -430,6 +430,36 @@ const MIGRATION_V14_PIECE_VENTE = `
 ALTER TABLE vente ADD COLUMN piece_cle TEXT
 `;
 
+/**
+ * v15 — Rapprochement de trésorerie (D18, point « garantir la fiabilité des données ») : un
+ * pointage compare le solde déclaré (compté physiquement en caisse, lu sur le relevé Mobile
+ * Money/banque) au solde calculé par Kombi à cet instant, et garde l'écart trouvé. Saisie
+ * manuelle volontairement — aucun import bancaire (hors scope, voir PLAN-cockpit-dirigeant.md).
+ */
+const MIGRATION_V15_POINTAGE_TRESORERIE = `
+CREATE TABLE IF NOT EXISTS pointage_tresorerie (
+  id TEXT PRIMARY KEY,
+  compte TEXT NOT NULL CHECK (compte IN ('especes','mtnMomo','orangeMoney','banque')),
+  date TEXT NOT NULL DEFAULT (datetime('now')),
+  solde_declare INTEGER NOT NULL, solde_calcule INTEGER NOT NULL, ecart INTEGER NOT NULL,
+  acteur_id TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+`;
+
+/**
+ * v16 — Clôture mensuelle (D18, même point) : verrouille un mois civil pour empêcher toute
+ * nouvelle opération (vente, achat, dépense) datée dedans, une fois que le dirigeant/comptable
+ * l'a validé. Ne couvre pas encore la clôture d'EXERCICE complète (à-nouveaux, verrouillage —
+ * limite déjà actée dans DECISIONS.md D17), seulement le verrouillage mois par mois.
+ */
+const MIGRATION_V16_CLOTURE_MENSUELLE = `
+CREATE TABLE IF NOT EXISTS cloture_mensuelle (
+  annee_mois TEXT PRIMARY KEY,
+  cloture_le TEXT NOT NULL DEFAULT (datetime('now')),
+  cloture_par TEXT
+)
+`;
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -491,7 +521,11 @@ export const MIGRATIONS_DO: readonly MigrationDO[] = [
   { v: 13, statements: statementsDe(MIGRATION_V13_PIECE_ACHAT) },
   // v14 — pièce justificative attachée à une vente à crédit.
   { v: 14, statements: statementsDe(MIGRATION_V14_PIECE_VENTE) },
-  // v15… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v15 — rapprochement de trésorerie (pointage : solde déclaré vs calculé, écart gardé).
+  { v: 15, statements: statementsDe(MIGRATION_V15_POINTAGE_TRESORERIE) },
+  // v16 — clôture mensuelle verrouillable (empêche une nouvelle opération dans un mois clos).
+  { v: 16, statements: statementsDe(MIGRATION_V16_CLOTURE_MENSUELLE) },
+  // v17… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */

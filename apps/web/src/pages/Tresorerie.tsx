@@ -13,11 +13,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formaterFCFA as fmt } from '@kombi/shared';
 import {
-  soldesTresorerie, listerVentesRecentes, listerDepenses,
+  soldesTresorerie, listerVentesRecentes, listerDepenses, enregistrerPointage,
   type EntrepriseResume, type TresorerieJour, type VenteRecente, type Depense,
 } from '../lib/api.js';
 import { MODE_PAIEMENT_LABEL, MODE_PAIEMENT_COULEUR } from '../components/charts.js';
-import { IcoDn, IcoUp, IcoPlus, Avatar } from '../components/icons.js';
+import { IcoDn, IcoUp, IcoPlus, IcoX, Avatar } from '../components/icons.js';
 
 type Compte = { code: keyof TresorerieJour; name: string; sub: string; from: string; to: string };
 const COMPTES: Compte[] = [
@@ -70,6 +70,7 @@ export function Tresorerie({ entreprise, onCaisse, onDepenses }: {
   const [depenses, setDepenses] = useState<Depense[]>([]);
   const [txFilter, setTxFilter] = useState<'all' | 'in' | 'out'>('all');
   const [frontCard, setFrontCard] = useState(0);
+  const [pointageOuvert, setPointageOuvert] = useState(false);
 
   useEffect(() => {
     soldesTresorerie(entreprise.id).then(setTresor).catch(() => {});
@@ -175,7 +176,18 @@ export function Tresorerie({ entreprise, onCaisse, onDepenses }: {
             Sortie
           </button>
         </div>
+
+        <button onClick={() => setPointageOuvert(true)}
+          className="w-full mt-2 rounded-2xl py-2.5 text-xs font-medium text-[#6b9165] hover:text-[#b4e033] transition-colors">
+          Pointer le solde de {COMPTES[frontCard]!.name}
+        </button>
       </div>
+
+      {pointageOuvert && (
+        <PointageSheet entreprise={entreprise} compte={COMPTES[frontCard]!}
+          soldeCalcule={tresor ? tresor[COMPTES[frontCard]!.code] ?? 0 : 0}
+          onClose={() => setPointageOuvert(false)} />
+      )}
 
       <div className="px-4 md:px-8 pt-4 pb-2 flex items-center gap-2">
         {([{ key: 'all', label: 'Tous' }, { key: 'in', label: 'Entrées' }, { key: 'out', label: 'Sorties' }] as const).map((f) => (
@@ -225,6 +237,84 @@ export function Tresorerie({ entreprise, onCaisse, onDepenses }: {
         className="fixed bottom-24 md:bottom-6 right-4 w-14 h-14 bg-[#b4e033] rounded-full flex items-center justify-center text-[#0e1c0f] shadow-lg shadow-[#b4e033]/20 z-10 active:scale-95 transition-all">
         <IcoPlus cls="w-6 h-6" />
       </button>
+    </div>
+  );
+}
+
+/**
+ * Rapprochement (D18) : le dirigeant compte physiquement (caisse) ou lit son relevé (Mobile
+ * Money/banque) et saisit ce montant — Kombi compare au solde qu'il a calculé et affiche l'écart.
+ * Saisie manuelle volontairement — aucun import bancaire (hors scope, voir
+ * docs/PLAN-cockpit-dirigeant.md).
+ */
+function PointageSheet({ entreprise, compte, soldeCalcule, onClose }: {
+  entreprise: EntrepriseResume; compte: { code: keyof TresorerieJour; name: string }; soldeCalcule: number; onClose: () => void;
+}) {
+  const [soldeDeclare, setSoldeDeclare] = useState('');
+  const [resultat, setResultat] = useState<{ ecart: number } | null>(null);
+  const [charge, setCharge] = useState(false);
+  const [erreur, setErreur] = useState('');
+
+  async function valider() {
+    setCharge(true); setErreur('');
+    try {
+      const res = await enregistrerPointage(entreprise.id, compte.code, Number(soldeDeclare) || 0);
+      setResultat({ ecart: res.ecart });
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Erreur');
+    } finally { setCharge(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60" onClick={onClose}>
+      <div className="bg-[#162419] rounded-t-3xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="w-10 h-1 bg-[#2a4230] rounded-full mx-auto mt-3 mb-1 shrink-0" />
+        <div className="px-5 pt-3 pb-2 flex items-center justify-between shrink-0">
+          <p className="text-[#edf5ea] font-semibold text-base">Pointer {compte.name}</p>
+          <button onClick={onClose} className="w-7 h-7 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+            <IcoX cls="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <div className="px-5 pb-8 space-y-4">
+          <p className="text-[#4a6b4a] text-xs leading-relaxed">
+            Comptez ce que vous avez réellement (caisse) ou lisez votre solde (Mobile Money, relevé bancaire), et
+            indiquez-le ici. Kombi le compare à ce qu'il a calculé.
+          </p>
+          {resultat === null ? (
+            <>
+              <div>
+                <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Solde constaté (FCFA)</label>
+                <input inputMode="numeric" value={soldeDeclare} onChange={(e) => setSoldeDeclare(e.target.value.replace(/\D/g, ''))}
+                  placeholder={String(soldeCalcule)} autoFocus
+                  className="w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-4 py-3 font-mono text-lg border border-[#2a4230] focus:border-[#b4e033] focus:outline-none" />
+              </div>
+              {erreur && <p className="text-[#f87171] text-xs">{erreur}</p>}
+              <button onClick={valider} disabled={charge || !soldeDeclare}
+                className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-3.5 font-semibold text-sm active:scale-[0.98] transition-all disabled:opacity-50">
+                {charge ? '…' : 'Comparer'}
+              </button>
+            </>
+          ) : (
+            <div className={`rounded-2xl p-4 text-center ${resultat.ecart === 0 ? 'bg-[#4ade80]/5 border border-[#4ade80]/20' : 'bg-[#fbbf24]/5 border border-[#fbbf24]/20'}`}>
+              {resultat.ecart === 0 ? (
+                <p className="text-[#4ade80] text-sm font-medium">Ça correspond exactement.</p>
+              ) : (
+                <>
+                  <p className={`font-mono font-bold text-2xl ${resultat.ecart > 0 ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
+                    {resultat.ecart > 0 ? '+' : '−'}{fmt(Math.abs(resultat.ecart))}
+                  </p>
+                  <p className="text-[#4a6b4a] text-xs mt-1">
+                    {resultat.ecart > 0 ? 'En trop par rapport au calcul de Kombi' : 'Manquant par rapport au calcul de Kombi'}
+                  </p>
+                </>
+              )}
+              <button onClick={onClose} className="w-full mt-4 bg-[#1e3222] text-[#edf5ea] rounded-xl py-2.5 text-sm font-medium">
+                Fermer
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

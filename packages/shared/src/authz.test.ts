@@ -36,4 +36,14 @@ describe('Autorisation par rôle', () => {
     expect(peut('employe', 'depense:read')).toBe(false);
     expect(peut('employe', 'compta:read')).toBe(false);
   });
+
+  it('magasinier gère le stock, sans accès caisse ni finance (D18)', () => {
+    expect(peut('magasinier', 'stock:manage')).toBe(true);
+    expect(peut('magasinier', 'stock:read')).toBe(true);
+    expect(peut('magasinier', 'tiers:read')).toBe(true);
+    expect(peut('magasinier', 'vente:create')).toBe(false);
+    expect(peut('magasinier', 'depense:read')).toBe(false);
+    expect(peut('magasinier', 'compta:read')).toBe(false);
+    expect(peut('magasinier', 'membre:manage')).toBe(false);
+  });
 });

@@ -12,6 +12,7 @@ import { IcoPlus, IcoChevR, IcoX, Avatar } from '../components/icons.js';
 
 const LABEL_ROLE: Record<string, string> = {
   admin: 'Administrateur', gerant: 'Gérant', caissier: 'Caissier', comptable: 'Comptable', employe: 'Employé',
+  magasinier: 'Magasinier',
 };
 
 const inputCls = 'w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none';

@@ -229,8 +229,8 @@ export function Dashboard({ entreprise, onCaisse, onNav }: {
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-[#edf5ea] font-semibold text-sm">Ce mois-ci vs le mois dernier</h3>
             {onNav && (
-              <button onClick={() => onNav('compta')} className="text-[#b4e033] text-xs font-medium flex items-center gap-0.5">
-                Détails <IcoChevR cls="w-3.5 h-3.5" />
+              <button onClick={() => onNav('rentabilite')} className="text-[#b4e033] text-xs font-medium flex items-center gap-0.5">
+                Par produit <IcoChevR cls="w-3.5 h-3.5" />
               </button>
             )}
           </div>
@@ -239,13 +239,19 @@ export function Dashboard({ entreprise, onCaisse, onNav }: {
             <Variation label="Marge" valeur={cockpit.comparaisonMensuelle.moisCourant.marge} pct={cockpit.comparaisonMensuelle.variationMargePct} favorableSiHausse />
             <Variation label="Dépenses" valeur={cockpit.comparaisonMensuelle.moisCourant.depenses} pct={cockpit.comparaisonMensuelle.variationDepensesPct} favorableSiHausse={false} />
           </div>
-          {cockpit.comparaisonMensuelle.topVariationsDepenses.some((v) => v.deltaMontant !== 0) && (
+          {(cockpit.comparaisonMensuelle.topVariationsDepenses.some((v) => v.deltaMontant !== 0) || cockpit.delaiMoyenPaiement.jours !== null) && (
             <p className="text-[#4a6b4a] text-xs mt-3 leading-relaxed">
               {cockpit.comparaisonMensuelle.topVariationsDepenses
                 .filter((v) => v.deltaMontant !== 0)
                 .slice(0, 2)
                 .map((v) => `${v.libelle} ${v.deltaMontant > 0 ? '+' : '−'}${fmt(Math.abs(v.deltaMontant))}`)
                 .join(' · ')}
+              {cockpit.delaiMoyenPaiement.jours !== null && (
+                <>
+                  {cockpit.comparaisonMensuelle.topVariationsDepenses.some((v) => v.deltaMontant !== 0) && ' · '}
+                  Délai moyen de paiement : {cockpit.delaiMoyenPaiement.jours} j
+                </>
+              )}
             </p>
           )}
         </div>

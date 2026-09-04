@@ -81,12 +81,20 @@ const PERMS_EMPLOYE: readonly Permission[] = [
   'facture:read',
 ];
 
+/** Stock uniquement (D18) : entrées/ajustements, aucun accès caisse ni finance. */
+const PERMS_MAGASINIER: readonly Permission[] = [
+  'stock:read',
+  'stock:manage',
+  'tiers:read', // pour rattacher un fournisseur à une entrée de stock
+];
+
 export const PERMISSIONS_PAR_ROLE: Record<RoleMembre, ReadonlySet<Permission>> = {
   admin: TOUTES,
   gerant: new Set(PERMS_GERANT),
   caissier: new Set(PERMS_CAISSIER),
   comptable: new Set(PERMS_COMPTABLE),
   employe: new Set(PERMS_EMPLOYE),
+  magasinier: new Set(PERMS_MAGASINIER),
 };
 
 /** Le rôle a-t-il la permission demandée ? */

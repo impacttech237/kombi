@@ -34,6 +34,83 @@ describe('Cockpit dirigeant — marge par produit', () => {
   });
 });
 
+describe('Cockpit dirigeant — marge par client', () => {
+  it('regroupe la marge par client, et met à part les ventes sans client identifié', async () => {
+    const e = doE('pilotage-marge-client-1');
+    await e.initialiser('pilotage-marge-client-1', 'commerce', 2026);
+    const produitId = await e.creerProduit({ nom: 'Sac de riz', prixVente: 15000, seuilAlerte: 0 });
+    await e.entrerStock({ produitId, quantite: 20, coutUnitaire: 8000, modePaiement: 'especes' });
+    const clientA = await e.creerTiers({ type: 'client', nom: 'Client A' });
+    const clientB = await e.creerTiers({ type: 'client', nom: 'Client B' });
+
+    // Client A : 2 ventes de 15000 (CA 30000, coût 16000, marge 14000)
+    await e.enregistrerVente({
+      lignes: [{ designation: 'Sac de riz', quantite: 1, prixUnitaire: 15000, produitId }],
+      modePaiement: 'especes', tiersId: clientA, clientUuid: 'ca-1',
+    });
+    await e.enregistrerVente({
+      lignes: [{ designation: 'Sac de riz', quantite: 1, prixUnitaire: 15000, produitId }],
+      modePaiement: 'especes', tiersId: clientA, clientUuid: 'ca-2',
+    });
+    // Client B : 1 vente négociée à 8000 (sous le coût — marge négative)
+    await e.enregistrerVente({
+      lignes: [{ designation: 'Sac de riz', quantite: 1, prixUnitaire: 8000, produitId }],
+      modePaiement: 'especes', tiersId: clientB, clientUuid: 'cb-1',
+    });
+    // Vente au comptant, sans client identifié
+    await e.enregistrerVente({
+      lignes: [{ designation: 'Sac de riz', quantite: 1, prixUnitaire: 15000, produitId }],
+      modePaiement: 'especes', clientUuid: 'anon-1',
+    });
+
+    const marges = await e.margeParClient() as
+      { tiers_id: string | null; nom: string; nb_ventes: number; ca_ht: number; marge: number }[];
+    expect(marges).toHaveLength(3);
+    const parA = marges.find((m) => m.nom === 'Client A')!;
+    expect(parA.nb_ventes).toBe(2);
+    expect(parA.marge).toBe(14000);
+    const parB = marges.find((m) => m.nom === 'Client B')!;
+    expect(parB.marge).toBe(0); // 8000 - 8000
+    const sansClient = marges.find((m) => m.tiers_id === null)!;
+    expect(sansClient.nom).toContain('comptant');
+    expect(sansClient.marge).toBe(7000);
+  });
+});
+
+describe('Cockpit dirigeant — délai moyen de paiement', () => {
+  it('ne compte que les créances soldées, ignore celles encore ouvertes', async () => {
+    const e = doE('pilotage-delai-1');
+    await e.initialiser('pilotage-delai-1', 'commerce', 2026);
+    const client = await e.creerTiers({ type: 'client', nom: 'Client Ponctuel' });
+
+    const { venteId } = await e.enregistrerVente({
+      lignes: [{ designation: 'Article', quantite: 1, prixUnitaire: 20000 }],
+      aCredit: true, tiersId: client, dateOperation: '2026-08-01',
+    });
+    // Réglée aujourd'hui (2026-09-04 dans cet environnement) → délai mesurable.
+    await e.payerVente(venteId, 20000, 'especes');
+
+    // Une créance encore ouverte ne doit pas fausser la moyenne.
+    await e.enregistrerVente({
+      lignes: [{ designation: 'Article', quantite: 1, prixUnitaire: 10000 }],
+      aCredit: true, tiersId: client, dateOperation: '2026-08-20',
+    });
+
+    const { jours, echantillon } = await e.delaiMoyenPaiement();
+    expect(echantillon).toBe(1);
+    expect(jours).not.toBeNull();
+    expect(jours!).toBeGreaterThan(0);
+  });
+
+  it('renvoie null quand aucune créance n\'a encore été soldée', async () => {
+    const e = doE('pilotage-delai-2');
+    await e.initialiser('pilotage-delai-2', 'commerce', 2026);
+    const { jours, echantillon } = await e.delaiMoyenPaiement();
+    expect(jours).toBeNull();
+    expect(echantillon).toBe(0);
+  });
+});
+
 describe('Cockpit dirigeant — comparaison mensuelle', () => {
   it('compare le mois courant au mois précédent (CA, marge, dépenses) avec variation en %', async () => {
     const e = doE('pilotage-comparaison-1');

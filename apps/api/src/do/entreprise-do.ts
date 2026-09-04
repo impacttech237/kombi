@@ -405,6 +405,18 @@ export class EntrepriseDO extends DurableObject {
     }
   }
 
+  /**
+   * Refuse toute nouvelle opération datée dans un mois civil clôturé (D18, fiabilité des
+   * données). Appelée avant écriture dans les 3 points d'entrée qui acceptent une date libre
+   * (vente, achat/entrée de stock, dépense) — pas sur les paiements d'une créance/dette déjà
+   * existante, qui postent toujours à la date du jour, jamais dans le passé.
+   */
+  private verifierMoisNonCloture(dateOp: string): void {
+    const anneeMois = dateOp.slice(0, 7);
+    const cloture = this.sql.exec('SELECT 1 FROM cloture_mensuelle WHERE annee_mois = ?', anneeMois).toArray()[0];
+    if (cloture) throw new Error(`Le mois ${anneeMois} est clôturé — aucune nouvelle opération n'y est autorisée`);
+  }
+
   /** Compte de TVA collectée : 4431 (vente de biens) ou 4432 (prestations de services). */
   private compteTvaCollectee(secteur: string): string {
     return secteur === 'service' ? '4432' : '4431';
@@ -439,6 +451,10 @@ export class EntrepriseDO extends DurableObject {
     if (v.aCredit && !v.tiersId) throw new Error('Un client est requis pour une vente à crédit');
     if (!v.aCredit && !v.modePaiement) throw new Error('Mode de paiement requis');
     this.verifierTvaAutorisee(v.regimeFiscal, v.lignes.map((l) => l.tauxTva));
+    // Date d'opération réelle (défaut : aujourd'hui, heure locale) — calculée avant la transaction
+    // (comme entrerStock/creerDepense) pour échouer avant d'ouvrir toute ressource transactionnelle.
+    const dateOp = v.dateOperation ?? this.dateCourante();
+    this.verifierMoisNonCloture(dateOp);
 
     // Toutes les écritures multi-tables (écriture + vente + lignes + mouvements de stock)
     // sont atomiques : en cas d'erreur, tout est annulé (aucune écriture partielle).
@@ -470,8 +486,6 @@ export class EntrepriseDO extends DurableObject {
         return { ...l, ht, coutUnit };
       });
       const totalTtc = totalHt + totalTva;
-      // Date d'opération réelle (défaut : aujourd'hui, heure locale) → sélectionne le bon exercice.
-      const dateOp = v.dateOperation ?? this.dateCourante();
       const exerciceId = this.exercicePourAnnee(Number(dateOp.slice(0, 4)));
       const compteProduit = secteur === 'service' ? '706' : '701';
 
@@ -831,6 +845,7 @@ export class EntrepriseDO extends DurableObject {
 
     // Date d'opération réelle (défaut : aujourd'hui, heure locale) → sélectionne le bon exercice.
     const dateOp = a.dateOperation ?? this.dateCourante();
+    this.verifierMoisNonCloture(dateOp);
     const exerciceId = this.exercicePourAnnee(Number(dateOp.slice(0, 4)));
 
     return this.ctx.storage.transactionSync(() => {
@@ -1537,6 +1552,7 @@ export class EntrepriseDO extends DurableObject {
     this.verifierTvaAutorisee(d.regimeFiscal, [d.tauxTva]);
     // Date d'opération réelle (défaut : aujourd'hui, heure locale) → sélectionne le bon exercice.
     const dateOp = d.dateOperation ?? this.dateCourante();
+    this.verifierMoisNonCloture(dateOp);
     const exerciceId = this.exercicePourAnnee(Number(dateOp.slice(0, 4)));
 
     return this.ctx.storage.transactionSync(() => {
@@ -1849,6 +1865,55 @@ export class EntrepriseDO extends DurableObject {
   }
 
   /**
+   * Marge par client (CA HT, coût, marge, % marge) sur l'exercice ouvert, triée par marge
+   * décroissante — répond à « quels clients me rapportent vraiment », distinct du volume vendu.
+   * Les ventes sans client identifié (comptant, client de passage) sont regroupées à part.
+   */
+  async margeParClient(): Promise<Record<string, unknown>[]> {
+    const rows = this.sql.exec(
+      `SELECT v.tiers_id, COALESCE(t.nom, 'Vente au comptant / client de passage') AS nom,
+              COUNT(DISTINCT v.id) AS nb_ventes, SUM(lv.montant_ht) AS ca_ht,
+              SUM(lv.quantite * lv.cout_unitaire) AS cogs
+         FROM ligne_vente lv JOIN vente v ON v.id = lv.vente_id LEFT JOIN tiers t ON t.id = v.tiers_id
+        WHERE v.statut != 'annulee' AND v.exercice_id = ?
+        GROUP BY COALESCE(v.tiers_id, 'sans_client')
+        ORDER BY (SUM(lv.montant_ht) - SUM(lv.quantite * lv.cout_unitaire)) DESC`,
+      this.exerciceOuvert(),
+    ).toArray() as { tiers_id: string | null; nom: string; nb_ventes: number; ca_ht: number; cogs: number }[];
+    return rows.map((r) => {
+      const marge = r.ca_ht - r.cogs;
+      return { ...r, marge, margePct: r.ca_ht > 0 ? Math.round((marge / r.ca_ht) * 1000) / 10 : null };
+    });
+  }
+
+  /**
+   * Délai moyen de paiement (en jours) des créances soldées cette année — factures et ventes à
+   * crédit dont le dernier règlement est intervenu après l'émission. Ne compte que les créances
+   * effectivement soldées (pas les encore ouvertes, dont le délai final n'est pas encore connu).
+   */
+  async delaiMoyenPaiement(): Promise<{ jours: number | null; echantillon: number }> {
+    const facturesReglees = this.sql.exec(
+      `SELECT f.date_emission AS emission, MAX(p.date) AS dernier_paiement
+         FROM facture f JOIN paiement_facture p ON p.facture_id = f.id
+        WHERE f.type = 'facture' AND f.statut = 'payee' AND f.date_emission IS NOT NULL
+        GROUP BY f.id`,
+    ).toArray() as { emission: string; dernier_paiement: string }[];
+    const ventesReglees = this.sql.exec(
+      `SELECT v.date AS emission, MAX(p.date) AS dernier_paiement
+         FROM vente v JOIN paiement_vente p ON p.vente_id = v.id
+        WHERE v.statut = 'payee'
+        GROUP BY v.id`,
+    ).toArray() as { emission: string; dernier_paiement: string }[];
+
+    const delais = [...facturesReglees, ...ventesReglees]
+      .map((r) => (Date.parse(r.dernier_paiement) - Date.parse(r.emission)) / 86_400_000)
+      .filter((j) => Number.isFinite(j) && j >= 0);
+    if (delais.length === 0) return { jours: null, echantillon: 0 };
+    const moyenne = delais.reduce((s, j) => s + j, 0) / delais.length;
+    return { jours: Math.round(moyenne * 10) / 10, echantillon: delais.length };
+  }
+
+  /**
    * Alertes de pilotage — consolide les retards déjà calculés ailleurs (créances, dettes) et
    * détecte deux situations nouvelles à partir de données existantes : une catégorie de dépense
    * anormalement haute ce mois (vs moyenne des 3 mois précédents) et une vente conclue sous son
@@ -1931,18 +1996,82 @@ export class EntrepriseDO extends DurableObject {
     comparaisonMensuelle: Awaited<ReturnType<EntrepriseDO['comparaisonMensuelle']>>;
     alertes: { type: string; gravite: 'attention' | 'critique'; libelle: string }[];
     topProduits: Record<string, unknown>[];
+    delaiMoyenPaiement: { jours: number | null; echantillon: number };
   }> {
-    const [tresorerie, margeCumulee, comparaison, alertes, produits] = await Promise.all([
+    const [tresorerie, margeCumulee, comparaison, alertes, produits, delaiMoyenPaiement] = await Promise.all([
       this.soldesTresorerie(),
       this.margeCumulee(),
       this.comparaisonMensuelle(),
       this.alertesPilotage(),
       this.margeParProduit(),
+      this.delaiMoyenPaiement(),
     ]);
     return {
       tresorerie, margeCumulee, comparaisonMensuelle: comparaison, alertes,
-      topProduits: produits.slice(0, 3),
+      topProduits: produits.slice(0, 3), delaiMoyenPaiement,
     };
+  }
+
+  // ══════════════ Fiabilité des données (D18 : rapprochement, clôture) ══════════════
+
+  /**
+   * Rapprochement de trésorerie : compare le solde déclaré (compté physiquement, lu sur un
+   * relevé Mobile Money/bancaire) au solde que Kombi calcule à cet instant pour ce compte, et
+   * garde l'écart trouvé. Saisie manuelle — aucun import bancaire (D18, hors scope).
+   */
+  async enregistrerPointage(
+    compte: 'especes' | 'mtnMomo' | 'orangeMoney' | 'banque', soldeDeclare: number,
+    acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
+  ): Promise<{ id: string; soldeCalcule: number; ecart: number }> {
+    const soldes = await this.soldesTresorerie();
+    const soldeCalcule = soldes[compte];
+    const ecart = Math.round(soldeDeclare) - soldeCalcule;
+    const id = uid();
+    this.sql.exec(
+      `INSERT INTO pointage_tresorerie (id, compte, solde_declare, solde_calcule, ecart, acteur_id)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      id, compte, Math.round(soldeDeclare), soldeCalcule, ecart, acteur.utilisateurId,
+    );
+    this.journaliser({
+      acteur, action: 'tresorerie.pointer', entite: 'pointage_tresorerie', entiteId: id,
+      apres: { compte, soldeDeclare: Math.round(soldeDeclare), soldeCalcule, ecart },
+    });
+    return { id, soldeCalcule, ecart };
+  }
+
+  /** Historique des pointages de trésorerie, du plus récent au plus ancien. */
+  async listerPointages(limite = 20): Promise<Record<string, unknown>[]> {
+    return this.sql.exec(
+      'SELECT id, compte, date, solde_declare, solde_calcule, ecart FROM pointage_tresorerie ORDER BY date DESC LIMIT ?',
+      limite,
+    ).toArray() as never;
+  }
+
+  /**
+   * Clôture un mois civil ('YYYY-MM') : plus aucune vente/achat/dépense ne pourra y être daté
+   * (voir `verifierMoisNonCloture`, appelée avant écriture). Ne verrouille QUE ce mois — pas une
+   * clôture d'exercice complète (à-nouveaux etc., voir DECISIONS.md D17, encore à construire).
+   */
+  async cloturerMois(anneeMois: string, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }): Promise<void> {
+    if (!/^\d{4}-\d{2}$/.test(anneeMois)) throw new Error('Format de mois invalide (attendu AAAA-MM)');
+    this.sql.exec(
+      'INSERT OR IGNORE INTO cloture_mensuelle (annee_mois, cloture_par) VALUES (?, ?)',
+      anneeMois, acteur.utilisateurId,
+    );
+    this.journaliser({ acteur, action: 'mois.cloturer', entite: 'cloture_mensuelle', entiteId: anneeMois, apres: { anneeMois } });
+  }
+
+  /** Rouvre un mois précédemment clôturé (erreur de manipulation, correction à faire). */
+  async rouvrirMois(anneeMois: string, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }): Promise<void> {
+    this.sql.exec('DELETE FROM cloture_mensuelle WHERE annee_mois = ?', anneeMois);
+    this.journaliser({ acteur, action: 'mois.rouvrir', entite: 'cloture_mensuelle', entiteId: anneeMois, apres: { anneeMois } });
+  }
+
+  /** Liste des mois clôturés, du plus récent au plus ancien. */
+  async listerClotures(): Promise<Record<string, unknown>[]> {
+    return this.sql.exec(
+      'SELECT annee_mois, cloture_le, cloture_par FROM cloture_mensuelle ORDER BY annee_mois DESC',
+    ).toArray() as never;
   }
 
   /**
