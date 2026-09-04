@@ -15,6 +15,7 @@ import { IcoChevR, IcoFile } from '../components/icons.js';
 const TYPES: { value: TypeRapport; label: string }[] = [
   { value: 'mensuel', label: 'Mensuel' }, { value: 'trimestriel', label: 'Trimestriel' },
   { value: 'annuel', label: 'Annuel' }, { value: 'comparaison', label: 'Comparaison' },
+  { value: 'personnalise', label: 'Plage libre' },
 ];
 
 /** Période de référence : année + mois (0-indexé). Le mois est ignoré pour le type 'annuel'. */
@@ -62,25 +63,32 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
   const [type, setType] = useState<TypeRapport>('mensuel');
   const auj = new Date();
   const [ref, setRef] = useState<RefPeriode>({ annee: auj.getFullYear(), mois: auj.getMonth() });
+  const debutMoisCourant = premierJour(auj.getFullYear(), auj.getMonth());
+  const [plageDebut, setPlageDebut] = useState(debutMoisCourant);
+  const [plageFin, setPlageFin] = useState(premierJour(auj.getFullYear(), auj.getMonth() + 1));
+  const [agenceFiltre, setAgenceFiltre] = useState('');
   const [rapport, setRapport] = useState<Rapport | null>(null);
   const [erreur, setErreur] = useState('');
   const [exportEnCours, setExportEnCours] = useState<'pdf' | 'csv' | null>(null);
 
   const effectif: TypeRapport = type === 'comparaison' ? 'mensuel' : type;
+  const agencesDisponibles = (rapport?.depenses.parAgence ?? []).filter((a) => a.agence !== 'Sans agence').map((a) => a.agence);
 
   function paramsActuels() {
+    const agence = agenceFiltre || undefined;
+    if (type === 'personnalise') return { type, debut: plageDebut, fin: plageFin, agence };
     const periode = bornes(effectif, ref);
-    if (type !== 'comparaison') return { type, ...periode };
+    if (type !== 'comparaison') return { type, ...periode, agence };
     const refPrec = decalerRef(effectif, ref, -1);
     const c = bornes(effectif, refPrec);
-    return { type, ...periode, debutComparaison: c.debut, finComparaison: c.fin };
+    return { type, ...periode, debutComparaison: c.debut, finComparaison: c.fin, agence };
   }
 
   useEffect(() => {
     setRapport(null); setErreur('');
     getRapport(entreprise.id, paramsActuels()).then(setRapport).catch((e) => setErreur(e instanceof Error ? e.message : 'Erreur'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entreprise.id, type, ref.annee, ref.mois]);
+  }, [entreprise.id, type, ref.annee, ref.mois, plageDebut, plageFin, agenceFiltre]);
 
   async function exporterPdf() {
     setExportEnCours('pdf');
@@ -113,32 +121,57 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
         ))}
       </div>
 
-      <div className="px-4 md:px-8 pb-2 flex items-center gap-2">
-        <button onClick={() => setRef((r) => decalerRef(effectif, r, -1))}
-          className="w-8 h-8 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165] shrink-0">
-          <IcoChevR cls="w-3.5 h-3.5 rotate-180" />
-        </button>
-        {effectif === 'mensuel' ? (
-          <input type="month" value={`${ref.annee}-${String(ref.mois + 1).padStart(2, '0')}`}
-            onChange={(e) => {
-              const [a, m] = e.target.value.split('-').map(Number);
-              if (a && m) setRef({ annee: a, mois: m - 1 });
-            }}
-            className="bg-[#1e3222] text-[#edf5ea] text-sm font-medium rounded-xl px-3 py-1.5 border border-[#2a4230] focus:border-[#b4e033] focus:outline-none [color-scheme:dark]" />
+      <div className="px-4 md:px-8 pb-2 flex items-center gap-2 flex-wrap">
+        {type === 'personnalise' ? (
+          <>
+            <input type="date" value={plageDebut} onChange={(e) => e.target.value && setPlageDebut(e.target.value)}
+              className="bg-[#1e3222] text-[#edf5ea] text-sm font-medium rounded-xl px-3 py-1.5 border border-[#2a4230] focus:border-[#b4e033] focus:outline-none [color-scheme:dark]" />
+            <span className="text-[#4a6b4a] text-sm">→</span>
+            <input type="date" value={plageFin} onChange={(e) => e.target.value && setPlageFin(e.target.value)}
+              className="bg-[#1e3222] text-[#edf5ea] text-sm font-medium rounded-xl px-3 py-1.5 border border-[#2a4230] focus:border-[#b4e033] focus:outline-none [color-scheme:dark]" />
+          </>
         ) : (
-          <span className="text-[#edf5ea] text-sm font-medium min-w-[90px] text-center">{labelPeriode(effectif, ref)}</span>
+          <>
+            <button onClick={() => setRef((r) => decalerRef(effectif, r, -1))}
+              className="w-8 h-8 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165] shrink-0">
+              <IcoChevR cls="w-3.5 h-3.5 rotate-180" />
+            </button>
+            {effectif === 'mensuel' ? (
+              <input type="month" value={`${ref.annee}-${String(ref.mois + 1).padStart(2, '0')}`}
+                onChange={(e) => {
+                  const [a, m] = e.target.value.split('-').map(Number);
+                  if (a && m) setRef({ annee: a, mois: m - 1 });
+                }}
+                className="bg-[#1e3222] text-[#edf5ea] text-sm font-medium rounded-xl px-3 py-1.5 border border-[#2a4230] focus:border-[#b4e033] focus:outline-none [color-scheme:dark]" />
+            ) : (
+              <span className="text-[#edf5ea] text-sm font-medium min-w-[90px] text-center">{labelPeriode(effectif, ref)}</span>
+            )}
+            <button onClick={() => setRef((r) => decalerRef(effectif, r, 1))}
+              className="w-8 h-8 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165] shrink-0">
+              <IcoChevR cls="w-3.5 h-3.5" />
+            </button>
+            {(ref.annee !== auj.getFullYear() || ref.mois !== auj.getMonth()) && (
+              <button onClick={() => setRef({ annee: auj.getFullYear(), mois: auj.getMonth() })}
+                className="text-[#6b9165] text-xs font-medium px-2 py-1 hover:text-[#b4e033]">
+                Aujourd'hui
+              </button>
+            )}
+          </>
         )}
-        <button onClick={() => setRef((r) => decalerRef(effectif, r, 1))}
-          className="w-8 h-8 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165] shrink-0">
-          <IcoChevR cls="w-3.5 h-3.5" />
-        </button>
-        {(ref.annee !== auj.getFullYear() || ref.mois !== auj.getMonth()) && (
-          <button onClick={() => setRef({ annee: auj.getFullYear(), mois: auj.getMonth() })}
-            className="text-[#6b9165] text-xs font-medium px-2 py-1 hover:text-[#b4e033]">
-            Aujourd'hui
-          </button>
+
+        {rapport && (
+          <select value={agenceFiltre} onChange={(e) => setAgenceFiltre(e.target.value)}
+            className="ml-auto bg-[#1e3222] text-[#edf5ea] text-xs rounded-xl px-2.5 py-1.5 border border-[#2a4230] focus:border-[#b4e033] focus:outline-none">
+            <option value="">Toutes agences</option>
+            {agencesDisponibles.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
         )}
       </div>
+      {agenceFiltre && (
+        <p className="text-[#4a6b4a] text-[11px] px-4 md:px-8 pb-1">
+          Filtre agence « {agenceFiltre} » — ne s'applique qu'aux dépenses (CA, marge et clients restent sur toute l'entreprise).
+        </p>
+      )}
 
       {erreur && <p className="text-[#f87171] text-sm px-4 md:px-8">{erreur}</p>}
 

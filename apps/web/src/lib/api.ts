@@ -187,7 +187,7 @@ export const simulerRecrutement = (entrepriseId: string, coutMensuel: number) =>
   );
 
 // ── Rapports & Analyses ──
-export type TypeRapport = 'mensuel' | 'trimestriel' | 'annuel' | 'comparaison';
+export type TypeRapport = 'mensuel' | 'trimestriel' | 'annuel' | 'comparaison' | 'personnalise';
 export interface RapportPeriode { debut: string; fin: string; }
 export interface RapportStats { ca: number; cogs: number; marge: number; depenses: number; resultat: number; }
 export interface Rapport {
@@ -198,12 +198,15 @@ export interface Rapport {
   delaiMoyenPaiement: { jours: number | null; echantillon: number };
   comparaison: { periode: RapportPeriode; stats: RapportStats; variationCaPct: number | null; variationMargePct: number | null; variationDepensesPct: number | null } | null;
 }
-export interface ParamsRapport { type: TypeRapport; debut: string; fin: string; debutComparaison?: string; finComparaison?: string; }
+export interface ParamsRapport {
+  type: TypeRapport; debut: string; fin: string; debutComparaison?: string; finComparaison?: string; agence?: string;
+}
 
 function qsRapport(p: ParamsRapport): string {
   const q = new URLSearchParams({ type: p.type, debut: p.debut, fin: p.fin });
   if (p.debutComparaison) q.set('debutComparaison', p.debutComparaison);
   if (p.finComparaison) q.set('finComparaison', p.finComparaison);
+  if (p.agence) q.set('agence', p.agence);
   return q.toString();
 }
 export const getRapport = (entrepriseId: string, p: ParamsRapport) =>
@@ -415,9 +418,24 @@ export interface AnalyseDepenses {
   sansJustificatif: Depense[];
   parAgence: { agence: string; total: number }[];
 }
-export const analyserDepenses = (entrepriseId: string, periode?: { debut: string; fin: string }) => {
-  const qs = periode ? `?debut=${periode.debut}&fin=${periode.fin}` : '';
-  return api<AnalyseDepenses>(`/api/depenses/analyse${qs}`, { entrepriseId });
+export const analyserDepenses = (entrepriseId: string, periode?: { debut: string; fin: string }, agence?: string) => {
+  const q = new URLSearchParams();
+  if (periode) { q.set('debut', periode.debut); q.set('fin', periode.fin); }
+  if (agence) q.set('agence', agence);
+  const qs = q.toString();
+  return api<AnalyseDepenses>(`/api/depenses/analyse${qs ? `?${qs}` : ''}`, { entrepriseId });
+};
+
+/** Détail des dépenses d'une catégorie — drill-down depuis l'écran Analyse. */
+export const listerDepensesParCategorie = (
+  entrepriseId: string, categorie: string, periode?: { debut: string; fin: string }, agence?: string,
+) => {
+  const q = new URLSearchParams();
+  if (periode) { q.set('debut', periode.debut); q.set('fin', periode.fin); }
+  if (agence) q.set('agence', agence);
+  const qs = q.toString();
+  return api<{ depenses: Depense[] }>(`/api/depenses/categorie/${encodeURIComponent(categorie)}${qs ? `?${qs}` : ''}`, { entrepriseId })
+    .then((r) => r.depenses);
 };
 
 /**

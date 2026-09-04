@@ -42,6 +42,30 @@ describe('Rapport agrégé — période simple', () => {
   });
 });
 
+describe('Rapport agrégé — période personnalisée et filtre agence', () => {
+  it('accepte une plage de dates arbitraire (type personnalisé)', async () => {
+    const e = doE('rapport-personnalise');
+    await e.initialiser('rapport-personnalise', 'commerce', 2026);
+    await e.enregistrerVente({ lignes: [{ designation: 'Article', quantite: 1, prixUnitaire: 20000 }], modePaiement: 'especes', dateOperation: '2026-09-15' });
+    const rapport = await e.rapport({ type: 'personnalise', periode: { debut: '2026-09-10', fin: '2026-09-20' } }) as { stats: { ca: number } };
+    expect(rapport.stats.ca).toBe(20000);
+  });
+
+  it('le filtre agence ne s\'applique qu\'aux dépenses du rapport, pas au CA', async () => {
+    const e = doE('rapport-agence');
+    await e.initialiser('rapport-agence', 'commerce', 2026);
+    await e.enregistrerVente({ lignes: [{ designation: 'Article', quantite: 1, prixUnitaire: 20000 }], modePaiement: 'especes', dateOperation: '2026-09-04' });
+    await e.creerDepense({ categorie: 'transport', compteNumero: '614', libelle: 'Douala', montant: 5000, modePaiement: 'especes', agence: 'Douala', dateOperation: '2026-09-04' });
+    await e.creerDepense({ categorie: 'transport', compteNumero: '614', libelle: 'Yaoundé', montant: 3000, modePaiement: 'especes', agence: 'Yaoundé', dateOperation: '2026-09-04' });
+
+    const rapport = await e.rapport({ type: 'mensuel', periode: { debut: '2026-09-01', fin: '2026-10-01' }, agence: 'Douala' }) as {
+      stats: { ca: number; depenses: number }; depenses: { total: number };
+    };
+    expect(rapport.stats.ca).toBe(20000); // CA global, non filtré par agence
+    expect(rapport.depenses.total).toBe(5000); // dépenses filtrées sur Douala uniquement
+  });
+});
+
 describe('Rapport agrégé — évolution des dépenses selon le type', () => {
   it('un rapport mensuel donne 6 mois d\'évolution, un rapport annuel les 12 mois civils de l\'exercice', async () => {
     const e = doE('rapport-evolution');

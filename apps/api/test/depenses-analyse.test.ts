@@ -97,4 +97,17 @@ describe('Dépenses — analyse (répartition, évolution, fournisseurs, anomali
     const sansAgence = analyse.parAgence.find((a: { agence: string }) => a.agence === 'Sans agence')!;
     expect(sansAgence.total).toBe(3000);
   });
+
+  it('filtre l\'analyse sur une seule agence quand demandé (retour testeur 2026-09-04)', async () => {
+    const e = doE('depenses-analyse-filtre-agence');
+    await e.initialiser('depenses-analyse-filtre-agence', 'commerce', 2026);
+    await e.creerDepense({ categorie: 'transport', compteNumero: '614', libelle: 'Course Douala', montant: 5000, modePaiement: 'especes', agence: 'Douala', dateOperation: '2026-09-04' });
+    await e.creerDepense({ categorie: 'loyer', compteNumero: '622', libelle: 'Loyer Douala', montant: 50000, modePaiement: 'especes', agence: 'Douala', dateOperation: '2026-09-04' });
+    await e.creerDepense({ categorie: 'transport', compteNumero: '614', libelle: 'Course Yaoundé', montant: 3000, modePaiement: 'especes', agence: 'Yaoundé', dateOperation: '2026-09-04' });
+
+    const analyse = await e.analyseDepenses(undefined, 6, 'Douala');
+    expect(analyse.total).toBe(55000);
+    expect(analyse.parCategorie.map((c: { categorie: string }) => c.categorie).sort()).toEqual(['loyer', 'transport']);
+    expect(analyse.parCategorie.every((c: { total: number }) => c.total > 0)).toBe(true);
+  });
 });

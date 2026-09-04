@@ -294,14 +294,31 @@ Retour testeur sur D20 (7 points), dont deux qui touchent des décisions déjà 
   `Comptabilite` accepte une prop `vueInitiale`.
 - **Sélection de période dans Rapports** — jusqu'ici toujours calée sur aujourd'hui. Ajout d'une
   navigation (mois via `<input type="month">`, trimestre/année via précédent/suivant) + retour
-  rapide à la période courante. Plage personnalisée et filtre par agence/projet/activité restent
-  hors scope de ce correctif (demandés par le testeur en P2, pas urgents).
+  rapide à la période courante.
 - **« Disponible aujourd'hui » pouvait afficher un montant négatif** — libellé et couleur du
   Dashboard changent automatiquement en « Découvert de trésorerie » (rouge) quand le solde total
   est négatif.
-- **Non traité dans ce correctif** (P2, hors urgence) : drill-down cliquable sur une catégorie de
-  dépense (transactions/justificatifs/utilisateur/fournisseur/écriture liés), filtre agence/
-  projet/activité dans Rapports. Voir le retour testeur complet pour le détail.
+
+### Suite D21 — plage personnalisée, filtre agence, drill-down (2026-09-04, même jour)
+Les deux P2 restants du même retour testeur, traités dans la foulée :
+- **Plage personnalisée dans Rapports** : nouveau type `personnalise` (deux `<input type="date">`
+  libres) en plus de mensuel/trimestriel/annuel/comparaison.
+- **Filtre agence** : `analyseDepenses()` (DO) accepte un `filtreAgence` optionnel, propagé par
+  `rapport()` et exposé dans `/api/rapports` et `/api/depenses/analyse`. **Ne filtre QUE la
+  section dépenses** du rapport — CA, marge, produits, clients, trésorerie restent à l'échelle de
+  l'entreprise entière, faute de dimension agence sur les ventes. Le sélecteur d'agences dans
+  `Rapports.tsx` se peuple depuis `parAgence` de la dernière réponse (pas de nouvel endpoint).
+- **Drill-down catégorie → transactions** : nouvelle méthode `depensesParCategorie()` (DO) et
+  route `GET /api/depenses/categorie/:categorie`, mêmes colonnes que `listerDepenses()` (contexte
+  complet). Câblé dans `Depenses.tsx` (onglet Analyse) : cliquer une catégorie (donut, « postes en
+  hausse », « inhabituelles ») ouvre la liste des transactions de cette catégorie sur le mois ;
+  cliquer une transaction ouvre `DetailDepenseSheet` (déjà existant, réutilisé tel quel — pas de
+  nouvel écran de détail). Les lignes « récurrentes » et « sans justificatif » de l'analyse (déjà
+  typées `Depense[]`) ouvrent directement ce même détail, sans étape intermédiaire.
+- **Toujours hors scope** : filtre par projet/activité (aucune dimension de ce type dans le
+  modèle de données — ajouter ça serait une vraie extension de schéma, pas un correctif), plage
+  personnalisée avec comparaison (le type `comparaison` reste basé sur mois/trimestre/année
+  civils).
 
 ## Décisions ouvertes (restantes)
 - Décompte exact des « 2 ans » de maintien de régime (exercices civils vs glissants).

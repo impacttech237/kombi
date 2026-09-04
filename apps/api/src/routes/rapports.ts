@@ -7,15 +7,17 @@ import { avecCacheTTL } from '../lib/cache-isolate.js';
 import { genererRapportPDF, type DonneesRapport } from '../pdf/rapport-pdf.js';
 
 const zPeriode = z.object({
-  type: z.enum(['mensuel', 'trimestriel', 'annuel', 'comparaison']),
+  type: z.enum(['mensuel', 'trimestriel', 'annuel', 'comparaison', 'personnalise']),
   debut: zDateISO, fin: zDateISO,
   debutComparaison: zDateISO.nullish(), finComparaison: zDateISO.nullish(),
+  agence: z.string().trim().min(1).max(80).nullish(),
 });
 
 function lireParams(c: { req: { query: (k: string) => string | undefined } }) {
   return zPeriode.safeParse({
     type: c.req.query('type'), debut: c.req.query('debut'), fin: c.req.query('fin'),
     debutComparaison: c.req.query('debutComparaison') ?? null, finComparaison: c.req.query('finComparaison') ?? null,
+    agence: c.req.query('agence') ?? null,
   });
 }
 
@@ -40,12 +42,12 @@ export const rapports = new Hono<AppEnv>();
 rapports.get('/', requirePermission('rapport:read'), async (c) => {
   const p = lireParams(c);
   if (!p.success) return c.json({ erreur: messageErreurZod(p.error) }, 400);
-  const { type, debut, fin, debutComparaison, finComparaison } = p.data;
+  const { type, debut, fin, debutComparaison, finComparaison, agence } = p.data;
   const periodeComparaison = debutComparaison && finComparaison ? { debut: debutComparaison, fin: finComparaison } : undefined;
   const entrepriseId = c.get('entrepriseId');
-  const cle = `rapport:${entrepriseId}:${type}:${debut}:${fin}:${debutComparaison ?? ''}:${finComparaison ?? ''}`;
+  const cle = `rapport:${entrepriseId}:${type}:${debut}:${fin}:${debutComparaison ?? ''}:${finComparaison ?? ''}:${agence ?? ''}`;
   const rapport = await avecCacheTTL(cle, 60_000, () =>
-    stubEntreprise(c.env, entrepriseId).rapport({ type, periode: { debut, fin }, periodeComparaison }),
+    stubEntreprise(c.env, entrepriseId).rapport({ type, periode: { debut, fin }, periodeComparaison, agence: agence ?? undefined }),
   );
   return c.json(rapport);
 });
@@ -53,10 +55,10 @@ rapports.get('/', requirePermission('rapport:read'), async (c) => {
 rapports.get('/pdf', requirePermission('rapport:read'), async (c) => {
   const p = lireParams(c);
   if (!p.success) return c.json({ erreur: messageErreurZod(p.error) }, 400);
-  const { type, debut, fin, debutComparaison, finComparaison } = p.data;
+  const { type, debut, fin, debutComparaison, finComparaison, agence } = p.data;
   const periodeComparaison = debutComparaison && finComparaison ? { debut: debutComparaison, fin: finComparaison } : undefined;
   const entrepriseId = c.get('entrepriseId');
-  const rapport = await stubEntreprise(c.env, entrepriseId).rapport({ type, periode: { debut, fin }, periodeComparaison }) as DonneesRapport & {
+  const rapport = await stubEntreprise(c.env, entrepriseId).rapport({ type, periode: { debut, fin }, periodeComparaison, agence: agence ?? undefined }) as DonneesRapport & {
     produits: { designation: string; ca_ht: number; marge: number }[]; clients: { nom: string; ca_ht: number; marge: number }[];
   };
   const ent = await emetteur(c, entrepriseId);
@@ -69,10 +71,10 @@ rapports.get('/pdf', requirePermission('rapport:read'), async (c) => {
 rapports.get('/csv', requirePermission('rapport:read'), async (c) => {
   const p = lireParams(c);
   if (!p.success) return c.json({ erreur: messageErreurZod(p.error) }, 400);
-  const { type, debut, fin, debutComparaison, finComparaison } = p.data;
+  const { type, debut, fin, debutComparaison, finComparaison, agence } = p.data;
   const periodeComparaison = debutComparaison && finComparaison ? { debut: debutComparaison, fin: finComparaison } : undefined;
   const entrepriseId = c.get('entrepriseId');
-  const rapport = await stubEntreprise(c.env, entrepriseId).rapport({ type, periode: { debut, fin }, periodeComparaison }) as {
+  const rapport = await stubEntreprise(c.env, entrepriseId).rapport({ type, periode: { debut, fin }, periodeComparaison, agence: agence ?? undefined }) as {
     stats: { ca: number; cogs: number; marge: number; depenses: number; resultat: number };
     produits: { designation: string; ca_ht: number; marge: number }[];
     clients: { nom: string; ca_ht: number; marge: number }[];

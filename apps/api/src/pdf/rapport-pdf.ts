@@ -20,7 +20,8 @@ function safe(s: string | undefined | null): string {
 }
 
 const LABEL_TYPE: Record<string, string> = {
-  mensuel: 'Rapport mensuel', trimestriel: 'Rapport trimestriel', annuel: 'Rapport annuel', comparaison: 'Comparaison de périodes',
+  mensuel: 'Rapport mensuel', trimestriel: 'Rapport trimestriel', annuel: 'Rapport annuel',
+  comparaison: 'Comparaison de périodes', personnalise: 'Rapport — période personnalisée',
 };
 
 /** Génère le PDF d'un rapport périodique (synthèse — pas le détail ligne à ligne). */

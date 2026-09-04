@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { formaterFCFA as fmt, CATEGORIES_DEPENSE } from '@kombi/shared';
 import {
   listerDepenses, televerserPieceDepense, urlPieceDepense, supprimerPieceDepense,
-  analyserDepenses, listerMembres,
+  analyserDepenses, listerMembres, listerDepensesParCategorie,
   type EntrepriseResume, type Depense, type AnalyseDepenses, type Membre,
 } from '../lib/api.js';
 import { enfilerMutation, nouvelUuid } from '../offline/db.js';
@@ -147,6 +147,8 @@ export function Depenses({ entreprise, onRetour }: { entreprise: EntrepriseResum
 
 function AnalyseDepensesTab({ entreprise }: { entreprise: EntrepriseResume }) {
   const [analyse, setAnalyse] = useState<AnalyseDepenses | null>(null);
+  const [categorieOuverte, setCategorieOuverte] = useState<{ code: string; libelle: string } | null>(null);
+  const [detail, setDetail] = useState<Depense | null>(null);
 
   useEffect(() => {
     analyserDepenses(entreprise.id).then(setAnalyse).catch(() => setAnalyse(null));
@@ -173,7 +175,8 @@ function AnalyseDepensesTab({ entreprise }: { entreprise: EntrepriseResume }) {
         {analyse.parCategorie.length === 0 ? (
           <p className="text-[#4a6b4a] text-xs">Rien sur cette période.</p>
         ) : (
-          <DepensesCategorieDonut data={analyse.parCategorie} />
+          <DepensesCategorieDonut data={analyse.parCategorie}
+            onSelect={(code) => setCategorieOuverte({ code, libelle: analyse.parCategorie.find((c) => c.categorie === code)?.libelle ?? code })} />
         )}
       </div>
 
@@ -187,10 +190,11 @@ function AnalyseDepensesTab({ entreprise }: { entreprise: EntrepriseResume }) {
           <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-2">Postes en hausse</p>
           <div className="space-y-2">
             {analyse.postesEnHausse.map((p) => (
-              <div key={p.categorie} className="flex items-center justify-between text-sm">
+              <button key={p.categorie} onClick={() => setCategorieOuverte({ code: p.categorie, libelle: p.libelle })}
+                className="w-full flex items-center justify-between text-sm hover:bg-[#1e3222] rounded-lg -mx-1 px-1 py-0.5 transition-colors">
                 <span className="text-[#edf5ea]">{p.libelle}</span>
                 <span className="text-[#f87171] font-mono text-xs">+{fmt(p.deltaMontant)}</span>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -231,9 +235,10 @@ function AnalyseDepensesTab({ entreprise }: { entreprise: EntrepriseResume }) {
           </p>
           <div className="space-y-1">
             {analyse.inhabituelles.map((i) => (
-              <p key={i.categorie} className="text-[#edf5ea] text-xs">
+              <button key={i.categorie} onClick={() => setCategorieOuverte({ code: i.categorie, libelle: i.libelle })}
+                className="block w-full text-left text-[#edf5ea] text-xs hover:bg-[#1e3222] rounded-lg -mx-1 px-1 py-0.5 transition-colors">
                 {i.libelle} : {fmt(i.total)} <span className="text-[#4a6b4a]">(moyenne habituelle {fmt(i.moyenneHistorique)})</span>
-              </p>
+              </button>
             ))}
           </div>
         </div>
@@ -244,10 +249,11 @@ function AnalyseDepensesTab({ entreprise }: { entreprise: EntrepriseResume }) {
           <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-2">Dépenses récurrentes</p>
           <div className="space-y-2">
             {analyse.recurrentes.map((d) => (
-              <div key={d.id} className="flex items-center justify-between text-sm">
+              <button key={d.id} onClick={() => setDetail(d)}
+                className="w-full flex items-center justify-between text-sm hover:bg-[#1e3222] rounded-lg -mx-1 px-1 py-0.5 transition-colors">
                 <span className="text-[#edf5ea] truncate">{d.libelle}</span>
                 <span className="text-[#edf5ea] font-mono text-xs">{fmt(d.montant)}</span>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -258,14 +264,92 @@ function AnalyseDepensesTab({ entreprise }: { entreprise: EntrepriseResume }) {
           <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-2">Sans justificatif ({analyse.sansJustificatif.length})</p>
           <div className="space-y-2">
             {analyse.sansJustificatif.slice(0, 8).map((d) => (
-              <div key={d.id} className="flex items-center justify-between text-sm">
+              <button key={d.id} onClick={() => setDetail(d)}
+                className="w-full flex items-center justify-between text-sm hover:bg-[#1e3222] rounded-lg -mx-1 px-1 py-0.5 transition-colors">
                 <span className="text-[#edf5ea] truncate">{d.libelle}</span>
                 <span className="text-[#fbbf24] font-mono text-xs">{fmt(d.montant)}</span>
-              </div>
+              </button>
             ))}
           </div>
         </div>
       )}
+
+      {categorieOuverte && (
+        <CategorieDrillDownSheet entreprise={entreprise} categorie={categorieOuverte.code} libelle={categorieOuverte.libelle}
+          onClose={() => setCategorieOuverte(null)} onSelectDepense={setDetail} />
+      )}
+      {detail && (
+        <DetailDepenseSheet entreprise={entreprise} depense={detail} onClose={() => setDetail(null)}
+          onMaj={() => {
+            listerDepensesParCategorie(entreprise.id, detail.categorie).then((liste) => {
+              const maj = liste.find((d) => d.id === detail.id);
+              if (maj) setDetail(maj);
+            }).catch(() => {});
+          }} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Drill-down d'une catégorie de dépense — retour testeur 2026-09-04 : « je devrais pouvoir
+ * cliquer sur une catégorie pour voir les transactions, justificatifs, utilisateurs,
+ * fournisseurs, budget consommé, écriture comptable ». Liste les dépenses de la catégorie sur le
+ * mois en cours ; chaque ligne ouvre `DetailDepenseSheet`, qui porte déjà tout ce contexte.
+ */
+function CategorieDrillDownSheet({ entreprise, categorie, libelle, onClose, onSelectDepense }: {
+  entreprise: EntrepriseResume; categorie: string; libelle: string; onClose: () => void; onSelectDepense: (d: Depense) => void;
+}) {
+  const [liste, setListe] = useState<Depense[] | null>(null);
+
+  useEffect(() => {
+    listerDepensesParCategorie(entreprise.id, categorie).then(setListe).catch(() => setListe([]));
+  }, [entreprise.id, categorie]);
+
+  const total = (liste ?? []).reduce((s, d) => s + d.montant, 0);
+  const sansPiece = (liste ?? []).filter((d) => !d.piece_cle).length;
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#0e1c0f]">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#1e3222] bg-[#0a1408] shrink-0">
+        <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+          <IcoChevR cls="w-4 h-4 rotate-180" />
+        </button>
+        <h2 className="text-[#edf5ea] font-semibold text-sm flex-1">{libelle}</h2>
+        <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+          <IcoX cls="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 pt-5 space-y-4">
+        {liste !== null && (
+          <div className="bg-[#162419] rounded-2xl p-4 text-center">
+            <p className="text-[#4a6b4a] text-xs">{liste.length} transaction{liste.length > 1 ? 's' : ''} ce mois-ci</p>
+            <p className="text-[#f87171] font-mono font-bold text-2xl mt-0.5">{fmt(total)}</p>
+            {sansPiece > 0 && <p className="text-[#fbbf24] text-xs mt-1">{sansPiece} sans justificatif</p>}
+          </div>
+        )}
+        {liste === null ? (
+          <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
+        ) : liste.length === 0 ? (
+          <p className="text-[#4a6b4a] text-sm text-center py-8">Aucune dépense dans cette catégorie ce mois-ci.</p>
+        ) : (
+          <div className="space-y-2">
+            {liste.map((d) => (
+              <button key={d.id} onClick={() => onSelectDepense(d)}
+                className="w-full bg-[#162419] rounded-2xl p-4 flex items-center gap-3 text-left hover:bg-[#1e3222] transition-colors">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[#edf5ea] font-medium text-sm truncate">{d.libelle}</p>
+                  <p className="text-[#4a6b4a] text-xs mt-0.5">
+                    {d.date.slice(0, 10)}{d.tiers_nom ? ` · ${d.tiers_nom}` : ''}{d.agence ? ` · ${d.agence}` : ''}
+                  </p>
+                </div>
+                {d.piece_cle && <IcoFile cls="w-4 h-4 text-[#b4e033] shrink-0" />}
+                <span className="text-[#f87171] font-mono font-semibold text-sm shrink-0">−{fmt(d.montant)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

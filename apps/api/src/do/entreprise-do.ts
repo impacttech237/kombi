@@ -1607,7 +1607,7 @@ export class EntrepriseDO extends DurableObject {
    * questions qu'un simple total + liste ne montre pas (audit reporting 2026-09-04) : où va
    * l'argent, qu'est-ce qui augmente, qui coûte le plus, qu'est-ce qui manque de justificatif.
    */
-  async analyseDepenses(periode?: { debut: string; fin: string }, moisEvolution = 6): Promise<{
+  async analyseDepenses(periode?: { debut: string; fin: string }, moisEvolution = 6, filtreAgence?: string): Promise<{
     periode: { debut: string; fin: string };
     total: number;
     parCategorie: { categorie: string; libelle: string; total: number }[];
@@ -1622,16 +1622,23 @@ export class EntrepriseDO extends DurableObject {
   }> {
     const aujourdhui = this.dateCourante();
     const [debut, fin] = periode ? [periode.debut, periode.fin] : this.bornesMois(aujourdhui);
+    // Filtre agence (audit reporting 2026-09-04, retour testeur) : optionnel, ne s'applique qu'à
+    // cette analyse (les dimensions CA/marge/produits/clients du rapport global n'ont pas de
+    // notion d'agence — voir `rapport()`). `agenceParam` vaut toujours un tableau (vide ou à un
+    // élément) pour pouvoir le spread dans chaque appel sans dupliquer la logique conditionnelle.
+    const clauseAgence = filtreAgence ? 'AND agence = ?' : '';
+    const clauseAgenceD = filtreAgence ? 'AND d.agence = ?' : '';
+    const agenceParam = filtreAgence ? [filtreAgence] : [];
 
     const total = (this.sql.exec(
-      `SELECT COALESCE(SUM(montant), 0) AS total FROM depense WHERE date >= ? AND date < ?`,
-      debut, fin,
+      `SELECT COALESCE(SUM(montant), 0) AS total FROM depense WHERE date >= ? AND date < ? ${clauseAgence}`,
+      debut, fin, ...agenceParam,
     ).toArray()[0] as { total: number }).total;
 
     const parCategorieRaw = this.sql.exec(
       `SELECT categorie, COALESCE(SUM(montant), 0) AS total FROM depense
-        WHERE date >= ? AND date < ? GROUP BY categorie ORDER BY total DESC`,
-      debut, fin,
+        WHERE date >= ? AND date < ? ${clauseAgence} GROUP BY categorie ORDER BY total DESC`,
+      debut, fin, ...agenceParam,
     ).toArray() as { categorie: string; total: number }[];
     const parCategorie = parCategorieRaw.map((c) => ({ ...c, libelle: this.labelCategorieDepense(c.categorie) }));
 
@@ -1643,8 +1650,8 @@ export class EntrepriseDO extends DurableObject {
       const debutM = this.debutMoisPrecedent(fin, i);
       const finM = this.debutMoisPrecedent(fin, i - 1);
       const t = (this.sql.exec(
-        `SELECT COALESCE(SUM(montant), 0) AS total FROM depense WHERE date >= ? AND date < ?`,
-        debutM, finM,
+        `SELECT COALESCE(SUM(montant), 0) AS total FROM depense WHERE date >= ? AND date < ? ${clauseAgence}`,
+        debutM, finM, ...agenceParam,
       ).toArray()[0] as { total: number }).total;
       evolutionMensuelle.push({ moisLabel: debutM.slice(0, 7), total: t });
     }
@@ -1661,8 +1668,8 @@ export class EntrepriseDO extends DurableObject {
     const debutPrecedent = new Date(Date.parse(debut) - dureeMs).toISOString().slice(0, 10);
     const parCategoriePeriode = (d: string, f: string) =>
       this.sql.exec(
-        `SELECT categorie, COALESCE(SUM(montant), 0) AS total FROM depense WHERE date >= ? AND date < ? GROUP BY categorie`,
-        d, f,
+        `SELECT categorie, COALESCE(SUM(montant), 0) AS total FROM depense WHERE date >= ? AND date < ? ${clauseAgence} GROUP BY categorie`,
+        d, f, ...agenceParam,
       ).toArray() as { categorie: string; total: number }[];
     const catPrecedente = parCategoriePeriode(debutPrecedent, debut);
     const precedentParCat = new Map(catPrecedente.map((c) => [c.categorie, c.total]));
@@ -1678,17 +1685,17 @@ export class EntrepriseDO extends DurableObject {
     const recurrentes = this.sql.exec(
       `SELECT d.id, d.categorie, d.libelle, d.montant, d.date, t.nom AS tiers_nom
          FROM depense d LEFT JOIN tiers t ON t.id = d.tiers_id
-        WHERE d.recurrente = 1 AND d.date >= ? AND d.date < ? ORDER BY d.montant DESC`,
-      debut, fin,
+        WHERE d.recurrente = 1 AND d.date >= ? AND d.date < ? ${clauseAgenceD} ORDER BY d.montant DESC`,
+      debut, fin, ...agenceParam,
     ).toArray() as never;
 
     const topFournisseurs = this.sql.exec(
       `SELECT d.tiers_id AS tiersId, COALESCE(t.nom, 'Sans fournisseur') AS nom,
               COALESCE(SUM(d.montant), 0) AS total, COUNT(*) AS nb
          FROM depense d LEFT JOIN tiers t ON t.id = d.tiers_id
-        WHERE d.date >= ? AND d.date < ? AND d.tiers_id IS NOT NULL
+        WHERE d.date >= ? AND d.date < ? AND d.tiers_id IS NOT NULL ${clauseAgenceD}
         GROUP BY d.tiers_id ORDER BY total DESC LIMIT 5`,
-      debut, fin,
+      debut, fin, ...agenceParam,
     ).toArray() as { tiersId: string | null; nom: string; total: number; nb: number }[];
 
     // Dépenses inhabituelles : même seuil que alertesPilotage (catégorie ≥1.5× sa moyenne des 3
@@ -1705,8 +1712,8 @@ export class EntrepriseDO extends DurableObject {
     const sansJustificatif = this.sql.exec(
       `SELECT d.id, d.categorie, d.libelle, d.montant, d.date, t.nom AS tiers_nom
          FROM depense d LEFT JOIN tiers t ON t.id = d.tiers_id
-        WHERE d.piece_cle IS NULL AND d.date >= ? AND d.date < ? ORDER BY d.montant DESC`,
-      debut, fin,
+        WHERE d.piece_cle IS NULL AND d.date >= ? AND d.date < ? ${clauseAgenceD} ORDER BY d.montant DESC`,
+      debut, fin, ...agenceParam,
     ).toArray() as never;
 
     const parAgence = this.sql.exec(
@@ -1716,6 +1723,29 @@ export class EntrepriseDO extends DurableObject {
     ).toArray() as { agence: string; total: number }[];
 
     return { periode: { debut, fin }, total, parCategorie, evolutionMensuelle, budget, postesEnHausse, recurrentes, topFournisseurs, inhabituelles, sansJustificatif, parAgence };
+  }
+
+  /**
+   * Détail des dépenses d'UNE catégorie sur une période (audit reporting 2026-09-04, retour
+   * testeur : « l'analyse identifie une catégorie en hausse mais je ne peux pas cliquer dessus
+   * pour voir les transactions »). Mêmes colonnes que `listerDepenses()` (contexte complet :
+   * justificatif, agence, créateur, écriture liée), filtrées à une catégorie + période + agence
+   * en option.
+   */
+  async depensesParCategorie(
+    categorie: string, periode?: { debut: string; fin: string }, filtreAgence?: string,
+  ): Promise<Record<string, unknown>[]> {
+    const [debut, fin] = periode ? [periode.debut, periode.fin] : this.bornesMois(this.dateCourante());
+    const clauseAgence = filtreAgence ? 'AND d.agence = ?' : '';
+    const agenceParam = filtreAgence ? [filtreAgence] : [];
+    return this.sql.exec(
+      `SELECT d.id, d.categorie, d.compte_numero, d.libelle, d.montant, d.mode_paiement,
+              d.recurrente, d.date, t.nom AS tiers_nom, d.piece_cle, d.agence, d.cree_par, d.ecriture_id
+         FROM depense d LEFT JOIN tiers t ON t.id = d.tiers_id
+        WHERE d.categorie = ? AND d.date >= ? AND d.date < ? ${clauseAgence}
+        ORDER BY d.montant DESC`,
+      categorie, debut, fin, ...agenceParam,
+    ).toArray() as never;
   }
 
   async depenseExiste(depenseId: string): Promise<boolean> {
@@ -2259,9 +2289,10 @@ export class EntrepriseDO extends DurableObject {
    * haut) — rien n'est recalculé en double.
    */
   async rapport(params: {
-    type: 'mensuel' | 'trimestriel' | 'annuel' | 'comparaison';
+    type: 'mensuel' | 'trimestriel' | 'annuel' | 'comparaison' | 'personnalise';
     periode: { debut: string; fin: string };
     periodeComparaison?: { debut: string; fin: string };
+    agence?: string;
   }): Promise<{
     type: string;
     periode: { debut: string; fin: string };
@@ -2278,7 +2309,7 @@ export class EntrepriseDO extends DurableObject {
     } | null;
   }> {
     const [depenses, produits, clients, tresorerie, delaiMoyenPaiement] = await Promise.all([
-      this.analyseDepenses(params.periode, params.type === 'annuel' ? 12 : 6),
+      this.analyseDepenses(params.periode, params.type === 'annuel' ? 12 : 6, params.agence),
       this.margeParProduit(params.periode),
       this.margeParClient(params.periode),
       this.soldesTresorerie(),

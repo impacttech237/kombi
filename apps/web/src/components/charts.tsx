@@ -186,8 +186,15 @@ export function EmptyCartIllustration() {
   );
 }
 
-/** Répartition des dépenses par catégorie (donut + légende), écran Dépenses > Analyse. */
-export function DepensesCategorieDonut({ data }: { data: { libelle: string; total: number }[] }) {
+/**
+ * Répartition des dépenses par catégorie (donut + légende), écran Dépenses > Analyse et Rapports.
+ * `onSelect`, si fourni, rend chaque ligne de légende cliquable (drill-down vers les transactions
+ * de la catégorie — retour testeur 2026-09-04 : « l'analyse identifie une hausse mais je ne peux
+ * pas cliquer dessus »).
+ */
+export function DepensesCategorieDonut({ data, onSelect }: {
+  data: { categorie?: string; libelle: string; total: number }[]; onSelect?: (categorie: string) => void;
+}) {
   const palette = ['#b4e033', '#60a5fa', '#fbbf24', '#f87171', '#a78bfa', '#4ade80', '#f97316', '#6b9165'];
   const top = [...data].sort((a, b) => b.total - a.total).slice(0, 8).map((d, i) => ({ ...d, color: palette[i % palette.length]! }));
   return (
@@ -199,15 +206,25 @@ export function DepensesCategorieDonut({ data }: { data: { libelle: string; tota
         </Pie>
       </PieChart>
       <div className="flex flex-col gap-1 min-w-0 flex-1">
-        {top.map((d) => (
-          <div key={d.libelle} className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-              <span className="text-[#4a6b4a] text-xs truncate">{d.libelle}</span>
-            </div>
-            <span className="text-[#edf5ea] text-xs font-mono font-medium shrink-0">{formaterFCFA(d.total)}</span>
-          </div>
-        ))}
+        {top.map((d) => {
+          const contenu = (
+            <>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                <span className="text-[#4a6b4a] text-xs truncate">{d.libelle}</span>
+              </div>
+              <span className="text-[#edf5ea] text-xs font-mono font-medium shrink-0">{formaterFCFA(d.total)}</span>
+            </>
+          );
+          return onSelect && d.categorie ? (
+            <button key={d.libelle} onClick={() => onSelect(d.categorie!)}
+              className="flex items-center justify-between gap-2 hover:bg-[#1e3222] rounded-lg -mx-1 px-1 py-0.5 transition-colors">
+              {contenu}
+            </button>
+          ) : (
+            <div key={d.libelle} className="flex items-center justify-between gap-2">{contenu}</div>
+          );
+        })}
       </div>
     </div>
   );

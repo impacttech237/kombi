@@ -56,8 +56,22 @@ depenses.get('/analyse', requirePermission('depense:read'), async (c) => {
   const debut = c.req.query('debut');
   const fin = c.req.query('fin');
   const periode = debut && fin ? { debut, fin } : undefined;
-  const analyse = await stubEntreprise(c.env, c.get('entrepriseId')).analyseDepenses(periode);
+  const agence = c.req.query('agence') || undefined;
+  const analyse = await stubEntreprise(c.env, c.get('entrepriseId')).analyseDepenses(periode, 6, agence);
   return c.json(analyse);
+});
+
+/**
+ * Détail des dépenses d'une catégorie (drill-down depuis l'écran Analyse — retour testeur
+ * 2026-09-04 : « je devrais pouvoir cliquer sur une catégorie pour voir les transactions »).
+ */
+depenses.get('/categorie/:categorie', requirePermission('depense:read'), async (c) => {
+  const debut = c.req.query('debut');
+  const fin = c.req.query('fin');
+  const periode = debut && fin ? { debut, fin } : undefined;
+  const agence = c.req.query('agence') || undefined;
+  const liste = await stubEntreprise(c.env, c.get('entrepriseId')).depensesParCategorie(c.req.param('categorie'), periode, agence);
+  return c.json({ depenses: liste });
 });
 
 // ── Pièce justificative (photo/scan d'un reçu ou d'une facture fournisseur) ──
