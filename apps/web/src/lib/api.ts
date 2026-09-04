@@ -121,6 +121,29 @@ export const tresorerieDuJour = (entrepriseId: string) =>
 export const soldesTresorerie = (entrepriseId: string) =>
   api<TresorerieJour>('/api/etats/tresorerie-solde', { entrepriseId });
 
+// ── Cockpit dirigeant (voir docs/PLAN-cockpit-dirigeant.md) ──
+export interface AlertePilotage { type: string; gravite: 'attention' | 'critique'; libelle: string; }
+export interface StatsPeriode { ca: number; cogs: number; marge: number; depenses: number; resultat: number; }
+export interface ComparaisonMensuelle {
+  moisCourant: StatsPeriode; moisPrecedent: StatsPeriode;
+  variationCaPct: number | null; variationMargePct: number | null; variationDepensesPct: number | null;
+  topVariationsDepenses: { categorie: string; libelle: string; moisCourant: number; moisPrecedent: number; deltaMontant: number }[];
+}
+export interface Cockpit {
+  tresorerie: TresorerieJour;
+  margeCumulee: number;
+  comparaisonMensuelle: ComparaisonMensuelle;
+  alertes: AlertePilotage[];
+  topProduits: { designation: string; quantite: number; ca_ht: number; cogs: number; marge: number; margePct: number | null }[];
+}
+export const getCockpit = (entrepriseId: string) => api<Cockpit>('/api/pilotage/cockpit', { entrepriseId });
+
+export interface MargeProduit {
+  designation: string; quantite: number; ca_ht: number; cogs: number; marge: number; margePct: number | null;
+}
+export const listerMargeProduits = (entrepriseId: string) =>
+  api<{ produits: MargeProduit[] }>('/api/pilotage/marge-produits', { entrepriseId }).then((r) => r.produits);
+
 export interface NotificationActive { type: string; gravite: 'attention' | 'critique'; libelle: string; }
 export const listerNotifications = (entrepriseId: string) =>
   api<{ notifications: NotificationActive[] }>('/api/notifications', { entrepriseId }).then((r) => r.notifications);

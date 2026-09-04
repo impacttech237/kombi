@@ -7,8 +7,8 @@ import { useEffect, useState } from 'react';
 import { formaterFCFA, peut, type RoleMembre } from '@kombi/shared';
 import {
   api, statsJour, tendance7Jours, listerDepenses, listerFacturesImpayees, meilleuresVentes,
-  depensesDuJour, soldesTresorerie, listerProduits, listerVentesRecentes,
-  type EntrepriseResume, type MeilleureVente, type TresorerieJour, type FactureImpayee,
+  depensesDuJour, soldesTresorerie, listerProduits, listerVentesRecentes, getCockpit,
+  type EntrepriseResume, type MeilleureVente, type TresorerieJour, type FactureImpayee, type Cockpit,
 } from '../lib/api.js';
 import {
   IcoTrend, IcoWlt, IcoAlert, IcoCart, IcoFile, IcoUser, IcoBox, IcoChevR, IcoDn, IcoUp,
@@ -34,6 +34,7 @@ export function Dashboard({ entreprise, onCaisse, onNav }: {
   const [depensesJour, setDepensesJour] = useState<number | null>(null);
   const [alertesStockListe, setAlertesStockListe] = useState<{ nom: string; stock: number; seuil: number; rupture: boolean }[] | null>(null);
   const [tresorerie, setTresorerie] = useState<TresorerieJour | null>(null);
+  const [cockpit, setCockpit] = useState<Cockpit | null>(null);
   const [facturesImpayees, setFacturesImpayees] = useState<FactureImpayee[] | null>(null);
   const [mouvements, setMouvements] = useState<{ id: string; libelle: string; montant: number; sens: 'in' | 'out'; date: string; mode: string; client: string | null }[] | null>(null);
   const [erreur, setErreur] = useState('');
@@ -54,6 +55,7 @@ export function Dashboard({ entreprise, onCaisse, onNav }: {
     tendance7Jours(entreprise.id).then(setTendance).catch(() => {});
     if (voitCreances) listerFacturesImpayees(entreprise.id).then(setFacturesImpayees).catch(() => {});
     if (voitCompta) soldesTresorerie(entreprise.id).then(setTresorerie).catch(() => {});
+    if (voitCompta) getCockpit(entreprise.id).then(setCockpit).catch(() => {});
     if (voitVentes) meilleuresVentes(entreprise.id).then(setTop).catch(() => {});
     if (voitDepenses) depensesDuJour(entreprise.id).then(setDepensesJour).catch(() => {});
     if (voitStock) {
@@ -221,6 +223,54 @@ export function Dashboard({ entreprise, onCaisse, onNav }: {
         </div>
       )}
 
+      {/* Ce mois-ci vs le mois dernier */}
+      {voitCompta && cockpit && (
+        <div className="mt-4 bg-[#162419] rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[#edf5ea] font-semibold text-sm">Ce mois-ci vs le mois dernier</h3>
+            {onNav && (
+              <button onClick={() => onNav('compta')} className="text-[#b4e033] text-xs font-medium flex items-center gap-0.5">
+                Détails <IcoChevR cls="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <Variation label="CA" valeur={cockpit.comparaisonMensuelle.moisCourant.ca} pct={cockpit.comparaisonMensuelle.variationCaPct} favorableSiHausse />
+            <Variation label="Marge" valeur={cockpit.comparaisonMensuelle.moisCourant.marge} pct={cockpit.comparaisonMensuelle.variationMargePct} favorableSiHausse />
+            <Variation label="Dépenses" valeur={cockpit.comparaisonMensuelle.moisCourant.depenses} pct={cockpit.comparaisonMensuelle.variationDepensesPct} favorableSiHausse={false} />
+          </div>
+          {cockpit.comparaisonMensuelle.topVariationsDepenses.some((v) => v.deltaMontant !== 0) && (
+            <p className="text-[#4a6b4a] text-xs mt-3 leading-relaxed">
+              {cockpit.comparaisonMensuelle.topVariationsDepenses
+                .filter((v) => v.deltaMontant !== 0)
+                .slice(0, 2)
+                .map((v) => `${v.libelle} ${v.deltaMontant > 0 ? '+' : '−'}${fmt(Math.abs(v.deltaMontant))}`)
+                .join(' · ')}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* À surveiller — alertes de pilotage (dettes en retard, dépenses inhabituelles, ventes à perte) */}
+      {voitCompta && cockpit && cockpit.alertes.filter((a) => a.type !== 'creance').length > 0 && (
+        <div className="mt-4">
+          <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-wide mb-2">À surveiller</p>
+          <div className="space-y-2">
+            {cockpit.alertes.filter((a) => a.type !== 'creance').map((a, i) => {
+              const critique = a.gravite === 'critique';
+              const color = critique ? '#f87171' : '#fbbf24';
+              return (
+                <div key={i} className="rounded-xl px-4 py-3 flex items-center gap-3"
+                  style={{ background: `${color}0d`, border: `1px solid ${color}33` }}>
+                  <IcoAlert cls={`w-4 h-4 shrink-0 ${critique ? 'text-[#f87171]' : 'text-[#fbbf24]'}`} />
+                  <p className="text-[#edf5ea] text-sm flex-1 min-w-0">{a.libelle}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Charts row */}
       <div className="mt-4 flex gap-3 items-stretch">
         <div className="flex-1 min-w-0 bg-[#162419] rounded-2xl p-4">
@@ -332,6 +382,28 @@ export function Dashboard({ entreprise, onCaisse, onNav }: {
       )}
 
       {erreur && <p className="text-[#f87171] text-xs mt-3">{erreur}</p>}
+    </div>
+  );
+}
+
+/**
+ * Une valeur + sa variation vs le mois précédent. `favorableSiHausse` détermine la couleur : une
+ * hausse est bonne pour le CA/la marge, mauvaise pour les dépenses.
+ */
+function Variation({ label, valeur, pct, favorableSiHausse }: {
+  label: string; valeur: number; pct: number | null; favorableSiHausse: boolean;
+}) {
+  const hausse = pct !== null && pct > 0;
+  const baisse = pct !== null && pct < 0;
+  const favorable = pct === null ? null : favorableSiHausse ? hausse : baisse;
+  const couleur = favorable === null ? 'text-[#6b9165]' : favorable ? 'text-[#4ade80]' : 'text-[#f87171]';
+  return (
+    <div className="bg-[#1e3222] rounded-xl p-3">
+      <p className="text-[#4a6b4a] text-[10px] uppercase tracking-wide font-medium">{label}</p>
+      <p className="text-[#edf5ea] font-mono font-semibold text-sm mt-1">{fmt(valeur)}</p>
+      <p className={`text-xs font-medium mt-0.5 ${couleur}`}>
+        {pct === null ? '—' : `${pct > 0 ? '+' : ''}${pct} %`}
+      </p>
     </div>
   );
 }

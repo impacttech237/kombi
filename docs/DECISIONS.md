@@ -172,5 +172,27 @@ règle de maintien 2 ans (CGI Art. 93 quinquies) ne s'appliquait donc jamais. D�
   épuisé) OU CA repassé solidement au-dessus du seuil (Réel de plein droit, plus besoin de
   maintien). Les deux sont sémantiquement différents mais aboutissent au même compteur à 0.
 
+## D18 — Repositionnement : Kombi vend le pilotage, la gestion reste le moteur invisible (2026-09-04)
+Échange avec le DG : « outil de gestion » décrit ce que fait Kombi, pas la valeur qu'il apporte.
+Le vrai besoin d'un dirigeant n'est pas d'enregistrer une vente, c'est de savoir où en est son
+entreprise et quoi faire. Décisions :
+- **Positionnement** : Kombi transforme les opérations quotidiennes (ventes, dépenses, stock,
+  créances) en visibilité et en décisions — pas juste un carnet numérique.
+- **Ce n'est pas un changement d'architecture** : la chaîne reste gestion → données fiables →
+  indicateurs → décisions. La gestion (saisie quotidienne) demeure le point d'entrée et le seul
+  moyen de nourrir le cockpit — un cockpit ne peut rien montrer sans données, donc l'acquisition
+  (comment on fait ouvrir l'appli le jour 1) reste centrée sur la gestion, même si le discours de
+  vente met en avant le pilotage.
+- **Périmètre volontairement restreint pour cette itération** (voir
+  [PLAN-cockpit-dirigeant.md](PLAN-cockpit-dirigeant.md)) : seuls les indicateurs calculables à
+  partir de données déjà saisies, sans aucune prédiction. Explicitement écarté pour l'instant :
+  prévisions de trésorerie et simulateurs — sur un segment à trésorerie irrégulière (PME
+  informelles/semi-formelles CEMAC), un chiffre prédit et faux détruit la confiance plus vite
+  qu'un chiffre constaté n'en construit. À revisiter une fois qu'on a du vrai usage pour calibrer.
+- **La survente reste volontairement non bloquante** (décision antérieure, testée) — la
+  proposition d'« interdire les stocks négatifs » du DG est rejetée, pas juste reportée : elle
+  contredirait un choix produit déjà pris. Une vente en survente devient une alerte a posteriori,
+  pas un blocage a priori.
+
 ## Décisions ouvertes (restantes)
 - Décompte exact des « 2 ans » de maintien de régime (exercices civils vs glissants).
