@@ -1607,7 +1607,7 @@ export class EntrepriseDO extends DurableObject {
    * questions qu'un simple total + liste ne montre pas (audit reporting 2026-09-04) : où va
    * l'argent, qu'est-ce qui augmente, qui coûte le plus, qu'est-ce qui manque de justificatif.
    */
-  async analyseDepenses(periode?: { debut: string; fin: string }): Promise<{
+  async analyseDepenses(periode?: { debut: string; fin: string }, moisEvolution = 6): Promise<{
     periode: { debut: string; fin: string };
     total: number;
     parCategorie: { categorie: string; libelle: string; total: number }[];
@@ -1635,9 +1635,11 @@ export class EntrepriseDO extends DurableObject {
     ).toArray() as { categorie: string; total: number }[];
     const parCategorie = parCategorieRaw.map((c) => ({ ...c, libelle: this.labelCategorieDepense(c.categorie) }));
 
-    // Évolution sur les 6 derniers mois civils (mois de `fin` exclu, glissant vers le passé).
+    // Évolution sur les `moisEvolution` derniers mois civils (mois de `fin` exclu, glissant vers le
+    // passé) — 6 par défaut (Dépenses/cockpit), 12 pour un rapport annuel (voir `rapport()`, sinon
+    // « évolution des dépenses » d'une année ne montrerait que ses 6 derniers mois, tronquée).
     const evolutionMensuelle: { moisLabel: string; total: number }[] = [];
-    for (let i = 6; i >= 1; i--) {
+    for (let i = moisEvolution; i >= 1; i--) {
       const debutM = this.debutMoisPrecedent(fin, i);
       const finM = this.debutMoisPrecedent(fin, i - 1);
       const t = (this.sql.exec(
@@ -2276,7 +2278,7 @@ export class EntrepriseDO extends DurableObject {
     } | null;
   }> {
     const [depenses, produits, clients, tresorerie, delaiMoyenPaiement] = await Promise.all([
-      this.analyseDepenses(params.periode),
+      this.analyseDepenses(params.periode, params.type === 'annuel' ? 12 : 6),
       this.margeParProduit(params.periode),
       this.margeParClient(params.periode),
       this.soldesTresorerie(),
@@ -2404,18 +2406,27 @@ export class EntrepriseDO extends DurableObject {
         candidats.push({
           probleme: 'Plafond de dépenses dépassé', impactFinancier: ecart,
           cause: `${totalDepenses} FCFA dépensés ce mois pour un plafond de ${budgetRow.plafond_depenses} FCFA`,
-          urgence: 'haute', actionSuggeree: 'Revoir le budget du mois', actionCible: { page: 'compta' },
+          urgence: 'haute', actionSuggeree: 'Revoir le budget du mois', actionCible: { page: 'compta-budgets' },
         });
       }
     }
 
-    // Trésorerie prévisionnelle négative à 30 jours.
+    // Trésorerie prévisionnelle négative à 30 jours — la cause doit refléter précisément CE QUI
+    // rend le solde négatif (audit 2026-09-04, retour testeur) : une trésorerie déjà négative
+    // sans aucun mouvement prévu n'a pas la même cause qu'une trésorerie qui va se dégrader.
     const prevision = await this.previsionTresorerie(30);
     if (prevision.soldeProjete < 0) {
+      const dejaNegative = prevision.soldeActuel < 0;
+      const aucunMouvementPrevu = prevision.entreesAttendues === 0 && prevision.sortiesAttendues === 0;
+      const cause = dejaNegative && aucunMouvementPrevu
+        ? `Trésorerie déjà négative (${prevision.soldeActuel} FCFA), aucun encaissement ni décaissement prévu dans les 30 prochains jours pour la résorber`
+        : dejaNegative
+          ? `Trésorerie déjà négative (${prevision.soldeActuel} FCFA) ; encaissements attendus ${prevision.entreesAttendues} FCFA, décaissements attendus ${prevision.sortiesAttendues} FCFA`
+          : `Décaissements attendus (${prevision.sortiesAttendues} FCFA) supérieurs aux encaissements attendus (${prevision.entreesAttendues} FCFA)`;
       candidats.push({
         probleme: 'Trésorerie prévisionnelle négative à 30 jours', impactFinancier: -prevision.soldeProjete,
-        cause: `Solde actuel ${prevision.soldeActuel} FCFA, décaissements attendus supérieurs aux encaissements attendus`,
-        urgence: 'haute', actionSuggeree: 'Anticiper les encaissements ou reporter des dépenses', actionCible: { page: 'compta' },
+        cause, urgence: 'haute',
+        actionSuggeree: 'Anticiper les encaissements ou reporter des dépenses', actionCible: { page: 'compta-budgets' },
       });
     }
 

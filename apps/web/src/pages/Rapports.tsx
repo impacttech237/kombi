@@ -17,58 +17,70 @@ const TYPES: { value: TypeRapport; label: string }[] = [
   { value: 'annuel', label: 'Annuel' }, { value: 'comparaison', label: 'Comparaison' },
 ];
 
+/** Période de référence : année + mois (0-indexé). Le mois est ignoré pour le type 'annuel'. */
+interface RefPeriode { annee: number; mois: number; }
+
 /** 'AAAA-MM-01' pour un couple (année, mois 0-indexé) — normalise mois hors [0,11] (ex. 12 → janvier suivant). */
 function premierJour(annee: number, mois: number): string {
   const d = new Date(Date.UTC(annee, mois, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`;
 }
 
-/**
- * Bornes [debut, fin) d'un mois/trimestre/année civil contenant `date`. Construit les chaînes
- * ISO directement depuis année/mois locaux (`getFullYear`/`getMonth`), sans passer par
- * `toISOString()` sur un `Date` local — ce dernier convertit en UTC et décale d'un jour dans les
- * fuseaux en avance sur UTC (ex. Cameroun UTC+1), bug constaté en test manuel le 2026-09-04.
- */
-function bornes(type: TypeRapport, date: Date): { debut: string; fin: string } {
-  const annee = date.getFullYear();
-  const mois = date.getMonth();
-  if (type === 'annuel') return { debut: `${annee}-01-01`, fin: `${annee + 1}-01-01` };
+/** Bornes [debut, fin) d'un mois/trimestre/année civil contenant la période de référence. */
+function bornes(type: TypeRapport, ref: RefPeriode): { debut: string; fin: string } {
+  if (type === 'annuel') return { debut: `${ref.annee}-01-01`, fin: `${ref.annee + 1}-01-01` };
   if (type === 'trimestriel') {
-    const debutMois = Math.floor(mois / 3) * 3;
-    return { debut: premierJour(annee, debutMois), fin: premierJour(annee, debutMois + 3) };
+    const debutMois = Math.floor(ref.mois / 3) * 3;
+    return { debut: premierJour(ref.annee, debutMois), fin: premierJour(ref.annee, debutMois + 3) };
   }
-  return { debut: premierJour(annee, mois), fin: premierJour(annee, mois + 1) };
+  return { debut: premierJour(ref.annee, ref.mois), fin: premierJour(ref.annee, ref.mois + 1) };
 }
-function periodePrecedente(type: TypeRapport, p: { debut: string; fin: string }): { debut: string; fin: string } {
-  const dureeMs = Date.parse(p.fin) - Date.parse(p.debut);
-  const fin = p.debut;
-  const debut = new Date(Date.parse(p.debut) - dureeMs).toISOString().slice(0, 10);
-  return { debut, fin };
+
+/**
+ * Décale une période de référence de `delta` unités (mois/trimestre/année) — arithmétique
+ * entière pure, jamais de `Date.setMonth` (l'overflow de jour-du-mois peut faire sauter un mois
+ * quand le mois cible est plus court, ex. 31 janvier − 1 mois avec setMonth peut retomber en
+ * mars). Sert à la fois à la navigation (précédent/suivant) et au calcul de la période
+ * comparative — un décalage calendaire, PAS une soustraction de durée en jours (bug corrigé le
+ * 2026-09-04 : « période précédente » d'un mois de 30 jours retombait un jour trop tôt).
+ */
+function decalerRef(type: TypeRapport, ref: RefPeriode, delta: number): RefPeriode {
+  if (type === 'annuel') return { annee: ref.annee + delta, mois: 0 };
+  const pas = type === 'trimestriel' ? 3 : 1;
+  const totalMois = ref.annee * 12 + ref.mois + delta * pas;
+  return { annee: Math.floor(totalMois / 12), mois: ((totalMois % 12) + 12) % 12 };
+}
+
+const MOIS_LABEL = ['Janv.', 'Févr.', 'Mars', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'];
+function labelPeriode(type: TypeRapport, ref: RefPeriode): string {
+  if (type === 'annuel') return String(ref.annee);
+  if (type === 'trimestriel') return `T${Math.floor(ref.mois / 3) + 1} ${ref.annee}`;
+  return `${MOIS_LABEL[ref.mois]} ${ref.annee}`;
 }
 
 export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResume; onRetour: () => void }) {
   const [type, setType] = useState<TypeRapport>('mensuel');
+  const auj = new Date();
+  const [ref, setRef] = useState<RefPeriode>({ annee: auj.getFullYear(), mois: auj.getMonth() });
   const [rapport, setRapport] = useState<Rapport | null>(null);
   const [erreur, setErreur] = useState('');
   const [exportEnCours, setExportEnCours] = useState<'pdf' | 'csv' | null>(null);
 
-  useEffect(() => {
-    const effectif: TypeRapport = type === 'comparaison' ? 'mensuel' : type;
-    const periode = bornes(effectif, new Date());
-    const params = type === 'comparaison'
-      ? { type, ...periode, ...(() => { const c = periodePrecedente(effectif, periode); return { debutComparaison: c.debut, finComparaison: c.fin }; })() }
-      : { type, ...periode };
-    setRapport(null); setErreur('');
-    getRapport(entreprise.id, params).then(setRapport).catch((e) => setErreur(e instanceof Error ? e.message : 'Erreur'));
-  }, [entreprise.id, type]);
+  const effectif: TypeRapport = type === 'comparaison' ? 'mensuel' : type;
 
   function paramsActuels() {
-    const effectif: TypeRapport = type === 'comparaison' ? 'mensuel' : type;
-    const periode = bornes(effectif, new Date());
-    return type === 'comparaison'
-      ? { type, ...periode, ...(() => { const c = periodePrecedente(effectif, periode); return { debutComparaison: c.debut, finComparaison: c.fin }; })() }
-      : { type, ...periode };
+    const periode = bornes(effectif, ref);
+    if (type !== 'comparaison') return { type, ...periode };
+    const refPrec = decalerRef(effectif, ref, -1);
+    const c = bornes(effectif, refPrec);
+    return { type, ...periode, debutComparaison: c.debut, finComparaison: c.fin };
   }
+
+  useEffect(() => {
+    setRapport(null); setErreur('');
+    getRapport(entreprise.id, paramsActuels()).then(setRapport).catch((e) => setErreur(e instanceof Error ? e.message : 'Erreur'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entreprise.id, type, ref.annee, ref.mois]);
 
   async function exporterPdf() {
     setExportEnCours('pdf');
@@ -99,6 +111,33 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
             {t.label}
           </button>
         ))}
+      </div>
+
+      <div className="px-4 md:px-8 pb-2 flex items-center gap-2">
+        <button onClick={() => setRef((r) => decalerRef(effectif, r, -1))}
+          className="w-8 h-8 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165] shrink-0">
+          <IcoChevR cls="w-3.5 h-3.5 rotate-180" />
+        </button>
+        {effectif === 'mensuel' ? (
+          <input type="month" value={`${ref.annee}-${String(ref.mois + 1).padStart(2, '0')}`}
+            onChange={(e) => {
+              const [a, m] = e.target.value.split('-').map(Number);
+              if (a && m) setRef({ annee: a, mois: m - 1 });
+            }}
+            className="bg-[#1e3222] text-[#edf5ea] text-sm font-medium rounded-xl px-3 py-1.5 border border-[#2a4230] focus:border-[#b4e033] focus:outline-none [color-scheme:dark]" />
+        ) : (
+          <span className="text-[#edf5ea] text-sm font-medium min-w-[90px] text-center">{labelPeriode(effectif, ref)}</span>
+        )}
+        <button onClick={() => setRef((r) => decalerRef(effectif, r, 1))}
+          className="w-8 h-8 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165] shrink-0">
+          <IcoChevR cls="w-3.5 h-3.5" />
+        </button>
+        {(ref.annee !== auj.getFullYear() || ref.mois !== auj.getMonth()) && (
+          <button onClick={() => setRef({ annee: auj.getFullYear(), mois: auj.getMonth() })}
+            className="text-[#6b9165] text-xs font-medium px-2 py-1 hover:text-[#b4e033]">
+            Aujourd'hui
+          </button>
+        )}
       </div>
 
       {erreur && <p className="text-[#f87171] text-sm px-4 md:px-8">{erreur}</p>}
@@ -156,7 +195,9 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
             </div>
 
             <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
-              <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-1">Évolution des dépenses (6 mois)</p>
+              <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-1">
+                Évolution des dépenses ({rapport.depenses.evolutionMensuelle.length} mois)
+              </p>
               <EvolutionMensuelleChart data={rapport.depenses.evolutionMensuelle} />
             </div>
 

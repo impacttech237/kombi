@@ -150,10 +150,16 @@ export function Dashboard({ entreprise, onCaisse, onNav }: {
                 <span className="text-[#6b9165] text-xs font-medium uppercase tracking-wide">Trésorerie</span>
                 <div className="w-8 h-8 rounded-full bg-[#b4e033]/10 flex items-center justify-center text-[#b4e033]"><IcoWlt /></div>
               </div>
-              <p className="text-[#b4e033] text-2xl font-mono font-semibold">{tresorerie ? fmt(tresorerieTotal) : '—'}</p>
+              <p className={`text-2xl font-mono font-semibold ${!tresorerie ? 'text-[#b4e033]' : tresorerieTotal >= 0 ? 'text-[#b4e033]' : 'text-[#f87171]'}`}>
+                {tresorerie ? fmt(tresorerieTotal) : '—'}
+              </p>
             </div>
             <div className="bg-[#1e3222] px-4 py-2">
-              <span className="text-[#6b9165] text-xs">Disponible aujourd'hui</span>
+              <span className="text-[#6b9165] text-xs">
+                {/* Un solde négatif n'est pas « disponible » — retour testeur 2026-09-04 (P2) : préférer
+                    une formulation qui nomme un découvert plutôt que de suggérer des fonds utilisables. */}
+                {tresorerie && tresorerieTotal < 0 ? `Découvert de trésorerie : ${fmt(Math.abs(tresorerieTotal))}` : 'Disponible aujourd\'hui'}
+              </span>
             </div>
           </div>
         )}

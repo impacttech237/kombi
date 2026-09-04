@@ -42,6 +42,26 @@ describe('Rapport agrégé — période simple', () => {
   });
 });
 
+describe('Rapport agrégé — évolution des dépenses selon le type', () => {
+  it('un rapport mensuel donne 6 mois d\'évolution, un rapport annuel les 12 mois civils de l\'exercice', async () => {
+    const e = doE('rapport-evolution');
+    await e.initialiser('rapport-evolution', 'commerce', 2026);
+    await e.creerDepense({ categorie: 'loyer', compteNumero: '622', libelle: 'Loyer', montant: 10000, modePaiement: 'especes', dateOperation: '2026-09-04' });
+
+    const mensuel = await e.rapport({ type: 'mensuel', periode: { debut: '2026-09-01', fin: '2026-10-01' } }) as {
+      depenses: { evolutionMensuelle: { moisLabel: string }[] };
+    };
+    expect(mensuel.depenses.evolutionMensuelle).toHaveLength(6);
+
+    const annuel = await e.rapport({ type: 'annuel', periode: { debut: '2026-01-01', fin: '2027-01-01' } }) as {
+      depenses: { evolutionMensuelle: { moisLabel: string }[] };
+    };
+    expect(annuel.depenses.evolutionMensuelle).toHaveLength(12);
+    expect(annuel.depenses.evolutionMensuelle[0]!.moisLabel).toBe('2026-01');
+    expect(annuel.depenses.evolutionMensuelle[11]!.moisLabel).toBe('2026-12');
+  });
+});
+
 describe('Rapport agrégé — comparaison de périodes', () => {
   it('calcule les variations entre deux périodes', async () => {
     const e = doE('rapport-comparaison');

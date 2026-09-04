@@ -252,5 +252,56 @@ un seul commit/push :
   recreate-don't-rename documenté dans `schema.ts` pour v17 (table référencée par rien, mais
   gardée cohérente avec le pattern existant par prudence).
 
+## D21 — Correctifs de la première revue QA du cockpit pilotage (2026-09-04)
+Retour testeur sur D20 (7 points), dont deux qui touchent des décisions déjà actées :
+- **Survente bloquée en caisse — révise D18.** D18 disait « la survente reste volontairement
+  non bloquante », rejetée pas juste reportée. Le testeur a signalé qu'un panier de 12 sacs pour
+  un stock de 10 laissait quand même « Encaisser » actif, et a demandé de bloquer. **Décision
+  explicitement redemandée et confirmée au dirigeant avant de coder** (pas une réinterprétation
+  silencieuse d'une décision déjà actée) : `Caisse.tsx` bloque désormais l'ajout au-delà du stock
+  (bouton produit désactivé, `+` désactivé une fois le stock atteint) et l'encaissement. **Le
+  blocage reste côté UI uniquement** — `enregistrerVente` (DO) n'est PAS touché : il reste
+  volontairement non bloquant côté serveur, pour deux raisons qui n'ont rien à voir avec le
+  souhait du dirigeant : (1) la synchronisation offline rejoue des ventes créées hors-ligne
+  contre un stock qui a pu changer entre-temps — les rejeter après coup casserait la promesse
+  offline-first ; (2) la valorisation du CMV sur la quantité réellement vendue (pas tronquée au
+  stock affiché, voir commentaire `enregistrerVente`) dépend de ce chemin non bloquant et a sa
+  propre justification comptable. Un utilisateur qui contourne l'UI (appel API direct) peut
+  toujours survendre — accepté comme limite connue, pas un oubli.
+- **Remise ≥ 100 % bloquait déjà mathématiquement le total à 0, mais laissait « Encaisser 0
+  FCFA » actif** — le vrai bug n'était pas l'absence de borne (déjà présente, `Math.min(100,
+  ...)`) mais l'absence de blocage d'une vente à 0 FCFA. `canConfirm` refuse maintenant un total
+  nul ; la saisie du % de remise est en plus bornée dès la frappe (l'utilisateur ne voit jamais
+  « 150 » s'afficher).
+- **Période comparative fausse (durée en jours au lieu d'un décalage calendaire)** —
+  `periodePrecedente` (Rapports.tsx) soustrayait la durée en millisecondes de la période
+  courante, ce qui décale d'un jour dès qu'un mois de longueur différente est impliqué. Remplacé
+  par une arithmétique entière sur (année, mois), jamais de `Date.setMonth`/soustraction de
+  durée.
+- **Rapport annuel : évolution des dépenses tronquée à 6 mois, mois futurs inclus** —
+  `analyseDepenses` calculait toujours les 6 mois trainants avant `fin`, y compris pour un
+  rapport annuel (`fin` = 1er janvier suivant → juillet-décembre de l'année, pas janvier-juin).
+  `moisEvolution` est maintenant un paramètre (6 par défaut, 12 pour un rapport annuel).
+- **Cause d'alerte trésorerie fausse quand rien n'est prévu** — l'alerte affirmait
+  systématiquement « décaissements attendus supérieurs aux encaissements attendus », y compris
+  quand les deux valent 0 (trésorerie déjà négative, sans aucun mouvement à venir dans
+  l'horizon). `problemesPrioritaires` distingue maintenant : déjà négative sans mouvement prévu ;
+  déjà négative avec mouvements prévus ; deviendrait négative (sorties > entrées, mathématiquement
+  le seul cas possible quand le solde actuel est positif).
+- **Recommandation « anticiper la trésorerie » ouvrait Comptabilité > États** — sans moyen
+  d'atteindre l'onglet Budgets (prévisions/simulations) depuis là. Nouveau code de navigation
+  interne `compta-budgets` (pas dans le menu, atteint uniquement via une action « À décider ») ;
+  `Comptabilite` accepte une prop `vueInitiale`.
+- **Sélection de période dans Rapports** — jusqu'ici toujours calée sur aujourd'hui. Ajout d'une
+  navigation (mois via `<input type="month">`, trimestre/année via précédent/suivant) + retour
+  rapide à la période courante. Plage personnalisée et filtre par agence/projet/activité restent
+  hors scope de ce correctif (demandés par le testeur en P2, pas urgents).
+- **« Disponible aujourd'hui » pouvait afficher un montant négatif** — libellé et couleur du
+  Dashboard changent automatiquement en « Découvert de trésorerie » (rouge) quand le solde total
+  est négatif.
+- **Non traité dans ce correctif** (P2, hors urgence) : drill-down cliquable sur une catégorie de
+  dépense (transactions/justificatifs/utilisateur/fournisseur/écriture liés), filtre agence/
+  projet/activité dans Rapports. Voir le retour testeur complet pour le détail.
+
 ## Décisions ouvertes (restantes)
 - Décompte exact des « 2 ans » de maintien de régime (exercices civils vs glissants).

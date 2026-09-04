@@ -46,6 +46,21 @@ describe('À décider — problèmes prioritaires', () => {
     const budgetPb = problemes.find((p) => p.probleme.includes('Plafond'));
     expect(budgetPb).toBeDefined();
     expect(budgetPb!.impactFinancier).toBe(15000);
+    expect(budgetPb!.actionCible).toEqual({ page: 'compta-budgets' });
+  });
+
+  it('cause exacte quand la trésorerie est déjà négative sans aucun mouvement prévu (pas de faux « décaissements > encaissements »)', async () => {
+    const e = doE('decisions-4');
+    await e.initialiser('decisions-4', 'commerce', 2026);
+    // Solde négatif par une dépense en espèces, sans aucune créance/dette à échéance ni dépense récurrente.
+    await e.creerDepense({ categorie: 'loyer', compteNumero: '622', libelle: 'Loyer', montant: 40000, modePaiement: 'especes', dateOperation: '2026-09-04' });
+
+    const problemes = await e.problemesPrioritaires() as { probleme: string; cause: string; actionCible: { page: string } }[];
+    const tresoPb = problemes.find((p) => p.probleme.includes('Trésorerie prévisionnelle'));
+    expect(tresoPb).toBeDefined();
+    expect(tresoPb!.cause).toContain('déjà négative');
+    expect(tresoPb!.cause).not.toContain('supérieurs aux encaissements attendus');
+    expect(tresoPb!.actionCible).toEqual({ page: 'compta-budgets' });
   });
 });
 

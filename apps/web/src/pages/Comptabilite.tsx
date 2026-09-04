@@ -20,10 +20,12 @@ import { Journal } from './Journal.js';
 
 interface IgsResp { caCumule: number; regime: string; igs: { igsAnnuel: number; classe: number } | null }
 
-export function Comptabilite({ entreprise }: { entreprise: EntrepriseResume }) {
+export function Comptabilite({ entreprise, vueInitiale }: {
+  entreprise: EntrepriseResume; vueInitiale?: 'etats' | 'journal' | 'clotures' | 'budgets';
+}) {
   const [etats, setEtats] = useState<EtatsFinanciers | null>(null);
   const [igs, setIgs] = useState<IgsResp | null>(null);
-  const [vue, setVue] = useState<'etats' | 'journal' | 'clotures' | 'budgets'>('etats');
+  const [vue, setVue] = useState<'etats' | 'journal' | 'clotures' | 'budgets'>(vueInitiale ?? 'etats');
   const [erreur, setErreur] = useState('');
   const voitJournal = peut(entreprise.role as RoleMembre, 'audit:read');
   const voitBudgets = peut(entreprise.role as RoleMembre, 'budget:read');

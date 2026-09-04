@@ -177,6 +177,7 @@ function Espace() {
           : onglet === 'tiers' ? <Tiers entreprise={active} onRetour={() => setOnglet('dashboard')} onNav={setOnglet} />
           : onglet === 'tresorerie'
             ? <Tresorerie entreprise={active} onCaisse={() => setOnglet('caisse')} onDepenses={() => setOnglet('depenses')} />
+          : onglet === 'compta-budgets' ? <Comptabilite entreprise={active} vueInitiale="budgets" />
           : <Comptabilite entreprise={active} />}
       </div>
     </AppShell>

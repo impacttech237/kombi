@@ -201,12 +201,22 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
   const recuAmount = montantRecu ? Number(montantRecu) : 0;
   const rendu = Math.max(0, recuAmount - cartTotal);
   const aCredit = saleMode === 'credit';
-  const canConfirm = aCredit ? !!tiersId : recuAmount >= cartTotal;
+  // Une remise à 100 % (ou une addition de remises qui y équivaut) ramène le total à 0 FCFA — ce
+  // n'est jamais une vente valide (retour testeur 2026-09-04, P0) : bloquer l'encaissement plutôt
+  // que de laisser partir la marchandise gratuitement par erreur de saisie.
+  const totalNul = panier.length > 0 && cartTotal <= 0;
+  const canConfirm = !totalNul && (aCredit ? !!tiersId : recuAmount >= cartTotal);
 
+  // Vente au-delà du stock désormais bloquée (retour testeur 2026-09-04, P0) — inverse la
+  // décision D18 « la survente reste volontairement non bloquante », explicitement révisée à la
+  // demande du dirigeant (voir docs/DECISIONS.md D21). L'article libre (sans produitId) n'a pas
+  // de notion de stock et n'est pas concerné.
   function ajouterProduit(p: Produit) {
     setPanier((prev) => {
       const idx = prev.findIndex((l) => l.produitId === p.id);
-      if (idx >= 0) { const n = [...prev]; n[idx] = { ...n[idx]!, quantite: n[idx]!.quantite + 1 }; return n; }
+      const quantiteActuelle = idx >= 0 ? prev[idx]!.quantite : 0;
+      if (quantiteActuelle >= p.stock_actuel) return prev;
+      if (idx >= 0) { const n = [...prev]; n[idx] = { ...n[idx]!, quantite: quantiteActuelle + 1 }; return n; }
       return [...prev, { designation: p.nom, quantite: 1, prixUnitaire: p.prix_vente, produitId: p.id }];
     });
   }
@@ -219,8 +229,13 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
   function retirerLigne(i: number) { setPanier((prev) => prev.filter((_, k) => k !== i)); }
   function changerQuantite(i: number, delta: number) {
     setPanier((prev) => {
-      const q = prev[i]!.quantite + delta;
+      const ligne = prev[i]!;
+      const q = ligne.quantite + delta;
       if (q <= 0) return prev.filter((_, k) => k !== i);
+      if (delta > 0 && ligne.produitId) {
+        const stock = produits.find((pp) => pp.id === ligne.produitId)?.stock_actuel ?? Infinity;
+        if (q > stock) return prev;
+      }
       const n = [...prev]; n[i] = { ...n[i]!, quantite: q }; return n;
     });
   }
@@ -288,6 +303,8 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
   const CartLine = ({ item, i }: { item: LignePanier; i: number }) => {
     const raw = item.prixUnitaire * item.quantite;
     const net = lineTotal(item, gd);
+    const stock = item.produitId ? produits.find((p) => p.id === item.produitId)?.stock_actuel : undefined;
+    const auMaxStock = stock !== undefined && item.quantite >= stock;
     return (
       <div className="flex items-start gap-2 px-4 py-3 border-b border-[#1e3222]">
         <div className="flex-1 min-w-0">
@@ -301,12 +318,14 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
               className="w-9 bg-[#0e1c0f] text-[#edf5ea] text-xs text-center rounded-md py-0.5 px-1 border border-[#2a4230] focus:outline-none focus:border-[#b4e033]/60" />
             <span className="text-[#4a6b4a] text-[10px]">%</span>
           </div>
+          {auMaxStock && <p className="text-[#fbbf24] text-[10px] mt-1">Stock disponible atteint ({stock})</p>}
         </div>
         <div className="flex flex-col items-end gap-1.5 shrink-0">
           <div className="flex items-center gap-1">
             <button onClick={() => changerQuantite(i, -1)} className="w-7 h-7 rounded-full bg-[#1e3222] text-[#edf5ea] flex items-center justify-center hover:bg-[#2a4230]"><IcoMinus cls="w-3 h-3" /></button>
             <span className="w-5 text-center text-[#edf5ea] text-sm font-medium">{item.quantite}</span>
-            <button onClick={() => changerQuantite(i, 1)} className="w-7 h-7 rounded-full bg-[#1e3222] text-[#edf5ea] flex items-center justify-center hover:bg-[#2a4230]"><IcoPlus cls="w-3 h-3" /></button>
+            <button onClick={() => changerQuantite(i, 1)} disabled={auMaxStock}
+              className="w-7 h-7 rounded-full bg-[#1e3222] text-[#edf5ea] flex items-center justify-center hover:bg-[#2a4230] disabled:opacity-30 disabled:hover:bg-[#1e3222]"><IcoPlus cls="w-3 h-3" /></button>
           </div>
           {(item.remisePct ?? 0) > 0 && <span className="font-mono text-[10px] text-[#4a6b4a] line-through">{fmt(raw)}</span>}
           <span className="font-mono text-[#b4e033] text-sm font-semibold">{fmt(net)}</span>
@@ -324,7 +343,11 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
           <span className="text-[#6b9165] text-sm">Remise globale</span>
           <div className="flex items-center gap-1.5">
             <input type="text" inputMode="numeric" value={remiseGlobale} placeholder="0"
-              onChange={(e) => setRemiseGlobale(e.target.value.replace(/\D/g, ''))}
+              onChange={(e) => {
+                const chiffres = e.target.value.replace(/\D/g, '');
+                const bornee = chiffres === '' ? '' : String(Math.min(100, Number(chiffres)));
+                setRemiseGlobale(bornee);
+              }}
               className="w-12 bg-[#1e3222] text-[#edf5ea] text-sm text-center rounded-lg py-1.5 border border-[#2a4230] focus:outline-none focus:border-[#b4e033] transition-colors" />
             <span className="text-[#4a6b4a] text-sm">%</span>
           </div>
@@ -345,7 +368,11 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
           <span className="text-[#6b9165] font-medium">Total</span>
           <span className="text-[#edf5ea] font-mono font-bold text-xl">{fmt(cartTotal)}</span>
         </div>
-        <button onClick={onCheckout} className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all">
+        {totalNul && (
+          <p className="text-[#f87171] text-xs">Le total ne peut pas être nul — réduisez la remise appliquée.</p>
+        )}
+        <button onClick={onCheckout} disabled={totalNul}
+          className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100">
           Encaisser {fmt(cartTotal)}
         </button>
       </div>
@@ -408,15 +435,18 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
               {filtres.map((p) => {
                 const inCart = panier.find((l) => l.produitId === p.id);
                 const isLow = p.en_alerte === 1;
+                const epuise = (inCart?.quantite ?? 0) >= p.stock_actuel;
                 return (
-                  <button key={p.id} onClick={() => ajouterProduit(p)}
-                    className="bg-[#162419] rounded-2xl p-3.5 text-left active:scale-95 transition-all hover:bg-[#1e3222] border border-transparent hover:border-[#b4e033]/20 relative">
+                  <button key={p.id} onClick={() => ajouterProduit(p)} disabled={epuise}
+                    className="bg-[#162419] rounded-2xl p-3.5 text-left active:scale-95 transition-all hover:bg-[#1e3222] border border-transparent hover:border-[#b4e033]/20 relative disabled:opacity-40 disabled:active:scale-100 disabled:hover:bg-[#162419] disabled:hover:border-transparent">
                     {inCart && <span className="absolute top-2.5 right-2.5 w-6 h-6 rounded-full bg-[#b4e033] text-[#0e1c0f] text-xs font-bold flex items-center justify-center">{inCart.quantite}</span>}
-                    {isLow && <span className="absolute top-2.5 left-2.5 w-2 h-2 rounded-full bg-[#fbbf24]" />}
+                    {isLow && !epuise && <span className="absolute top-2.5 left-2.5 w-2 h-2 rounded-full bg-[#fbbf24]" />}
                     <p className="text-[#edf5ea] font-medium text-sm leading-tight mt-1 pr-8">{p.nom}</p>
                     <p className="text-[#4a6b4a] text-xs mt-1">{p.unite}</p>
                     <p className="text-[#b4e033] font-mono font-semibold text-sm mt-2">{fmt(p.prix_vente)}</p>
-                    <p className="text-[#4a6b4a] text-xs mt-0.5">Stock : {p.stock_actuel}</p>
+                    <p className={`text-xs mt-0.5 ${epuise ? 'text-[#f87171]' : 'text-[#4a6b4a]'}`}>
+                      {epuise ? 'Stock épuisé' : `Stock : ${p.stock_actuel}`}
+                    </p>
                   </button>
                 );
               })}
