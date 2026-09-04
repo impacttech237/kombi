@@ -11,7 +11,9 @@ import { useEffect, useState } from 'react';
 import { formaterFCFA as fmt, peut, type RoleMembre } from '@kombi/shared';
 import {
   api, etatsFinanciers, listerClotures, cloturerMois, rouvrirMois,
+  getBudget, definirBudget, previsionTresorerie, seuilRentabilite, simulerBaisseVentes, simulerRecrutement,
   type EntrepriseResume, type EtatsFinanciers, type LigneEtat, type ClotureMensuelle,
+  type Budget, type PrevisionTresorerie, type SeuilRentabilite,
 } from '../lib/api.js';
 import { IcoLayers } from '../components/icons.js';
 import { Journal } from './Journal.js';
@@ -21,9 +23,10 @@ interface IgsResp { caCumule: number; regime: string; igs: { igsAnnuel: number; 
 export function Comptabilite({ entreprise }: { entreprise: EntrepriseResume }) {
   const [etats, setEtats] = useState<EtatsFinanciers | null>(null);
   const [igs, setIgs] = useState<IgsResp | null>(null);
-  const [vue, setVue] = useState<'etats' | 'journal' | 'clotures'>('etats');
+  const [vue, setVue] = useState<'etats' | 'journal' | 'clotures' | 'budgets'>('etats');
   const [erreur, setErreur] = useState('');
   const voitJournal = peut(entreprise.role as RoleMembre, 'audit:read');
+  const voitBudgets = peut(entreprise.role as RoleMembre, 'budget:read');
   const regimeIgs = entreprise.regime_fiscal === 'igs';
 
   useEffect(() => {
@@ -52,20 +55,30 @@ export function Comptabilite({ entreprise }: { entreprise: EntrepriseResume }) {
           <p className="text-[#edf5ea] font-semibold">États financiers</p>
           <p className="text-[#4a6b4a] text-xs mt-0.5">{entreprise.raison_sociale}</p>
         </div>
-        {voitJournal && (
+        {(voitJournal || voitBudgets) && (
           <div className="flex items-center gap-1 bg-[#1e3222] rounded-xl p-1 border border-[#2a4230]">
             <button onClick={() => setVue('etats')}
               className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all ${vue === 'etats' ? 'bg-[#b4e033] text-[#0e1c0f]' : 'text-[#4a6b4a] hover:text-[#6b9165]'}`}>
               États
             </button>
-            <button onClick={() => setVue('journal')}
-              className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all ${vue === 'journal' ? 'bg-[#60a5fa] text-[#0e1c0f]' : 'text-[#4a6b4a] hover:text-[#6b9165]'}`}>
-              Journal
-            </button>
-            <button onClick={() => setVue('clotures')}
-              className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all ${vue === 'clotures' ? 'bg-[#fbbf24] text-[#0e1c0f]' : 'text-[#4a6b4a] hover:text-[#6b9165]'}`}>
-              Clôtures
-            </button>
+            {voitJournal && (
+              <button onClick={() => setVue('journal')}
+                className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all ${vue === 'journal' ? 'bg-[#60a5fa] text-[#0e1c0f]' : 'text-[#4a6b4a] hover:text-[#6b9165]'}`}>
+                Journal
+              </button>
+            )}
+            {voitJournal && (
+              <button onClick={() => setVue('clotures')}
+                className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all ${vue === 'clotures' ? 'bg-[#fbbf24] text-[#0e1c0f]' : 'text-[#4a6b4a] hover:text-[#6b9165]'}`}>
+                Clôtures
+              </button>
+            )}
+            {voitBudgets && (
+              <button onClick={() => setVue('budgets')}
+                className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all ${vue === 'budgets' ? 'bg-[#a78bfa] text-[#0e1c0f]' : 'text-[#4a6b4a] hover:text-[#6b9165]'}`}>
+                Budgets
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -76,6 +89,8 @@ export function Comptabilite({ entreprise }: { entreprise: EntrepriseResume }) {
         <div className="px-4 md:px-8"><Journal entreprise={entreprise} /></div>
       ) : vue === 'clotures' ? (
         <div className="px-4 md:px-8"><ClotureMensuelleTab entreprise={entreprise} /></div>
+      ) : vue === 'budgets' ? (
+        <div className="px-4 md:px-8"><BudgetsTab entreprise={entreprise} /></div>
       ) : !etats ? (
         <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
       ) : (
@@ -283,6 +298,171 @@ function ClotureMensuelleTab({ entreprise }: { entreprise: EntrepriseResume }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Budgets & prévisions (audit reporting 2026-09-04) : objectif du mois, prévision de trésorerie
+ * à 30/60/90 jours, seuil de rentabilité, simulations « et si ». Calculs à la volée côté DO —
+ * seul l'objectif du mois (budget_mensuel) est persisté.
+ */
+function BudgetsTab({ entreprise }: { entreprise: EntrepriseResume }) {
+  // `toISOString()` sur un Date local convertirait en UTC et décalerait le mois près de minuit
+  // dans un fuseau en avance sur UTC (ex. Cameroun UTC+1) — année/mois locaux à la place.
+  const auj = new Date();
+  const moisCourant = `${auj.getFullYear()}-${String(auj.getMonth() + 1).padStart(2, '0')}`;
+  const [budget, setBudget] = useState<Budget | null>(null);
+  const [caCible, setCaCible] = useState('');
+  const [plafondDepenses, setPlafondDepenses] = useState('');
+  const [margeCiblePct, setMargeCiblePct] = useState('');
+  const [charge, setCharge] = useState(false);
+  const [erreur, setErreur] = useState('');
+
+  const [horizon, setHorizon] = useState<30 | 60 | 90>(30);
+  const [prevision, setPrevision] = useState<PrevisionTresorerie | null>(null);
+  const [seuil, setSeuil] = useState<SeuilRentabilite | null>(null);
+
+  const [pctBaisse, setPctBaisse] = useState('10');
+  const [simBaisse, setSimBaisse] = useState<{ caActuel: number; caProjete: number; margeActuelle: number; margeProjetee: number; impactMarge: number } | null>(null);
+  const [coutRecrutement, setCoutRecrutement] = useState('');
+  const [simRecrutement, setSimRecrutement] = useState<{ margeActuelle: number; coutMensuel: number; margeProjetee: number; impactMarge: number } | null>(null);
+
+  useEffect(() => {
+    getBudget(entreprise.id, moisCourant).then((b) => {
+      setBudget(b);
+      setCaCible(b?.ca_cible != null ? String(b.ca_cible) : '');
+      setPlafondDepenses(b?.plafond_depenses != null ? String(b.plafond_depenses) : '');
+      setMargeCiblePct(b?.marge_cible_pct != null ? String(b.marge_cible_pct) : '');
+    }).catch(() => {});
+    seuilRentabilite(entreprise.id).then(setSeuil).catch(() => {});
+  }, [entreprise.id, moisCourant]);
+
+  useEffect(() => {
+    previsionTresorerie(entreprise.id, horizon).then(setPrevision).catch(() => {});
+  }, [entreprise.id, horizon]);
+
+  async function enregistrerBudget() {
+    setCharge(true); setErreur('');
+    try {
+      await definirBudget(entreprise.id, moisCourant, {
+        caCible: caCible ? Number(caCible) : null,
+        plafondDepenses: plafondDepenses ? Number(plafondDepenses) : null,
+        margeCiblePct: margeCiblePct ? Number(margeCiblePct) : null,
+      });
+      setBudget(await getBudget(entreprise.id, moisCourant));
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Erreur');
+    } finally { setCharge(false); }
+  }
+
+  return (
+    <div className="pt-2 space-y-3">
+      <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
+        <p className="text-[#edf5ea] text-sm font-medium mb-1">Objectifs du mois — {moisCourant}</p>
+        <p className="text-[#4a6b4a] text-xs leading-relaxed mb-3">
+          CA cible, plafond de dépenses et marge cible. Utilisés pour comparer le réel au prévu (écran Dépenses,
+          onglet Analyse) et pour la synthèse « À décider ».
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <div>
+            <label className="text-[#6b9165] text-xs font-medium block mb-1">CA cible (FCFA)</label>
+            <input inputMode="numeric" value={caCible} onChange={(e) => setCaCible(e.target.value.replace(/\D/g, ''))}
+              className="w-full bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-2.5 text-sm border border-[#2a4230] focus:border-[#a78bfa] focus:outline-none" />
+          </div>
+          <div>
+            <label className="text-[#6b9165] text-xs font-medium block mb-1">Plafond dépenses (FCFA)</label>
+            <input inputMode="numeric" value={plafondDepenses} onChange={(e) => setPlafondDepenses(e.target.value.replace(/\D/g, ''))}
+              className="w-full bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-2.5 text-sm border border-[#2a4230] focus:border-[#a78bfa] focus:outline-none" />
+          </div>
+          <div>
+            <label className="text-[#6b9165] text-xs font-medium block mb-1">Marge cible (%)</label>
+            <input inputMode="numeric" value={margeCiblePct} onChange={(e) => setMargeCiblePct(e.target.value.replace(/[^\d.]/g, ''))}
+              className="w-full bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-2.5 text-sm border border-[#2a4230] focus:border-[#a78bfa] focus:outline-none" />
+          </div>
+        </div>
+        <button onClick={enregistrerBudget} disabled={charge}
+          className="mt-3 bg-[#a78bfa] text-[#0e1c0f] rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-40">
+          {charge ? '…' : budget ? 'Mettre à jour' : 'Enregistrer'}
+        </button>
+        {erreur && <p className="text-[#f87171] text-xs mt-2">{erreur}</p>}
+      </div>
+
+      <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[#edf5ea] text-sm font-medium">Prévision de trésorerie</p>
+          <div className="flex bg-[#1e3222] rounded-lg p-0.5 border border-[#2a4230]">
+            {([30, 60, 90] as const).map((h) => (
+              <button key={h} onClick={() => setHorizon(h)}
+                className={`text-xs px-2 py-1 rounded-md font-semibold transition-all ${horizon === h ? 'bg-[#a78bfa] text-[#0e1c0f]' : 'text-[#4a6b4a]'}`}>
+                {h}j
+              </button>
+            ))}
+          </div>
+        </div>
+        {prevision && (
+          <div className="space-y-1.5 text-sm">
+            <div className="flex justify-between"><span className="text-[#6b9165]">Solde actuel</span><span className="text-[#edf5ea] font-mono">{fmt(prevision.soldeActuel)}</span></div>
+            <div className="flex justify-between"><span className="text-[#6b9165]">Entrées attendues</span><span className="text-[#4ade80] font-mono">+{fmt(prevision.entreesAttendues)}</span></div>
+            <div className="flex justify-between"><span className="text-[#6b9165]">Sorties attendues</span><span className="text-[#f87171] font-mono">−{fmt(prevision.sortiesAttendues)}</span></div>
+            <div className={`flex justify-between pt-2 border-t border-[#1e3222] font-semibold ${prevision.soldeProjete >= 0 ? 'text-[#b4e033]' : 'text-[#f87171]'}`}>
+              <span>Solde projeté à {horizon} jours</span><span className="font-mono">{fmt(prevision.soldeProjete)}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {seuil && (
+        <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
+          <p className="text-[#edf5ea] text-sm font-medium mb-2">Seuil de rentabilité</p>
+          {seuil.seuilCaMensuel != null ? (
+            <p className="text-[#4a6b4a] text-xs leading-relaxed">
+              Avec un taux de marge de <span className="text-[#edf5ea] font-mono">{seuil.margeSurCoutsVariablesPct}%</span> et
+              {' '}<span className="text-[#edf5ea] font-mono">{fmt(seuil.chargesFixesMensuelles)}</span> de charges fixes/mois,
+              il faut au moins <span className="text-[#a78bfa] font-mono font-semibold">{fmt(seuil.seuilCaMensuel)}</span> de CA/mois pour être à l'équilibre.
+            </p>
+          ) : (
+            <p className="text-[#4a6b4a] text-xs">Pas assez de données de vente pour calculer le seuil.</p>
+          )}
+        </div>
+      )}
+
+      <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
+        <p className="text-[#edf5ea] text-sm font-medium mb-2">Simuler une baisse de ventes</p>
+        <div className="flex gap-2">
+          <input inputMode="numeric" value={pctBaisse} onChange={(e) => setPctBaisse(e.target.value.replace(/\D/g, ''))}
+            className="w-20 bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-2 text-sm border border-[#2a4230] focus:border-[#a78bfa] focus:outline-none" />
+          <span className="text-[#6b9165] text-sm self-center">% de baisse</span>
+          <button onClick={() => simulerBaisseVentes(entreprise.id, Number(pctBaisse)).then(setSimBaisse).catch(() => {})}
+            className="ml-auto bg-[#1e3222] text-[#a78bfa] rounded-xl px-4 py-2 text-sm font-medium border border-[#a78bfa]/20">
+            Simuler
+          </button>
+        </div>
+        {simBaisse && (
+          <p className="text-[#4a6b4a] text-xs mt-3 leading-relaxed">
+            CA {fmt(simBaisse.caActuel)} → <span className="text-[#edf5ea] font-mono">{fmt(simBaisse.caProjete)}</span>,
+            marge {fmt(simBaisse.margeActuelle)} → <span className={`font-mono ${simBaisse.margeProjetee >= 0 ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>{fmt(simBaisse.margeProjetee)}</span>
+          </p>
+        )}
+      </div>
+
+      <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
+        <p className="text-[#edf5ea] text-sm font-medium mb-2">Simuler un recrutement / investissement</p>
+        <div className="flex gap-2">
+          <input inputMode="numeric" value={coutRecrutement} onChange={(e) => setCoutRecrutement(e.target.value.replace(/\D/g, ''))}
+            placeholder="Coût mensuel (FCFA)"
+            className="flex-1 bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-2 text-sm border border-[#2a4230] focus:border-[#a78bfa] focus:outline-none" />
+          <button onClick={() => simulerRecrutement(entreprise.id, Number(coutRecrutement || '0')).then(setSimRecrutement).catch(() => {})}
+            className="bg-[#1e3222] text-[#a78bfa] rounded-xl px-4 py-2 text-sm font-medium border border-[#a78bfa]/20">
+            Simuler
+          </button>
+        </div>
+        {simRecrutement && (
+          <p className="text-[#4a6b4a] text-xs mt-3 leading-relaxed">
+            Marge actuelle {fmt(simRecrutement.margeActuelle)} → <span className={`font-mono ${simRecrutement.margeProjetee >= 0 ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>{fmt(simRecrutement.margeProjetee)}</span> après ce coût mensuel.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

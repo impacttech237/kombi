@@ -22,6 +22,9 @@ import { notifications } from './routes/notifications.js';
 import { etats } from './routes/etats.js';
 import { pieces } from './routes/pieces.js';
 import { pilotage } from './routes/pilotage.js';
+import { budgets } from './routes/budgets.js';
+import { rapports } from './routes/rapports.js';
+import { decisions } from './routes/decisions.js';
 import { sauvegarderToutesLesEntreprises } from './services/sauvegarde.js';
 
 const app = new Hono<AppEnv>();
@@ -100,6 +103,16 @@ app.route('/api/pieces', pieces);
 
 app.use('/api/pilotage/*', authentifier, tenant, requireModule('comptabilite'));
 app.route('/api/pilotage', pilotage);
+
+app.use('/api/budgets/*', authentifier, tenant, requireModule('comptabilite'));
+app.route('/api/budgets', budgets);
+
+app.use('/api/rapports/*', authentifier, tenant, requireModule('comptabilite'));
+app.route('/api/rapports', rapports);
+
+app.use('/api/decisions/*', authentifier, tenant, requireModule('comptabilite'));
+app.use('/api/decisions', authentifier, tenant, requireModule('comptabilite'));
+app.route('/api/decisions', decisions);
 
 app.use('/api/abonnement/*', authentifier, tenant);
 app.use('/api/abonnement', authentifier, tenant);

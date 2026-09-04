@@ -17,6 +17,7 @@ const zDepense = z.object({
   clientUuid: z.string().nullish(),
   tauxTva: zTauxTva.optional().default(0),
   dateOperation: zDateISO.nullish(),
+  agence: z.string().trim().max(80).nullish(),
 });
 
 export const depenses = new Hono<AppEnv>();
@@ -45,9 +46,18 @@ depenses.post('/', requirePermission('depense:manage'), async (c) => {
     categorie: d.categorie, compteNumero: compteDeCategorie(d.categorie), libelle: d.libelle,
     montant: d.montant, modePaiement: d.modePaiement,
     tiersId: d.tiersId ?? null, recurrente: d.recurrente, clientUuid: d.clientUuid ?? null,
-    tauxTva: d.tauxTva, regimeFiscal, dateOperation: d.dateOperation ?? null,
+    tauxTva: d.tauxTva, regimeFiscal, dateOperation: d.dateOperation ?? null, agence: d.agence ?? null,
   }, { utilisateurId: c.get('utilisateurId'), role: c.get('role') });
   return c.json(res, res.deja ? 200 : 201);
+});
+
+/** Analyse des dépenses (répartition, évolution, budget, fournisseurs, inhabituelles…). */
+depenses.get('/analyse', requirePermission('depense:read'), async (c) => {
+  const debut = c.req.query('debut');
+  const fin = c.req.query('fin');
+  const periode = debut && fin ? { debut, fin } : undefined;
+  const analyse = await stubEntreprise(c.env, c.get('entrepriseId')).analyseDepenses(periode);
+  return c.json(analyse);
 });
 
 // ── Pièce justificative (photo/scan d'un reçu ou d'une facture fournisseur) ──

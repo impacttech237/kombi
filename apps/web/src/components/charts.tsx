@@ -186,6 +186,58 @@ export function EmptyCartIllustration() {
   );
 }
 
+/** Répartition des dépenses par catégorie (donut + légende), écran Dépenses > Analyse. */
+export function DepensesCategorieDonut({ data }: { data: { libelle: string; total: number }[] }) {
+  const palette = ['#b4e033', '#60a5fa', '#fbbf24', '#f87171', '#a78bfa', '#4ade80', '#f97316', '#6b9165'];
+  const top = [...data].sort((a, b) => b.total - a.total).slice(0, 8).map((d, i) => ({ ...d, color: palette[i % palette.length]! }));
+  return (
+    <div className="flex items-center gap-4">
+      <PieChart width={96} height={96}>
+        <Pie data={top} cx="50%" cy="50%" innerRadius={30} outerRadius={46}
+          startAngle={90} endAngle={-270} dataKey="total" strokeWidth={0} paddingAngle={2}>
+          {top.map((d, i) => <Cell key={i} fill={d.color} opacity={0.85} />)}
+        </Pie>
+      </PieChart>
+      <div className="flex flex-col gap-1 min-w-0 flex-1">
+        {top.map((d) => (
+          <div key={d.libelle} className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+              <span className="text-[#4a6b4a] text-xs truncate">{d.libelle}</span>
+            </div>
+            <span className="text-[#edf5ea] text-xs font-mono font-medium shrink-0">{formaterFCFA(d.total)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Évolution mensuelle d'une valeur (dépenses, CA…) sur plusieurs mois — barres verticales. */
+export function EvolutionMensuelleChart({ data }: { data: { moisLabel: string; total: number }[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={140}>
+      <BarChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 0 }}>
+        <CartesianGrid vertical={false} stroke="#2a4230" strokeDasharray="3 3" strokeWidth={0.8} />
+        <XAxis dataKey="moisLabel" tick={{ fill: '#4a6b4a', fontSize: 10, fontWeight: 500 }} axisLine={false} tickLine={false} />
+        <Tooltip
+          cursor={{ fill: '#b4e033', fillOpacity: 0.05 }}
+          content={({ active, payload, label }) => {
+            if (!active || !payload?.length) return null;
+            return (
+              <div className="bg-[#b4e033] rounded-lg px-3 py-1.5 shadow-lg">
+                <p className="text-[#0e1c0f] text-xs font-bold font-mono">{formaterFCFA(payload[0]!.value as number)}</p>
+                <p className="text-[#0e1c0f]/70 text-[10px]">{label}</p>
+              </div>
+            );
+          }}
+        />
+        <Bar dataKey="total" radius={[4, 4, 0, 0]} maxBarSize={28} fill="#b4e033" fillOpacity={0.75} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 export const MODE_PAIEMENT_LABEL: Record<string, string> = {
   especes: 'Espèces', orange_money: 'Orange Money', mtn_momo: 'MTN MoMo', virement: 'Virement', cheque: 'Chèque', autre: 'Autre',
 };

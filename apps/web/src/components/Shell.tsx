@@ -9,7 +9,7 @@ import { listerNotifications, type NotificationActive } from '../lib/api.js';
 import {
   IcoHome, IcoCart, IcoFile, IcoBox, IcoWlt, IcoBell, IcoLayers, IcoX, IcoChevR, IcoGrid,
   IcoUser, IcoUsers, IcoClipboard, IcoBarChart, IcoSettings, IcoTrendDown, IcoHandCoins, IcoLogOut,
-  IcoFolder, IcoPercent, Avatar,
+  IcoFolder, IcoPercent, IcoTrend, IcoAlert, Avatar,
 } from './icons.js';
 
 export interface NavItem {
@@ -48,8 +48,10 @@ const MENU_FINANCES: NavItem[] = [
 ];
 
 const MENU_ADMIN: NavItem[] = [
+  { code: 'a-decider', label: 'À décider', short: 'À décider', Icon: IcoAlert },
   { code: 'compta', label: 'Comptabilité (OHADA)', short: 'Compta', Icon: IcoBarChart },
   { code: 'rentabilite', label: 'Rentabilité par produit', short: 'Rentabilité', Icon: IcoPercent },
+  { code: 'rapports', label: 'Rapports & Analyses', short: 'Rapports', Icon: IcoTrend },
   { code: 'equipe', label: 'Équipe', short: 'Équipe', Icon: IcoUsers },
   { code: 'parametres', label: 'Paramètres fiscaux', short: 'Réglages', Icon: IcoSettings },
 ];

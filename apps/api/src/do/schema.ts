@@ -460,6 +460,51 @@ CREATE TABLE IF NOT EXISTS cloture_mensuelle (
 )
 `;
 
+/**
+ * v17 — Contexte dépense (audit reporting 2026-09-04) : « agence » (tag texte libre, pas un
+ * module « projet » à part entière — hors scope) et « créé par » (membre à l'origine de la
+ * dépense, pour la reconstituer sans dépendre de audit_log). `depense` est référencée par rien
+ * (aucune FK d'une autre table vers elle) donc le RENAME direct est sûr (pas le pattern
+ * recreate-avec-nom-temporaire des tables référencées, voir note plus bas) ; on suit quand même
+ * le pattern recreate car `ecriture_id`/`piece_cle` etc. doivent être recopiés à l'identique.
+ */
+const MIGRATION_V17_DEPENSE_CONTEXTE = `
+CREATE TABLE depense_v17 (
+  id TEXT PRIMARY KEY, exercice_id TEXT NOT NULL REFERENCES exercice(id),
+  categorie TEXT NOT NULL, compte_numero TEXT NOT NULL, libelle TEXT NOT NULL,
+  montant INTEGER NOT NULL CHECK (montant > 0),
+  mode_paiement TEXT NOT NULL CHECK (mode_paiement IN ('especes','mtn_momo','orange_money','virement','cheque','autre')),
+  tiers_id TEXT REFERENCES tiers(id), recurrente INTEGER NOT NULL DEFAULT 0 CHECK (recurrente IN (0,1)),
+  date TEXT NOT NULL DEFAULT (datetime('now')), ecriture_id TEXT REFERENCES ecriture(id),
+  client_uuid TEXT UNIQUE, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  piece_cle TEXT, agence TEXT, cree_par TEXT
+)
+--##
+INSERT INTO depense_v17 (id, exercice_id, categorie, compte_numero, libelle, montant, mode_paiement,
+                         tiers_id, recurrente, date, ecriture_id, client_uuid, created_at, piece_cle)
+  SELECT id, exercice_id, categorie, compte_numero, libelle, montant, mode_paiement,
+         tiers_id, recurrente, date, ecriture_id, client_uuid, created_at, piece_cle FROM depense
+--##
+DROP TABLE depense
+--##
+ALTER TABLE depense_v17 RENAME TO depense
+`;
+
+/**
+ * v18 — Budgets mensuels (audit reporting 2026-09-04, feature « Prévisions et budgets ») : un
+ * objectif par mois civil (CA cible, plafond de dépenses, marge cible). Les prévisions de
+ * trésorerie et simulations (baisse de ventes, impact recrutement/investissement, seuil de
+ * rentabilité) sont des calculs à la volée à partir de ce budget + des données existantes —
+ * aucun état supplémentaire à persister pour elles.
+ */
+const MIGRATION_V18_BUDGET_MENSUEL = `
+CREATE TABLE IF NOT EXISTS budget_mensuel (
+  annee_mois TEXT PRIMARY KEY,
+  ca_cible INTEGER, plafond_depenses INTEGER, marge_cible_pct REAL,
+  cree_par TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+`;
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -525,7 +570,11 @@ export const MIGRATIONS_DO: readonly MigrationDO[] = [
   { v: 15, statements: statementsDe(MIGRATION_V15_POINTAGE_TRESORERIE) },
   // v16 — clôture mensuelle verrouillable (empêche une nouvelle opération dans un mois clos).
   { v: 16, statements: statementsDe(MIGRATION_V16_CLOTURE_MENSUELLE) },
-  // v17… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v17 — contexte dépense : agence (tag libre) + créé par (membre).
+  { v: 17, statements: statementsDe(MIGRATION_V17_DEPENSE_CONTEXTE) },
+  // v18 — budgets mensuels (CA cible, plafond dépenses, marge cible).
+  { v: 18, statements: statementsDe(MIGRATION_V18_BUDGET_MENSUEL) },
+  // v19… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */

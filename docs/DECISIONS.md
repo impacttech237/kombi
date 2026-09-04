@@ -217,5 +217,40 @@ NON shardée du système (control-plane partagé). Les caches déjà en place (r
   pour une entreprise très active après plusieurs années. Pas de D1 read replicas configurés
   non plus (`wrangler.toml`) — à envisager si D1 redevient un point chaud malgré le cache.
 
+## D20 — Rapports & Analyses, À décider, Budgets/Prévisions, Dépenses enrichies (2026-09-04)
+Suite à l'audit de la vision « pilotage » du dirigeant, quatre lacunes demandées en bloc, dans
+un seul commit/push :
+1. **Module Rapports & Analyses** (`/api/rapports`, page `Rapports.tsx`) : rapports
+   mensuel/trimestriel/annuel/comparaison, réutilisant `analyseDepenses`,
+   `margeParProduit`/`margeParClient`/`delaiMoyenPaiement` — ces trois dernières généralisées
+   pour accepter une période optionnelle (comportement par défaut inchangé pour le cockpit).
+2. **Page « À décider »** (`problemesPrioritaires()`, `/api/decisions`, page `ADecider.tsx`) :
+   synthèse quotidienne des 3 problèmes au plus fort impact financier (créances/dettes en
+   retard, dépense anormale, vente à perte, dépassement de budget, trésorerie prévisionnelle
+   négative), avec cause, urgence et action suggérée — bannière compacte sur le Dashboard.
+   Réservée `decision:read` (admin/gérant uniquement, pas comptable/caissier).
+3. **Budgets & prévisions** (`budget_mensuel`, `/api/budgets`, onglet « Budgets » dans
+   Comptabilité) — module entièrement nouveau (aucune table n'existait) : objectifs du mois (CA
+   cible, plafond dépenses, marge cible), prévision de trésorerie à 30/60/90 j (à partir des
+   échéances déjà connues + moyenne des dépenses récurrentes — pas un modèle statistique),
+   seuil de rentabilité, simulations « et si » (baisse de ventes, recrutement/investissement)
+   calculées à la volée, sans état persisté.
+4. **Dépenses enrichies** (`analyseDepenses()`, onglet « Analyse » dans `Depenses.tsx`, fiche
+   détail complétée) : répartition par catégorie, évolution 6 mois, comparaison au budget,
+   postes en hausse, récurrentes, top fournisseurs, dépenses inhabituelles, sans justificatif,
+   par agence. Colonnes ajoutées à `depense` (migration v17) : `agence` (texte libre — pas un
+   module « projet » à part entière, hors scope) et `cree_par` (résolu en nom via
+   `listerMembres`, déjà utilisé par l'écran Équipe — pas de jointure côté DO, qui ne connaît
+   pas les comptes utilisateurs, gérés en D1).
+- **Export « Excel » = CSV** (UTF-8 + BOM), pas un vrai `.xlsx` : aucune lib xlsx/exceljs dans
+  le repo, et Cloudflare Workers n'a pas l'environnement Node dont ces libs ont souvent besoin.
+  Le CSV s'ouvre nativement dans Excel/Sheets sans dépendance supplémentaire. Le PDF réutilise
+  le pattern `pdf-lib` déjà en place pour les factures (`apps/api/src/pdf/rapport-pdf.ts`).
+- Nouvelles permissions : `rapport:read`, `budget:read`, `budget:manage`, `decision:read` —
+  grants détaillés dans `packages/shared/src/authz.ts`.
+- Migrations DO v17 (`depense.agence`/`cree_par`) et v18 (`budget_mensuel`), suivant le pattern
+  recreate-don't-rename documenté dans `schema.ts` pour v17 (table référencée par rien, mais
+  gardée cohérente avec le pattern existant par prudence).
+
 ## Décisions ouvertes (restantes)
 - Décompte exact des « 2 ans » de maintien de régime (exercices civils vs glissants).

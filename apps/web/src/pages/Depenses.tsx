@@ -7,11 +7,13 @@ import { useEffect, useState } from 'react';
 import { formaterFCFA as fmt, CATEGORIES_DEPENSE } from '@kombi/shared';
 import {
   listerDepenses, televerserPieceDepense, urlPieceDepense, supprimerPieceDepense,
-  type EntrepriseResume, type Depense,
+  analyserDepenses, listerMembres,
+  type EntrepriseResume, type Depense, type AnalyseDepenses, type Membre,
 } from '../lib/api.js';
 import { enfilerMutation, nouvelUuid } from '../offline/db.js';
 import { synchroniser } from '../offline/sync.js';
 import { IcoPlus, IcoChevR, IcoX, IcoFile, IcoAlert } from '../components/icons.js';
+import { DepensesCategorieDonut, EvolutionMensuelleChart } from '../components/charts.js';
 
 /**
  * Re-décode l'image via le décodeur natif du navigateur puis la redessine sur un canvas — le
@@ -62,6 +64,7 @@ export function Depenses({ entreprise, onRetour }: { entreprise: EntrepriseResum
   const [liste, setListe] = useState<Depense[] | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [detail, setDetail] = useState<Depense | null>(null);
+  const [onglet, setOnglet] = useState<'liste' | 'analyse'>('liste');
 
   function recharger() { return listerDepenses(entreprise.id).then(setListe).catch(() => setListe((p) => p ?? [])); }
   useEffect(() => { void recharger(); }, [entreprise.id]);
@@ -86,25 +89,40 @@ export function Depenses({ entreprise, onRetour }: { entreprise: EntrepriseResum
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-24 md:pb-8 space-y-2 pt-1">
-        {liste === null ? (
-          <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
-        ) : liste.length === 0 ? (
-          <p className="text-[#4a6b4a] text-sm text-center py-8">Aucune dépense enregistrée pour l'instant.</p>
-        ) : (
-          liste.map((d) => (
-            <button key={d.id} onClick={() => setDetail(d)}
-              className="w-full bg-[#162419] rounded-2xl p-4 flex items-center gap-3 text-left hover:bg-[#1e3222] transition-colors">
-              <div className="flex-1 min-w-0">
-                <p className="text-[#edf5ea] font-medium text-sm truncate">{d.libelle}</p>
-                <p className="text-[#4a6b4a] text-xs mt-0.5">{labelCategorie(d.categorie)}{d.recurrente ? ' · récurrente' : ''}</p>
-              </div>
-              {d.piece_cle && <IcoFile cls="w-4 h-4 text-[#b4e033] shrink-0" />}
-              <span className="text-[#f87171] font-mono font-semibold text-sm shrink-0">−{fmt(d.montant)}</span>
+      <div className="px-4 md:px-8 pb-2">
+        <div className="flex bg-[#1e3222] rounded-xl p-1 border border-[#2a4230]">
+          {(['liste', 'analyse'] as const).map((o) => (
+            <button key={o} onClick={() => setOnglet(o)}
+              className={`flex-1 rounded-lg py-2 text-xs font-semibold transition-colors ${onglet === o ? 'bg-[#b4e033] text-[#0e1c0f]' : 'text-[#6b9165]'}`}>
+              {o === 'liste' ? 'Liste' : 'Analyse'}
             </button>
-          ))
-        )}
+          ))}
+        </div>
       </div>
+
+      {onglet === 'liste' ? (
+        <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-24 md:pb-8 space-y-2 pt-1">
+          {liste === null ? (
+            <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
+          ) : liste.length === 0 ? (
+            <p className="text-[#4a6b4a] text-sm text-center py-8">Aucune dépense enregistrée pour l'instant.</p>
+          ) : (
+            liste.map((d) => (
+              <button key={d.id} onClick={() => setDetail(d)}
+                className="w-full bg-[#162419] rounded-2xl p-4 flex items-center gap-3 text-left hover:bg-[#1e3222] transition-colors">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[#edf5ea] font-medium text-sm truncate">{d.libelle}</p>
+                  <p className="text-[#4a6b4a] text-xs mt-0.5">{labelCategorie(d.categorie)}{d.recurrente ? ' · récurrente' : ''}{d.agence ? ` · ${d.agence}` : ''}</p>
+                </div>
+                {d.piece_cle && <IcoFile cls="w-4 h-4 text-[#b4e033] shrink-0" />}
+                <span className="text-[#f87171] font-mono font-semibold text-sm shrink-0">−{fmt(d.montant)}</span>
+              </button>
+            ))
+          )}
+        </div>
+      ) : (
+        <AnalyseDepensesTab entreprise={entreprise} />
+      )}
 
       <button onClick={() => setCreateOpen(true)}
         className="fixed bottom-24 md:bottom-6 right-4 w-14 h-14 bg-[#b4e033] rounded-full flex items-center justify-center text-[#0e1c0f] shadow-lg shadow-[#b4e033]/20 z-10 active:scale-95 transition-all">
@@ -127,11 +145,140 @@ export function Depenses({ entreprise, onRetour }: { entreprise: EntrepriseResum
   );
 }
 
+function AnalyseDepensesTab({ entreprise }: { entreprise: EntrepriseResume }) {
+  const [analyse, setAnalyse] = useState<AnalyseDepenses | null>(null);
+
+  useEffect(() => {
+    analyserDepenses(entreprise.id).then(setAnalyse).catch(() => setAnalyse(null));
+  }, [entreprise.id]);
+
+  if (analyse === null) return <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>;
+
+  return (
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-24 md:pb-8 space-y-4 pt-1">
+      {analyse.budget && (
+        <div className={`rounded-2xl p-4 border ${analyse.budget.ecart != null && analyse.budget.ecart > 0 ? 'bg-[#f87171]/8 border-[#f87171]/30' : 'bg-[#162419] border-[#2a4230]'}`}>
+          <p className="text-[#4a6b4a] text-xs">Plafond du mois</p>
+          <p className="text-[#edf5ea] font-mono font-semibold text-sm mt-0.5">
+            {fmt(analyse.total)} / {analyse.budget.plafondDepenses != null ? fmt(analyse.budget.plafondDepenses) : '—'}
+            {analyse.budget.ecart != null && analyse.budget.ecart > 0 && (
+              <span className="text-[#f87171] ml-2">dépassé de {fmt(analyse.budget.ecart)}</span>
+            )}
+          </p>
+        </div>
+      )}
+
+      <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
+        <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-3">Répartition par catégorie</p>
+        {analyse.parCategorie.length === 0 ? (
+          <p className="text-[#4a6b4a] text-xs">Rien sur cette période.</p>
+        ) : (
+          <DepensesCategorieDonut data={analyse.parCategorie} />
+        )}
+      </div>
+
+      <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
+        <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-1">Évolution sur 6 mois</p>
+        <EvolutionMensuelleChart data={analyse.evolutionMensuelle} />
+      </div>
+
+      {analyse.postesEnHausse.length > 0 && (
+        <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
+          <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-2">Postes en hausse</p>
+          <div className="space-y-2">
+            {analyse.postesEnHausse.map((p) => (
+              <div key={p.categorie} className="flex items-center justify-between text-sm">
+                <span className="text-[#edf5ea]">{p.libelle}</span>
+                <span className="text-[#f87171] font-mono text-xs">+{fmt(p.deltaMontant)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {analyse.topFournisseurs.length > 0 && (
+        <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
+          <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-2">Fournisseurs les plus coûteux</p>
+          <div className="space-y-2">
+            {analyse.topFournisseurs.map((f) => (
+              <div key={f.tiersId ?? f.nom} className="flex items-center justify-between text-sm">
+                <span className="text-[#edf5ea] truncate">{f.nom} <span className="text-[#4a6b4a]">×{f.nb}</span></span>
+                <span className="text-[#edf5ea] font-mono text-xs">{fmt(f.total)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {analyse.parAgence.length > 1 && (
+        <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
+          <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-2">Par agence</p>
+          <div className="space-y-2">
+            {analyse.parAgence.map((a) => (
+              <div key={a.agence} className="flex items-center justify-between text-sm">
+                <span className="text-[#edf5ea]">{a.agence}</span>
+                <span className="text-[#edf5ea] font-mono text-xs">{fmt(a.total)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {analyse.inhabituelles.length > 0 && (
+        <div className="bg-[#f87171]/8 rounded-2xl p-4 border border-[#f87171]/30">
+          <p className="text-[#f87171] text-xs font-medium uppercase tracking-wide mb-2 flex items-center gap-1.5">
+            <IcoAlert cls="w-3.5 h-3.5" /> Dépenses inhabituelles
+          </p>
+          <div className="space-y-1">
+            {analyse.inhabituelles.map((i) => (
+              <p key={i.categorie} className="text-[#edf5ea] text-xs">
+                {i.libelle} : {fmt(i.total)} <span className="text-[#4a6b4a]">(moyenne habituelle {fmt(i.moyenneHistorique)})</span>
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {analyse.recurrentes.length > 0 && (
+        <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
+          <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-2">Dépenses récurrentes</p>
+          <div className="space-y-2">
+            {analyse.recurrentes.map((d) => (
+              <div key={d.id} className="flex items-center justify-between text-sm">
+                <span className="text-[#edf5ea] truncate">{d.libelle}</span>
+                <span className="text-[#edf5ea] font-mono text-xs">{fmt(d.montant)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {analyse.sansJustificatif.length > 0 && (
+        <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
+          <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-2">Sans justificatif ({analyse.sansJustificatif.length})</p>
+          <div className="space-y-2">
+            {analyse.sansJustificatif.slice(0, 8).map((d) => (
+              <div key={d.id} className="flex items-center justify-between text-sm">
+                <span className="text-[#edf5ea] truncate">{d.libelle}</span>
+                <span className="text-[#fbbf24] font-mono text-xs">{fmt(d.montant)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DetailDepenseSheet({ entreprise, depense, onClose, onMaj }: {
   entreprise: EntrepriseResume; depense: Depense; onClose: () => void; onMaj: () => void;
 }) {
   const [charge, setCharge] = useState(false);
   const [erreur, setErreur] = useState('');
+  const [membres, setMembres] = useState<Membre[] | null>(null);
+
+  useEffect(() => { listerMembres(entreprise.id).then(setMembres).catch(() => setMembres([])); }, [entreprise.id]);
+  const nomCreateur = membres?.find((m) => m.id === depense.cree_par)?.nom ?? depense.cree_par;
 
   async function ajouterPiece(fichier: File) {
     setCharge(true); setErreur('');
@@ -166,6 +313,40 @@ function DetailDepenseSheet({ entreprise, depense, onClose, onMaj }: {
         <div className="bg-[#162419] rounded-2xl p-4 text-center">
           <p className="text-[#4a6b4a] text-xs">{labelCategorie(depense.categorie)}</p>
           <p className="text-[#f87171] font-mono font-bold text-2xl mt-0.5">−{fmt(depense.montant)}</p>
+        </div>
+
+        <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230] space-y-2">
+          <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-1">Contexte</p>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-[#4a6b4a] text-xs">Date</span>
+            <span className="text-[#edf5ea]">{depense.date.slice(0, 10)}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-[#4a6b4a] text-xs">Mode de paiement</span>
+            <span className="text-[#edf5ea]">{MODES_PAIEMENT.find((m) => m.value === depense.mode_paiement)?.label ?? depense.mode_paiement}</span>
+          </div>
+          {depense.tiers_nom && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-[#4a6b4a] text-xs">Fournisseur</span>
+              <span className="text-[#edf5ea]">{depense.tiers_nom}</span>
+            </div>
+          )}
+          {depense.agence && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-[#4a6b4a] text-xs">Agence</span>
+              <span className="text-[#edf5ea]">{depense.agence}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-[#4a6b4a] text-xs">Enregistrée par</span>
+            <span className="text-[#edf5ea]">{nomCreateur ?? '—'}</span>
+          </div>
+          {depense.ecriture_id && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-[#4a6b4a] text-xs">Écriture comptable</span>
+              <span className="text-[#4a6b4a] font-mono text-[10px]">{depense.ecriture_id.slice(0, 8)}</span>
+            </div>
+          )}
         </div>
 
         <div>
@@ -205,6 +386,7 @@ function NouvelleDepenseSheet({ entreprise, onClose, onCree }: {
   const [mode, setMode] = useState('especes');
   const [recurrente, setRecurrente] = useState(false);
   const [dateOperation, setDateOperation] = useState('');
+  const [agence, setAgence] = useState('');
   const [charge, setCharge] = useState(false);
   const [erreur, setErreur] = useState('');
   const [texteScan, setTexteScan] = useState('');
@@ -227,7 +409,7 @@ function NouvelleDepenseSheet({ entreprise, onClose, onCree }: {
         clientUuid, entrepriseId: entreprise.id, type: 'depense',
         payload: {
           categorie, libelle: libelle.trim() || labelCategorie(categorie), montant: Number(montant),
-          modePaiement: mode, recurrente, dateOperation: dateOperation || null,
+          modePaiement: mode, recurrente, dateOperation: dateOperation || null, agence: agence.trim() || null,
         },
       });
       await synchroniser();
@@ -290,6 +472,10 @@ function NouvelleDepenseSheet({ entreprise, onClose, onCree }: {
         <div>
           <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Date de la dépense (optionnel)</label>
           <input type="date" value={dateOperation} onChange={(e) => setDateOperation(e.target.value)} className={`${inputCls} [color-scheme:dark]`} />
+        </div>
+        <div>
+          <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Agence (optionnel)</label>
+          <input value={agence} onChange={(e) => setAgence(e.target.value)} placeholder="Ex. Agence Bonanjo" className={inputCls} />
         </div>
         <label className="flex items-center gap-2.5 text-sm text-[#edf5ea]">
           <input type="checkbox" checked={recurrente} onChange={(e) => setRecurrente(e.target.checked)} className="accent-[#b4e033] w-4 h-4" />

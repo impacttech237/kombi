@@ -29,6 +29,7 @@ async function rejouer(m: Mutation): Promise<void> {
         categorie: p.categorie as string, libelle: p.libelle as string, montant: p.montant as number,
         modePaiement: p.modePaiement as string, recurrente: p.recurrente as boolean | undefined,
         clientUuid: m.clientUuid, dateOperation: (p.dateOperation as string | undefined) ?? null,
+        agence: (p.agence as string | undefined) ?? null,
       });
       return;
     case 'tiers':

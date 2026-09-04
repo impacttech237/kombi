@@ -1539,7 +1539,7 @@ export class EntrepriseDO extends DurableObject {
   async creerDepense(d: {
     categorie: string; compteNumero: string; libelle: string; montant: number;
     modePaiement: string; tiersId?: string | null; recurrente?: boolean; clientUuid?: string | null;
-    tauxTva?: number; regimeFiscal?: string | null; dateOperation?: string | null;
+    tauxTva?: number; regimeFiscal?: string | null; dateOperation?: string | null; agence?: string | null;
   }, acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' }): Promise<{ depenseId: string; deja: boolean }> {
     if (d.clientUuid) {
       const ex = this.sql
@@ -1579,10 +1579,11 @@ export class EntrepriseDO extends DurableObject {
       const depenseId = uid();
       this.sql.exec(
         `INSERT INTO depense (id, exercice_id, categorie, compte_numero, libelle, montant, mode_paiement,
-                              tiers_id, recurrente, ecriture_id, client_uuid, date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                              tiers_id, recurrente, ecriture_id, client_uuid, date, agence, cree_par)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         depenseId, exerciceId, d.categorie, d.compteNumero, d.libelle, montant, d.modePaiement,
         d.tiersId ?? null, d.recurrente ? 1 : 0, ecritureId, d.clientUuid ?? null, dateOp,
+        d.agence ?? null, acteur.utilisateurId,
       );
       this.journaliser({
         acteur, action: 'depense.creer', entite: 'depense', entiteId: depenseId,
@@ -1595,10 +1596,124 @@ export class EntrepriseDO extends DurableObject {
   async listerDepenses(): Promise<Record<string, unknown>[]> {
     return this.sql.exec(
       `SELECT d.id, d.categorie, d.compte_numero, d.libelle, d.montant, d.mode_paiement,
-              d.recurrente, d.date, t.nom AS tiers_nom, d.piece_cle
+              d.recurrente, d.date, t.nom AS tiers_nom, d.piece_cle, d.agence, d.cree_par, d.ecriture_id
          FROM depense d LEFT JOIN tiers t ON t.id = d.tiers_id
         ORDER BY d.created_at DESC`,
     ).toArray() as never;
+  }
+
+  /**
+   * Analyse des dépenses sur une période [debut, fin) — défaut : mois civil courant. Répond aux
+   * questions qu'un simple total + liste ne montre pas (audit reporting 2026-09-04) : où va
+   * l'argent, qu'est-ce qui augmente, qui coûte le plus, qu'est-ce qui manque de justificatif.
+   */
+  async analyseDepenses(periode?: { debut: string; fin: string }): Promise<{
+    periode: { debut: string; fin: string };
+    total: number;
+    parCategorie: { categorie: string; libelle: string; total: number }[];
+    evolutionMensuelle: { moisLabel: string; total: number }[];
+    budget: { plafondDepenses: number | null; ecart: number | null } | null;
+    postesEnHausse: { categorie: string; libelle: string; moisCourant: number; moisPrecedent: number; deltaMontant: number }[];
+    recurrentes: Record<string, unknown>[];
+    topFournisseurs: { tiersId: string | null; nom: string; total: number; nb: number }[];
+    inhabituelles: { categorie: string; libelle: string; total: number; moyenneHistorique: number }[];
+    sansJustificatif: Record<string, unknown>[];
+    parAgence: { agence: string; total: number }[];
+  }> {
+    const aujourdhui = this.dateCourante();
+    const [debut, fin] = periode ? [periode.debut, periode.fin] : this.bornesMois(aujourdhui);
+
+    const total = (this.sql.exec(
+      `SELECT COALESCE(SUM(montant), 0) AS total FROM depense WHERE date >= ? AND date < ?`,
+      debut, fin,
+    ).toArray()[0] as { total: number }).total;
+
+    const parCategorieRaw = this.sql.exec(
+      `SELECT categorie, COALESCE(SUM(montant), 0) AS total FROM depense
+        WHERE date >= ? AND date < ? GROUP BY categorie ORDER BY total DESC`,
+      debut, fin,
+    ).toArray() as { categorie: string; total: number }[];
+    const parCategorie = parCategorieRaw.map((c) => ({ ...c, libelle: this.labelCategorieDepense(c.categorie) }));
+
+    // Évolution sur les 6 derniers mois civils (mois de `fin` exclu, glissant vers le passé).
+    const evolutionMensuelle: { moisLabel: string; total: number }[] = [];
+    for (let i = 6; i >= 1; i--) {
+      const debutM = this.debutMoisPrecedent(fin, i);
+      const finM = this.debutMoisPrecedent(fin, i - 1);
+      const t = (this.sql.exec(
+        `SELECT COALESCE(SUM(montant), 0) AS total FROM depense WHERE date >= ? AND date < ?`,
+        debutM, finM,
+      ).toArray()[0] as { total: number }).total;
+      evolutionMensuelle.push({ moisLabel: debutM.slice(0, 7), total: t });
+    }
+
+    const budgetRow = this.sql.exec(
+      'SELECT plafond_depenses FROM budget_mensuel WHERE annee_mois = ?', debut.slice(0, 7),
+    ).toArray()[0] as { plafond_depenses: number | null } | undefined;
+    const budget = budgetRow
+      ? { plafondDepenses: budgetRow.plafond_depenses, ecart: budgetRow.plafond_depenses != null ? total - budgetRow.plafond_depenses : null }
+      : null;
+
+    // Postes en hausse : période courante vs période équivalente précédente (même durée, juste avant).
+    const dureeMs = Date.parse(fin) - Date.parse(debut);
+    const debutPrecedent = new Date(Date.parse(debut) - dureeMs).toISOString().slice(0, 10);
+    const parCategoriePeriode = (d: string, f: string) =>
+      this.sql.exec(
+        `SELECT categorie, COALESCE(SUM(montant), 0) AS total FROM depense WHERE date >= ? AND date < ? GROUP BY categorie`,
+        d, f,
+      ).toArray() as { categorie: string; total: number }[];
+    const catPrecedente = parCategoriePeriode(debutPrecedent, debut);
+    const precedentParCat = new Map(catPrecedente.map((c) => [c.categorie, c.total]));
+    const postesEnHausse = parCategorieRaw
+      .map((c) => {
+        const mP = precedentParCat.get(c.categorie) ?? 0;
+        return { categorie: c.categorie, libelle: this.labelCategorieDepense(c.categorie), moisCourant: c.total, moisPrecedent: mP, deltaMontant: c.total - mP };
+      })
+      .filter((c) => c.deltaMontant > 0)
+      .sort((a, b) => b.deltaMontant - a.deltaMontant)
+      .slice(0, 5);
+
+    const recurrentes = this.sql.exec(
+      `SELECT d.id, d.categorie, d.libelle, d.montant, d.date, t.nom AS tiers_nom
+         FROM depense d LEFT JOIN tiers t ON t.id = d.tiers_id
+        WHERE d.recurrente = 1 AND d.date >= ? AND d.date < ? ORDER BY d.montant DESC`,
+      debut, fin,
+    ).toArray() as never;
+
+    const topFournisseurs = this.sql.exec(
+      `SELECT d.tiers_id AS tiersId, COALESCE(t.nom, 'Sans fournisseur') AS nom,
+              COALESCE(SUM(d.montant), 0) AS total, COUNT(*) AS nb
+         FROM depense d LEFT JOIN tiers t ON t.id = d.tiers_id
+        WHERE d.date >= ? AND d.date < ? AND d.tiers_id IS NOT NULL
+        GROUP BY d.tiers_id ORDER BY total DESC LIMIT 5`,
+      debut, fin,
+    ).toArray() as { tiersId: string | null; nom: string; total: number; nb: number }[];
+
+    // Dépenses inhabituelles : même seuil que alertesPilotage (catégorie ≥1.5× sa moyenne des 3
+    // mois précédant `debut`, ou nouvelle catégorie ≥20 000 FCFA) — logique partagée volontairement
+    // dupliquée ici en lecture pure (pas d'extraction commune pour rester simple, même fenêtre de calcul).
+    const debut3mois = this.debutMoisPrecedent(debut, 3);
+    const historique3mois = parCategoriePeriode(debut3mois, debut);
+    const moyenneParCat = new Map(historique3mois.map((h) => [h.categorie, h.total / 3]));
+    const inhabituelles = parCategorieRaw
+      .map((c) => ({ categorie: c.categorie, libelle: this.labelCategorieDepense(c.categorie), total: c.total, moyenneHistorique: Math.round(moyenneParCat.get(c.categorie) ?? 0) }))
+      .filter((c) => (c.moyenneHistorique >= 5000 && c.total >= c.moyenneHistorique * 1.5 && c.total - c.moyenneHistorique >= 10_000)
+        || (c.moyenneHistorique === 0 && c.total >= 20_000));
+
+    const sansJustificatif = this.sql.exec(
+      `SELECT d.id, d.categorie, d.libelle, d.montant, d.date, t.nom AS tiers_nom
+         FROM depense d LEFT JOIN tiers t ON t.id = d.tiers_id
+        WHERE d.piece_cle IS NULL AND d.date >= ? AND d.date < ? ORDER BY d.montant DESC`,
+      debut, fin,
+    ).toArray() as never;
+
+    const parAgence = this.sql.exec(
+      `SELECT COALESCE(agence, 'Sans agence') AS agence, COALESCE(SUM(montant), 0) AS total
+         FROM depense WHERE date >= ? AND date < ? GROUP BY COALESCE(agence, 'Sans agence') ORDER BY total DESC`,
+      debut, fin,
+    ).toArray() as { agence: string; total: number }[];
+
+    return { periode: { debut, fin }, total, parCategorie, evolutionMensuelle, budget, postesEnHausse, recurrentes, topFournisseurs, inhabituelles, sansJustificatif, parAgence };
   }
 
   async depenseExiste(depenseId: string): Promise<boolean> {
@@ -1847,16 +1962,22 @@ export class EntrepriseDO extends DurableObject {
     };
   }
 
-  /** Marge par produit (CA HT, coût, marge, % marge) sur l'exercice ouvert, triée par marge décroissante. */
-  async margeParProduit(): Promise<Record<string, unknown>[]> {
+  /**
+   * Marge par produit (CA HT, coût, marge, % marge), triée par marge décroissante. Sans `periode`,
+   * porte sur l'exercice ouvert (comportement historique, dont dépend le cockpit) ; avec `periode`
+   * (rapports mensuels/trimestriels/annuels/comparaisons), filtre par date de vente à la place.
+   */
+  async margeParProduit(periode?: { debut: string; fin: string }): Promise<Record<string, unknown>[]> {
+    const clauseDate = periode ? 'v.date >= ? AND v.date < ?' : 'v.exercice_id = ?';
+    const params = periode ? [periode.debut, periode.fin] : [this.exerciceOuvert()];
     const rows = this.sql.exec(
       `SELECT lv.designation, SUM(lv.quantite) AS quantite, SUM(lv.montant_ht) AS ca_ht,
               SUM(lv.quantite * lv.cout_unitaire) AS cogs
          FROM ligne_vente lv JOIN vente v ON v.id = lv.vente_id
-        WHERE v.statut != 'annulee' AND v.exercice_id = ?
+        WHERE v.statut != 'annulee' AND ${clauseDate}
         GROUP BY lv.designation
         ORDER BY (SUM(lv.montant_ht) - SUM(lv.quantite * lv.cout_unitaire)) DESC`,
-      this.exerciceOuvert(),
+      ...params,
     ).toArray() as { designation: string; quantite: number; ca_ht: number; cogs: number }[];
     return rows.map((r) => {
       const marge = r.ca_ht - r.cogs;
@@ -1869,16 +1990,18 @@ export class EntrepriseDO extends DurableObject {
    * décroissante — répond à « quels clients me rapportent vraiment », distinct du volume vendu.
    * Les ventes sans client identifié (comptant, client de passage) sont regroupées à part.
    */
-  async margeParClient(): Promise<Record<string, unknown>[]> {
+  async margeParClient(periode?: { debut: string; fin: string }): Promise<Record<string, unknown>[]> {
+    const clauseDate = periode ? 'v.date >= ? AND v.date < ?' : 'v.exercice_id = ?';
+    const params = periode ? [periode.debut, periode.fin] : [this.exerciceOuvert()];
     const rows = this.sql.exec(
       `SELECT v.tiers_id, COALESCE(t.nom, 'Vente au comptant / client de passage') AS nom,
               COUNT(DISTINCT v.id) AS nb_ventes, SUM(lv.montant_ht) AS ca_ht,
               SUM(lv.quantite * lv.cout_unitaire) AS cogs
          FROM ligne_vente lv JOIN vente v ON v.id = lv.vente_id LEFT JOIN tiers t ON t.id = v.tiers_id
-        WHERE v.statut != 'annulee' AND v.exercice_id = ?
+        WHERE v.statut != 'annulee' AND ${clauseDate}
         GROUP BY COALESCE(v.tiers_id, 'sans_client')
         ORDER BY (SUM(lv.montant_ht) - SUM(lv.quantite * lv.cout_unitaire)) DESC`,
-      this.exerciceOuvert(),
+      ...params,
     ).toArray() as { tiers_id: string | null; nom: string; nb_ventes: number; ca_ht: number; cogs: number }[];
     return rows.map((r) => {
       const marge = r.ca_ht - r.cogs;
@@ -1891,7 +2014,7 @@ export class EntrepriseDO extends DurableObject {
    * crédit dont le dernier règlement est intervenu après l'émission. Ne compte que les créances
    * effectivement soldées (pas les encore ouvertes, dont le délai final n'est pas encore connu).
    */
-  async delaiMoyenPaiement(): Promise<{ jours: number | null; echantillon: number }> {
+  async delaiMoyenPaiement(periode?: { debut: string; fin: string }): Promise<{ jours: number | null; echantillon: number }> {
     const facturesReglees = this.sql.exec(
       `SELECT f.date_emission AS emission, MAX(p.date) AS dernier_paiement
          FROM facture f JOIN paiement_facture p ON p.facture_id = f.id
@@ -1905,7 +2028,10 @@ export class EntrepriseDO extends DurableObject {
         GROUP BY v.id`,
     ).toArray() as { emission: string; dernier_paiement: string }[];
 
+    const dansLaPeriode = (r: { dernier_paiement: string }) =>
+      !periode || (r.dernier_paiement >= periode.debut && r.dernier_paiement < periode.fin);
     const delais = [...facturesReglees, ...ventesReglees]
+      .filter(dansLaPeriode)
       .map((r) => (Date.parse(r.dernier_paiement) - Date.parse(r.emission)) / 86_400_000)
       .filter((j) => Number.isFinite(j) && j >= 0);
     if (delais.length === 0) return { jours: null, echantillon: 0 };
@@ -2010,6 +2136,290 @@ export class EntrepriseDO extends DurableObject {
       tresorerie, margeCumulee, comparaisonMensuelle: comparaison, alertes,
       topProduits: produits.slice(0, 3), delaiMoyenPaiement,
     };
+  }
+
+  // ══════════════ Budgets & prévisions (audit reporting 2026-09-04) ══════════════
+
+  /** Définit (ou met à jour) l'objectif du mois : CA cible, plafond de dépenses, marge cible. */
+  async definirBudget(
+    anneeMois: string,
+    d: { caCible?: number | null; plafondDepenses?: number | null; margeCiblePct?: number | null },
+    acteur: Acteur = { utilisateurId: 'systeme', role: 'systeme' },
+  ): Promise<void> {
+    if (!/^\d{4}-\d{2}$/.test(anneeMois)) throw new Error('Format de mois invalide (attendu AAAA-MM)');
+    this.sql.exec(
+      `INSERT INTO budget_mensuel (annee_mois, ca_cible, plafond_depenses, marge_cible_pct, cree_par, updated_at)
+       VALUES (?, ?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(annee_mois) DO UPDATE SET
+         ca_cible = excluded.ca_cible, plafond_depenses = excluded.plafond_depenses,
+         marge_cible_pct = excluded.marge_cible_pct, cree_par = excluded.cree_par, updated_at = datetime('now')`,
+      anneeMois, d.caCible ?? null, d.plafondDepenses ?? null, d.margeCiblePct ?? null, acteur.utilisateurId,
+    );
+    this.journaliser({ acteur, action: 'budget.definir', entite: 'budget_mensuel', entiteId: anneeMois, apres: d });
+  }
+
+  async getBudget(anneeMois: string): Promise<Record<string, unknown> | null> {
+    return (this.sql.exec('SELECT * FROM budget_mensuel WHERE annee_mois = ?', anneeMois).toArray()[0] as Record<string, unknown> | undefined) ?? null;
+  }
+
+  async listerBudgets(): Promise<Record<string, unknown>[]> {
+    return this.sql.exec('SELECT * FROM budget_mensuel ORDER BY annee_mois DESC').toArray() as never;
+  }
+
+  /** Moyenne mensuelle des dépenses récurrentes sur les 3 derniers mois — proxy des charges fixes. */
+  private chargesFixesMensuellesMoyennes(): number {
+    const aujourdhui = this.dateCourante();
+    const debut3mois = this.debutMoisPrecedent(aujourdhui, 3);
+    const total = (this.sql.exec(
+      `SELECT COALESCE(SUM(montant), 0) AS total FROM depense WHERE recurrente = 1 AND date >= ? AND date < ?`,
+      debut3mois, aujourdhui,
+    ).toArray()[0] as { total: number }).total;
+    return Math.round(total / 3);
+  }
+
+  /**
+   * Prévision de trésorerie à `horizonJours` (30/60/90) : solde actuel + créances attendues à
+   * échéance dans l'horizon − dettes attendues à échéance dans l'horizon − dépenses récurrentes
+   * projetées sur l'horizon (moyenne des 3 derniers mois). Approximation volontairement simple —
+   * pas de modèle statistique, juste ce qui est déjà connu (échéances) + une tendance récente.
+   */
+  async previsionTresorerie(horizonJours: 30 | 60 | 90): Promise<{
+    soldeActuel: number; entreesAttendues: number; sortiesAttendues: number; soldeProjete: number; horizonJours: number;
+  }> {
+    const soldes = await this.soldesTresorerie();
+    const soldeActuel = soldes.especes + soldes.mtnMomo + soldes.orangeMoney + soldes.banque;
+    const aujourdhui = this.dateCourante();
+    const limite = new Date(Date.parse(aujourdhui) + horizonJours * 86_400_000).toISOString().slice(0, 10);
+
+    const creances = await this.listerVentesACredit() as { date_echeance: string | null; total_ttc: number; regle: number }[];
+    const entreesAttendues = creances
+      .filter((c) => c.date_echeance !== null && c.date_echeance >= aujourdhui && c.date_echeance <= limite)
+      .reduce((s, c) => s + (c.total_ttc - c.regle), 0);
+
+    const dettes = await this.listerDettesFournisseurs() as { date_echeance: string | null; total_ttc: number; regle: number }[];
+    const sortiesDettes = dettes
+      .filter((d) => d.date_echeance !== null && d.date_echeance >= aujourdhui && d.date_echeance <= limite)
+      .reduce((s, d) => s + (d.total_ttc - d.regle), 0);
+
+    const sortiesRecurrentes = Math.round(this.chargesFixesMensuellesMoyennes() * (horizonJours / 30));
+    const sortiesAttendues = sortiesDettes + sortiesRecurrentes;
+
+    return { soldeActuel, entreesAttendues, sortiesAttendues, soldeProjete: soldeActuel + entreesAttendues - sortiesAttendues, horizonJours };
+  }
+
+  /**
+   * Seuil de rentabilité (point mort) : charges fixes mensuelles ÷ taux de marge sur coûts
+   * variables. `margeSurCoutsVariablesPct` vient de la marge cumulée sur l'exercice (CA/coût déjà
+   * calculés ailleurs pour la rentabilité produit) — proxy, pas une comptabilité analytique complète.
+   */
+  async seuilRentabilite(): Promise<{ margeSurCoutsVariablesPct: number | null; chargesFixesMensuelles: number; seuilCaMensuel: number | null }> {
+    const produits = await this.margeParProduit() as { ca_ht: number; marge: number }[];
+    const caTotal = produits.reduce((s, p) => s + p.ca_ht, 0);
+    const margeTotal = produits.reduce((s, p) => s + p.marge, 0);
+    const margeSurCoutsVariablesPct = caTotal > 0 ? Math.round((margeTotal / caTotal) * 1000) / 10 : null;
+    const chargesFixesMensuelles = this.chargesFixesMensuellesMoyennes();
+    const seuilCaMensuel = margeSurCoutsVariablesPct && margeSurCoutsVariablesPct > 0
+      ? Math.round(chargesFixesMensuelles / (margeSurCoutsVariablesPct / 100))
+      : null;
+    return { margeSurCoutsVariablesPct, chargesFixesMensuelles, seuilCaMensuel };
+  }
+
+  /**
+   * Simulation à la volée (aucun état persisté) : impact d'une baisse de ventes ou d'un
+   * recrutement/investissement sur la marge du mois courant. Sert à répondre vite à « et si… »
+   * sans construire un vrai modèle prévisionnel — hypothèse simple : le taux de marge reste
+   * constant quand le CA varie.
+   */
+  async simulerScenario(
+    type: 'baisse_ventes' | 'recrutement_investissement', params: { pct?: number; coutMensuel?: number },
+  ): Promise<Record<string, number | null>> {
+    const comp = await this.comparaisonMensuelle();
+    const { ca, marge } = comp.moisCourant;
+    if (type === 'baisse_ventes') {
+      const pct = params.pct ?? 0;
+      const tauxMarge = ca > 0 ? marge / ca : 0;
+      const caProjete = Math.round(ca * (1 - pct / 100));
+      const margeProjetee = Math.round(caProjete * tauxMarge);
+      return { caActuel: ca, caProjete, margeActuelle: marge, margeProjetee, impactMarge: margeProjetee - marge };
+    }
+    const coutMensuel = params.coutMensuel ?? 0;
+    const margeProjetee = marge - coutMensuel;
+    return { margeActuelle: marge, coutMensuel, margeProjetee, impactMarge: margeProjetee - marge };
+  }
+
+  // ══════════════ Rapports & Analyses (audit reporting 2026-09-04) ══════════════
+
+  /**
+   * Rapport agrégé sur une période (mensuel/trimestriel/annuel/comparaison — le découpage exact
+   * de `periode` est calculé côté route/frontend, ce point ne fait que restituer les données pour
+   * l'intervalle donné). Réutilise `statsPeriode` (déjà utilisé par `comparaisonMensuelle`),
+   * `analyseDepenses`, `margeParProduit`/`margeParClient` (généralisées à une période, voir plus
+   * haut) — rien n'est recalculé en double.
+   */
+  async rapport(params: {
+    type: 'mensuel' | 'trimestriel' | 'annuel' | 'comparaison';
+    periode: { debut: string; fin: string };
+    periodeComparaison?: { debut: string; fin: string };
+  }): Promise<{
+    type: string;
+    periode: { debut: string; fin: string };
+    stats: { ca: number; cogs: number; marge: number; depenses: number; resultat: number };
+    depenses: Awaited<ReturnType<EntrepriseDO['analyseDepenses']>>;
+    produits: Record<string, unknown>[];
+    clients: Record<string, unknown>[];
+    tresorerie: { especes: number; mtnMomo: number; orangeMoney: number; banque: number };
+    delaiMoyenPaiement: { jours: number | null; echantillon: number };
+    comparaison: {
+      periode: { debut: string; fin: string };
+      stats: { ca: number; cogs: number; marge: number; depenses: number; resultat: number };
+      variationCaPct: number | null; variationMargePct: number | null; variationDepensesPct: number | null;
+    } | null;
+  }> {
+    const [depenses, produits, clients, tresorerie, delaiMoyenPaiement] = await Promise.all([
+      this.analyseDepenses(params.periode),
+      this.margeParProduit(params.periode),
+      this.margeParClient(params.periode),
+      this.soldesTresorerie(),
+      this.delaiMoyenPaiement(params.periode),
+    ]);
+    const stats = this.statsPeriode(params.periode.debut, params.periode.fin);
+
+    let comparaison = null;
+    if (params.periodeComparaison) {
+      const statsPrec = this.statsPeriode(params.periodeComparaison.debut, params.periodeComparaison.fin);
+      const pct = (actuel: number, precedent: number) => (precedent === 0 ? null : Math.round(((actuel - precedent) / precedent) * 1000) / 10);
+      comparaison = {
+        periode: params.periodeComparaison, stats: statsPrec,
+        variationCaPct: pct(stats.ca, statsPrec.ca),
+        variationMargePct: pct(stats.marge, statsPrec.marge),
+        variationDepensesPct: pct(stats.depenses, statsPrec.depenses),
+      };
+    }
+
+    return { type: params.type, periode: params.periode, stats, depenses, produits, clients, tresorerie, delaiMoyenPaiement, comparaison };
+  }
+
+  // ══════════════ À décider (audit reporting 2026-09-04) ══════════════
+
+  /**
+   * Synthèse quotidienne priorisée : au lieu d'obliger le dirigeant à consulter chaque module,
+   * construit une liste de problèmes candidats à partir de signaux déjà calculés ailleurs
+   * (créances/dettes en retard, dépense anormale, vente à perte, dépassement de budget,
+   * trésorerie prévisionnelle négative), chacun avec un impact financier chiffré, et retourne les
+   * 3 plus importants. Contrairement à `alertesPilotage` (liste plate, texte uniquement), chaque
+   * problème porte une cause, une urgence et une action suggérée avec sa cible de navigation.
+   */
+  async problemesPrioritaires(): Promise<{
+    probleme: string; impactFinancier: number; cause: string; urgence: 'faible' | 'moyenne' | 'haute';
+    actionSuggeree: string; actionCible: { page: string };
+  }[]> {
+    const candidats: { probleme: string; impactFinancier: number; cause: string; urgence: 'faible' | 'moyenne' | 'haute'; actionSuggeree: string; actionCible: { page: string } }[] = [];
+    const aujourdhui = this.dateCourante();
+
+    const impayees = await this.listerFacturesImpayees() as { numero: string | null; montantDu: number; enRetard: boolean }[];
+    for (const f of impayees) {
+      if (f.enRetard && f.montantDu > 0) {
+        candidats.push({
+          probleme: `${f.numero ?? 'Facture'} impayée`, impactFinancier: f.montantDu,
+          cause: 'Échéance de paiement dépassée', urgence: 'haute',
+          actionSuggeree: 'Relancer le client', actionCible: { page: 'creances' },
+        });
+      }
+    }
+    const ventesCredit = await this.listerVentesACredit() as { tiers_nom: string | null; total_ttc: number; regle: number; enRetard: boolean }[];
+    for (const v of ventesCredit) {
+      const du = v.total_ttc - v.regle;
+      if (v.enRetard && du > 0) {
+        candidats.push({
+          probleme: `${v.tiers_nom ?? 'Client'} doit ${du} FCFA`, impactFinancier: du,
+          cause: 'Vente à crédit en retard de paiement', urgence: 'haute',
+          actionSuggeree: 'Relancer le client', actionCible: { page: 'creances' },
+        });
+      }
+    }
+    const dettes = await this.listerDettesFournisseurs() as { tiers_nom: string | null; total_ttc: number; regle: number; enRetard: boolean }[];
+    for (const d of dettes) {
+      const du = d.total_ttc - d.regle;
+      if (d.enRetard && du > 0) {
+        candidats.push({
+          probleme: `${d.tiers_nom ?? 'Fournisseur'} à régler`, impactFinancier: du,
+          cause: 'Dette fournisseur en retard de règlement', urgence: 'moyenne',
+          actionSuggeree: 'Planifier le règlement', actionCible: { page: 'dettes' },
+        });
+      }
+    }
+
+    // Dépense anormale du mois — même seuil qu'alertesPilotage/analyseDepenses.inhabituelles.
+    const [debutCourant, finCourant] = this.bornesMois(aujourdhui);
+    const debut3mois = this.debutMoisPrecedent(aujourdhui, 3);
+    const courant = this.sql.exec(
+      `SELECT categorie, COALESCE(SUM(montant), 0) AS total FROM depense WHERE date >= ? AND date < ? GROUP BY categorie`,
+      debutCourant, finCourant,
+    ).toArray() as { categorie: string; total: number }[];
+    const historique = this.sql.exec(
+      `SELECT categorie, COALESCE(SUM(montant), 0) AS total FROM depense WHERE date >= ? AND date < ? GROUP BY categorie`,
+      debut3mois, debutCourant,
+    ).toArray() as { categorie: string; total: number }[];
+    const moyenneParCat = new Map(historique.map((h) => [h.categorie, h.total / 3]));
+    for (const c of courant) {
+      const moyenne = moyenneParCat.get(c.categorie) ?? 0;
+      const libelleCat = this.labelCategorieDepense(c.categorie);
+      const anormale = (moyenne >= 5000 && c.total >= moyenne * 1.5 && c.total - moyenne >= 10_000) || (moyenne === 0 && c.total >= 20_000);
+      if (anormale) {
+        candidats.push({
+          probleme: `Dépenses « ${libelleCat} » en hausse`, impactFinancier: Math.round(c.total - moyenne),
+          cause: `${c.total} FCFA ce mois contre ${Math.round(moyenne)} FCFA en moyenne les 3 mois précédents`,
+          urgence: 'moyenne', actionSuggeree: 'Vérifier le poste', actionCible: { page: 'depenses' },
+        });
+      }
+    }
+
+    // Ventes conclues sous le coût de revient, ce mois-ci.
+    const ventesAPerte = this.sql.exec(
+      `SELECT lv.designation, COUNT(*) AS n, SUM((lv.cout_unitaire - lv.prix_unitaire) * lv.quantite) AS perte
+         FROM ligne_vente lv JOIN vente v ON v.id = lv.vente_id
+        WHERE v.statut != 'annulee' AND lv.cout_unitaire > 0 AND lv.prix_unitaire < lv.cout_unitaire
+          AND v.date >= ? AND v.date < ?
+        GROUP BY lv.designation ORDER BY perte DESC LIMIT 3`,
+      debutCourant, finCourant,
+    ).toArray() as { designation: string; n: number; perte: number }[];
+    for (const v of ventesAPerte) {
+      if (v.perte > 0) {
+        candidats.push({
+          probleme: `${v.designation} vendu sous son coût`, impactFinancier: v.perte,
+          cause: `Vendu ${v.n} fois en dessous du prix de revient ce mois`, urgence: 'moyenne',
+          actionSuggeree: 'Revoir le prix de vente', actionCible: { page: 'rentabilite' },
+        });
+      }
+    }
+
+    // Dépassement du plafond de dépenses du mois (Budgets).
+    const budgetRow = this.sql.exec(
+      'SELECT plafond_depenses FROM budget_mensuel WHERE annee_mois = ?', debutCourant.slice(0, 7),
+    ).toArray()[0] as { plafond_depenses: number | null } | undefined;
+    if (budgetRow?.plafond_depenses != null) {
+      const totalDepenses = courant.reduce((s, c) => s + c.total, 0);
+      const ecart = totalDepenses - budgetRow.plafond_depenses;
+      if (ecart > 0) {
+        candidats.push({
+          probleme: 'Plafond de dépenses dépassé', impactFinancier: ecart,
+          cause: `${totalDepenses} FCFA dépensés ce mois pour un plafond de ${budgetRow.plafond_depenses} FCFA`,
+          urgence: 'haute', actionSuggeree: 'Revoir le budget du mois', actionCible: { page: 'compta' },
+        });
+      }
+    }
+
+    // Trésorerie prévisionnelle négative à 30 jours.
+    const prevision = await this.previsionTresorerie(30);
+    if (prevision.soldeProjete < 0) {
+      candidats.push({
+        probleme: 'Trésorerie prévisionnelle négative à 30 jours', impactFinancier: -prevision.soldeProjete,
+        cause: `Solde actuel ${prevision.soldeActuel} FCFA, décaissements attendus supérieurs aux encaissements attendus`,
+        urgence: 'haute', actionSuggeree: 'Anticiper les encaissements ou reporter des dépenses', actionCible: { page: 'compta' },
+      });
+    }
+
+    return candidats.sort((a, b) => b.impactFinancier - a.impactFinancier).slice(0, 3);
   }
 
   // ══════════════ Fiabilité des données (D18 : rapprochement, clôture) ══════════════

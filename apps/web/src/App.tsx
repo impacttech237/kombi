@@ -16,6 +16,8 @@ import { Creances } from './pages/Creances.js';
 import { Dettes } from './pages/Dettes.js';
 import { PiecesJustificatives } from './pages/PiecesJustificatives.js';
 import { Rentabilite } from './pages/Rentabilite.js';
+import { Rapports } from './pages/Rapports.js';
+import { ADecider } from './pages/ADecider.js';
 import { Equipe } from './pages/Equipe.js';
 import { Tiers } from './pages/Tiers.js';
 import { Parametres } from './pages/Parametres.js';
@@ -145,6 +147,8 @@ function Espace() {
     ...(peut(role, 'achat:read') ? [] : ['dettes']),
     ...(peut(role, 'compta:read') ? [] : ['pieces']),
     ...(peut(role, 'compta:read') ? [] : ['rentabilite']),
+    ...(peut(role, 'rapport:read') ? [] : ['rapports']),
+    ...(peut(role, 'decision:read') ? [] : ['a-decider']),
   ];
   const nomUtilisateur = session?.user?.name?.trim() || active.raison_sociale;
 
@@ -166,6 +170,8 @@ function Espace() {
           : onglet === 'dettes' ? <Dettes entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'pieces' ? <PiecesJustificatives entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'rentabilite' ? <Rentabilite entreprise={active} onRetour={() => setOnglet('dashboard')} />
+          : onglet === 'rapports' ? <Rapports entreprise={active} onRetour={() => setOnglet('dashboard')} />
+          : onglet === 'a-decider' ? <ADecider entreprise={active} onRetour={() => setOnglet('dashboard')} onNav={setOnglet} />
           : onglet === 'equipe' ? <Equipe entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'parametres' ? <Parametres entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'tiers' ? <Tiers entreprise={active} onRetour={() => setOnglet('dashboard')} onNav={setOnglet} />

@@ -26,6 +26,10 @@ export const PERMISSIONS = [
   'depense:manage',
   'depense:read',
   'audit:read', // consulter le journal d'audit immuable
+  'rapport:read', // module Rapports & Analyses (mensuel/trimestriel/annuel, exports)
+  'budget:read', // consulter budgets, prévisions, simulations, seuil de rentabilité
+  'budget:manage', // définir/modifier les objectifs mensuels (CA cible, plafond dépenses, marge cible)
+  'decision:read', // page « À décider » — synthèse quotidienne orientée dirigeant
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -48,6 +52,10 @@ const PERMS_GERANT: readonly Permission[] = [
   'compta:read',
   'depense:manage',
   'depense:read',
+  'rapport:read',
+  'budget:read',
+  'budget:manage',
+  'decision:read',
 ];
 
 const PERMS_CAISSIER: readonly Permission[] = [
@@ -71,6 +79,8 @@ const PERMS_COMPTABLE: readonly Permission[] = [
   'depense:read',
   'compta:read',
   'audit:read',
+  'rapport:read',
+  'budget:read', // lecture seule — pas budget:manage (fixer les objectifs reste au dirigeant)
 ];
 
 /** Opérationnel hors caisse/finance : suivi des commandes et des tiers, pas d'argent. */

@@ -7,8 +7,8 @@ import { useEffect, useState } from 'react';
 import { formaterFCFA, peut, type RoleMembre } from '@kombi/shared';
 import {
   api, statsJour, tendance7Jours, listerDepenses, listerFacturesImpayees, meilleuresVentes,
-  depensesDuJour, soldesTresorerie, listerProduits, listerVentesRecentes, getCockpit,
-  type EntrepriseResume, type MeilleureVente, type TresorerieJour, type FactureImpayee, type Cockpit,
+  depensesDuJour, soldesTresorerie, listerProduits, listerVentesRecentes, getCockpit, listerDecisions,
+  type EntrepriseResume, type MeilleureVente, type TresorerieJour, type FactureImpayee, type Cockpit, type Decision,
 } from '../lib/api.js';
 import {
   IcoTrend, IcoWlt, IcoAlert, IcoCart, IcoFile, IcoUser, IcoBox, IcoChevR, IcoDn, IcoUp,
@@ -38,12 +38,14 @@ export function Dashboard({ entreprise, onCaisse, onNav }: {
   const [facturesImpayees, setFacturesImpayees] = useState<FactureImpayee[] | null>(null);
   const [mouvements, setMouvements] = useState<{ id: string; libelle: string; montant: number; sens: 'in' | 'out'; date: string; mode: string; client: string | null }[] | null>(null);
   const [erreur, setErreur] = useState('');
+  const [decisions, setDecisions] = useState<Decision[] | null>(null);
   const role = entreprise.role as RoleMembre;
   const voitCompta = peut(role, 'compta:read');
   const voitDepenses = peut(role, 'depense:read');
   const voitCreances = peut(role, 'vente:read') || peut(role, 'facture:read');
   const voitVentes = peut(role, 'vente:read');
   const voitStock = entreprise.secteur !== 'service' && peut(role, 'stock:read');
+  const voitDecisions = peut(role, 'decision:read');
 
   useEffect(() => {
     if (voitCompta) {
@@ -56,6 +58,7 @@ export function Dashboard({ entreprise, onCaisse, onNav }: {
     if (voitCreances) listerFacturesImpayees(entreprise.id).then(setFacturesImpayees).catch(() => {});
     if (voitCompta) soldesTresorerie(entreprise.id).then(setTresorerie).catch(() => {});
     if (voitCompta) getCockpit(entreprise.id).then(setCockpit).catch(() => {});
+    if (voitDecisions) listerDecisions(entreprise.id).then(setDecisions).catch(() => {});
     if (voitVentes) meilleuresVentes(entreprise.id).then(setTop).catch(() => {});
     if (voitDepenses) depensesDuJour(entreprise.id).then(setDepensesJour).catch(() => {});
     if (voitStock) {
@@ -85,7 +88,7 @@ export function Dashboard({ entreprise, onCaisse, onNav }: {
         setMouvements([...v, ...d].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5));
       });
     }
-  }, [entreprise.id, voitCompta, voitDepenses, voitCreances, voitVentes, voitStock]);
+  }, [entreprise.id, voitCompta, voitDepenses, voitCreances, voitVentes, voitStock, voitDecisions]);
 
   const regimeIgs = entreprise.regime_fiscal === 'igs';
   const nomUtilisateur = entreprise.raison_sociale;
@@ -110,6 +113,20 @@ export function Dashboard({ entreprise, onCaisse, onNav }: {
           <DashboardIllustration />
         </div>
       </div>
+
+      {voitDecisions && decisions !== null && decisions.length > 0 && (
+        <button onClick={onNav ? () => onNav('a-decider') : undefined}
+          className="w-full text-left bg-[#f87171]/8 border border-[#f87171]/25 rounded-2xl p-4 mb-4 flex items-center gap-3 active:scale-[0.99] transition-all">
+          <div className="w-9 h-9 rounded-full bg-[#f87171]/10 flex items-center justify-center shrink-0 text-[#f87171]"><IcoAlert /></div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[#edf5ea] text-sm font-semibold">
+              {decisions.length} chose{decisions.length > 1 ? 's' : ''} à décider aujourd'hui
+            </p>
+            <p className="text-[#4a6b4a] text-xs mt-0.5 truncate">{decisions[0]!.probleme}</p>
+          </div>
+          <IcoChevR cls="w-4 h-4 text-[#4a6b4a] shrink-0" />
+        </button>
+      )}
 
       {/* KPI Row */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">

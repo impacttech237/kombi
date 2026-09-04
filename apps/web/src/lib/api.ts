@@ -151,6 +151,93 @@ export interface MargeClient {
 export const listerMargeClients = (entrepriseId: string) =>
   api<{ clients: MargeClient[] }>('/api/pilotage/marge-clients', { entrepriseId }).then((r) => r.clients);
 
+// ── Budgets & prévisions ──
+export interface Budget {
+  annee_mois: string; ca_cible: number | null; plafond_depenses: number | null;
+  marge_cible_pct: number | null; cree_par: string | null; updated_at: string;
+}
+export const getBudget = (entrepriseId: string, anneeMois: string) =>
+  api<{ budget: Budget | null }>(`/api/budgets/${anneeMois}`, { entrepriseId }).then((r) => r.budget);
+export const listerBudgets = (entrepriseId: string) =>
+  api<{ budgets: Budget[] }>('/api/budgets', { entrepriseId }).then((r) => r.budgets);
+export const definirBudget = (
+  entrepriseId: string, anneeMois: string,
+  data: { caCible?: number | null; plafondDepenses?: number | null; margeCiblePct?: number | null },
+) => api<{ ok: boolean }>(`/api/budgets/${anneeMois}`, { method: 'PUT', body: data, entrepriseId });
+
+export interface PrevisionTresorerie {
+  soldeActuel: number; entreesAttendues: number; sortiesAttendues: number; soldeProjete: number; horizonJours: number;
+}
+export const previsionTresorerie = (entrepriseId: string, horizon: 30 | 60 | 90) =>
+  api<PrevisionTresorerie>(`/api/budgets/previsions?horizon=${horizon}`, { entrepriseId });
+
+export interface SeuilRentabilite {
+  margeSurCoutsVariablesPct: number | null; chargesFixesMensuelles: number; seuilCaMensuel: number | null;
+}
+export const seuilRentabilite = (entrepriseId: string) =>
+  api<SeuilRentabilite>('/api/budgets/seuil-rentabilite', { entrepriseId });
+
+export const simulerBaisseVentes = (entrepriseId: string, pct: number) =>
+  api<{ caActuel: number; caProjete: number; margeActuelle: number; margeProjetee: number; impactMarge: number }>(
+    `/api/budgets/simulation?type=baisse_ventes&pct=${pct}`, { entrepriseId },
+  );
+export const simulerRecrutement = (entrepriseId: string, coutMensuel: number) =>
+  api<{ margeActuelle: number; coutMensuel: number; margeProjetee: number; impactMarge: number }>(
+    `/api/budgets/simulation?type=recrutement_investissement&coutMensuel=${coutMensuel}`, { entrepriseId },
+  );
+
+// ── Rapports & Analyses ──
+export type TypeRapport = 'mensuel' | 'trimestriel' | 'annuel' | 'comparaison';
+export interface RapportPeriode { debut: string; fin: string; }
+export interface RapportStats { ca: number; cogs: number; marge: number; depenses: number; resultat: number; }
+export interface Rapport {
+  type: string; periode: RapportPeriode; stats: RapportStats;
+  depenses: AnalyseDepenses;
+  produits: MargeProduit[]; clients: MargeClient[];
+  tresorerie: TresorerieJour;
+  delaiMoyenPaiement: { jours: number | null; echantillon: number };
+  comparaison: { periode: RapportPeriode; stats: RapportStats; variationCaPct: number | null; variationMargePct: number | null; variationDepensesPct: number | null } | null;
+}
+export interface ParamsRapport { type: TypeRapport; debut: string; fin: string; debutComparaison?: string; finComparaison?: string; }
+
+function qsRapport(p: ParamsRapport): string {
+  const q = new URLSearchParams({ type: p.type, debut: p.debut, fin: p.fin });
+  if (p.debutComparaison) q.set('debutComparaison', p.debutComparaison);
+  if (p.finComparaison) q.set('finComparaison', p.finComparaison);
+  return q.toString();
+}
+export const getRapport = (entrepriseId: string, p: ParamsRapport) =>
+  api<Rapport>(`/api/rapports?${qsRapport(p)}`, { entrepriseId });
+
+async function blobRapport(entrepriseId: string, p: ParamsRapport, format: 'pdf' | 'csv'): Promise<Blob> {
+  const BASE = import.meta.env.VITE_API_URL ?? '';
+  const res = await fetch(`${BASE}/api/rapports/${format}?${qsRapport(p)}`, {
+    headers: { 'x-entreprise-id': entrepriseId },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error('Export indisponible');
+  return res.blob();
+}
+export async function urlRapportPdf(entrepriseId: string, p: ParamsRapport): Promise<string> {
+  return URL.createObjectURL(await blobRapport(entrepriseId, p, 'pdf'));
+}
+export async function telechargerRapportCsv(entrepriseId: string, p: ParamsRapport): Promise<void> {
+  const blob = await blobRapport(entrepriseId, p, 'csv');
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `rapport-${p.type}-${p.debut}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ── À décider ──
+export interface Decision {
+  probleme: string; impactFinancier: number; cause: string; urgence: 'faible' | 'moyenne' | 'haute';
+  actionSuggeree: string; actionCible: { page: string };
+}
+export const listerDecisions = (entrepriseId: string) =>
+  api<{ problemes: Decision[] }>('/api/decisions', { entrepriseId }).then((r) => r.problemes);
+
 // ── Fiabilité des données (D18) : rapprochement de trésorerie, clôture mensuelle ──
 export interface Pointage { id: string; compte: string; date: string; solde_declare: number; solde_calcule: number; ecart: number; }
 export const listerPointages = (entrepriseId: string) =>
@@ -310,10 +397,28 @@ export const changerStatutCommande = (entrepriseId: string, id: string, statut: 
 export interface Depense {
   id: string; categorie: string; compte_numero: string; libelle: string; montant: number;
   mode_paiement: string; recurrente: number; date: string; tiers_nom: string | null;
-  piece_cle: string | null;
+  piece_cle: string | null; agence: string | null; cree_par: string | null; ecriture_id: string | null;
 }
 export const listerDepenses = (entrepriseId: string) =>
   api<{ depenses: Depense[] }>('/api/depenses', { entrepriseId }).then((r) => r.depenses);
+
+export interface AnalyseDepenses {
+  periode: { debut: string; fin: string };
+  total: number;
+  parCategorie: { categorie: string; libelle: string; total: number }[];
+  evolutionMensuelle: { moisLabel: string; total: number }[];
+  budget: { plafondDepenses: number | null; ecart: number | null } | null;
+  postesEnHausse: { categorie: string; libelle: string; moisCourant: number; moisPrecedent: number; deltaMontant: number }[];
+  recurrentes: Depense[];
+  topFournisseurs: { tiersId: string | null; nom: string; total: number; nb: number }[];
+  inhabituelles: { categorie: string; libelle: string; total: number; moyenneHistorique: number }[];
+  sansJustificatif: Depense[];
+  parAgence: { agence: string; total: number }[];
+}
+export const analyserDepenses = (entrepriseId: string, periode?: { debut: string; fin: string }) => {
+  const qs = periode ? `?debut=${periode.debut}&fin=${periode.fin}` : '';
+  return api<AnalyseDepenses>(`/api/depenses/analyse${qs}`, { entrepriseId });
+};
 
 /**
  * Pièce justificative (photo/scan ou PDF) attachée à une dépense/un achat/une vente — fichier
@@ -375,7 +480,7 @@ export const creerDepense = (
   entrepriseId: string,
   data: {
     categorie: string; libelle: string; montant: number; modePaiement: string; recurrente?: boolean;
-    clientUuid?: string; dateOperation?: string | null;
+    clientUuid?: string; dateOperation?: string | null; agence?: string | null;
   },
 ) => api<{ depenseId: string; deja: boolean }>('/api/depenses', { method: 'POST', body: data, entrepriseId });
 
