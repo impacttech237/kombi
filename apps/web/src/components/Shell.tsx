@@ -1,15 +1,16 @@
 /**
- * Shell de navigation v2 — porté fidèlement du prototype Figma Make
- * (docs/Interface application gestion PME/, fonctions Sidebar/TopBar/BottomNav). Sidebar fixe en
- * desktop (md:flex), TopBar + BottomNav en mobile (md:hidden). Ne pas dévier du design du
- * prototype — seule la donnée (entreprise, rôle, notifications) est réelle.
+ * Shell de navigation — design system « Cockpit » (maquette validée 2025-09).
+ * Desktop : sidebar claire fixe (sections Pilotage / Exploitation / Finances / Admin),
+ * recherche, carte Pro, profil + déconnexion en bas.
+ * Mobile : barre supérieure (marque + notifications) + barre inférieure + feuille « Menu ».
+ * Toutes les icônes sont des SVG (composants Ico*) — aucun émoji.
  */
 import { useEffect, useState } from 'react';
 import { listerNotifications, type NotificationActive } from '../lib/api.js';
 import {
-  IcoHome, IcoCart, IcoFile, IcoBox, IcoWlt, IcoBell, IcoLayers, IcoX, IcoChevR, IcoGrid,
+  IcoHome, IcoCart, IcoFile, IcoBox, IcoWlt, IcoBell, IcoX, IcoGrid, IcoLayers,
   IcoUser, IcoUsers, IcoClipboard, IcoBarChart, IcoSettings, IcoTrendDown, IcoHandCoins, IcoLogOut,
-  IcoFolder, IcoPercent, IcoTrend, IcoAlert, Avatar,
+  IcoFolder, IcoPercent, IcoTrend, IcoAlert, IcoSearch, Avatar,
 } from './icons.js';
 
 export interface NavItem {
@@ -17,46 +18,59 @@ export interface NavItem {
   label: string;
   short: string;
   Icon: (p: { cls?: string }) => React.JSX.Element;
-  badge?: number;
+  alert?: boolean;
 }
 
-/**
- * Architecture de navigation (validée avec le porteur du projet, 2026-09-03) : le prototype est
- * conçu mobile-first et ne doit pas être surchargé — seuls 4 onglets restent visibles en
- * permanence, tout le reste vit dans la feuille « Menu », organisée en groupes (même traitement
- * visuel que la section « Administration » de la Sidebar du prototype). Dépenses/Créances/Dettes
- * ont leur propre groupe « Finances » dans ce menu (plus d'écran dédié requis).
- */
+/** Onglets toujours visibles sur la barre inférieure mobile. */
 const PRIMARY_TABS: NavItem[] = [
   { code: 'dashboard', label: 'Tableau de bord', short: 'Accueil', Icon: IcoHome },
-  { code: 'caisse', label: 'Ventes', short: 'Ventes', Icon: IcoCart },
+  { code: 'caisse', label: 'Caisse', short: 'Caisse', Icon: IcoCart },
   { code: 'stock', label: 'Stock', short: 'Stock', Icon: IcoBox },
   { code: 'tresorerie', label: 'Trésorerie', short: 'Tréso.', Icon: IcoWlt },
 ];
 
-const MENU_MODULES: NavItem[] = [
-  { code: 'factures', label: 'Factures & Devis', short: 'Factures', Icon: IcoFile },
-  { code: 'commandes', label: 'Commandes / Missions', short: 'Commandes', Icon: IcoClipboard },
-  { code: 'tiers', label: 'Clients & Fournisseurs', short: 'Tiers', Icon: IcoUser },
+/** Sections de navigation (sidebar desktop + feuille menu mobile). */
+const SECTIONS: { titre: string; items: NavItem[] }[] = [
+  {
+    titre: 'Pilotage',
+    items: [
+      { code: 'dashboard', label: 'Tableau de bord', short: 'Accueil', Icon: IcoHome },
+      { code: 'a-decider', label: 'À décider', short: 'À décider', Icon: IcoAlert, alert: true },
+      { code: 'rapports', label: 'Rapports & Analyses', short: 'Rapports', Icon: IcoTrend },
+    ],
+  },
+  {
+    titre: 'Exploitation',
+    items: [
+      { code: 'caisse', label: 'Caisse', short: 'Caisse', Icon: IcoCart },
+      { code: 'stock', label: 'Stock', short: 'Stock', Icon: IcoBox },
+      { code: 'tresorerie', label: 'Trésorerie', short: 'Tréso.', Icon: IcoWlt },
+      { code: 'commandes', label: 'Opérations', short: 'Opérations', Icon: IcoClipboard },
+      { code: 'factures', label: 'Factures & Devis', short: 'Factures', Icon: IcoFile },
+      { code: 'tiers', label: 'Clients & Fournisseurs', short: 'Tiers', Icon: IcoUser },
+    ],
+  },
+  {
+    titre: 'Finances',
+    items: [
+      { code: 'depenses', label: 'Dépenses', short: 'Dépenses', Icon: IcoTrendDown },
+      { code: 'creances', label: 'Créances', short: 'Créances', Icon: IcoHandCoins },
+      { code: 'dettes', label: 'Dettes', short: 'Dettes', Icon: IcoHandCoins },
+      { code: 'pieces', label: 'Pièces justificatives', short: 'Pièces', Icon: IcoFolder },
+      { code: 'compta', label: 'Comptabilité', short: 'Compta', Icon: IcoBarChart },
+      { code: 'rentabilite', label: 'Rentabilité', short: 'Rentabilité', Icon: IcoPercent },
+    ],
+  },
+  {
+    titre: 'Administration',
+    items: [
+      { code: 'equipe', label: 'Équipe', short: 'Équipe', Icon: IcoUsers },
+      { code: 'parametres', label: 'Paramètres', short: 'Réglages', Icon: IcoSettings },
+    ],
+  },
 ];
 
-const MENU_FINANCES: NavItem[] = [
-  { code: 'depenses', label: 'Dépenses', short: 'Dépenses', Icon: IcoTrendDown },
-  { code: 'creances', label: 'Créances (on me doit)', short: 'Créances', Icon: IcoHandCoins },
-  { code: 'dettes', label: 'Dettes (je dois)', short: 'Dettes', Icon: IcoHandCoins },
-  { code: 'pieces', label: 'Pièces justificatives', short: 'Pièces', Icon: IcoFolder },
-];
-
-const MENU_ADMIN: NavItem[] = [
-  { code: 'a-decider', label: 'À décider', short: 'À décider', Icon: IcoAlert },
-  { code: 'compta', label: 'Comptabilité (OHADA)', short: 'Compta', Icon: IcoBarChart },
-  { code: 'rentabilite', label: 'Rentabilité par produit', short: 'Rentabilité', Icon: IcoPercent },
-  { code: 'rapports', label: 'Rapports & Analyses', short: 'Rapports', Icon: IcoTrend },
-  { code: 'equipe', label: 'Équipe', short: 'Équipe', Icon: IcoUsers },
-  { code: 'parametres', label: 'Paramètres fiscaux', short: 'Réglages', Icon: IcoSettings },
-];
-
-const ALL_NAV = [...PRIMARY_TABS, ...MENU_MODULES, ...MENU_FINANCES, ...MENU_ADMIN];
+const ALL_NAV = [...PRIMARY_TABS, ...SECTIONS.flatMap((s) => s.items)];
 
 function useNotifications(entrepriseId: string | undefined) {
   const [notifs, setNotifs] = useState<NotificationActive[] | null>(null);
@@ -67,118 +81,98 @@ function useNotifications(entrepriseId: string | undefined) {
   return notifs ?? [];
 }
 
-function NotifSheet({ notifs, onClose }: {
-  notifs: NotificationActive[]; onClose: () => void;
+/** Un item de nav réutilisé partout (sidebar + feuille menu). */
+function NavButton({ item, active, onNav, masquer }: {
+  item: NavItem; active: string; onNav: (c: string) => void; masquer: string[];
 }) {
+  if (masquer.includes(item.code)) return null;
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60" onClick={onClose}>
-      <div className="bg-[#162419] rounded-t-3xl overflow-hidden max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="w-10 h-1 bg-[#2a4230] rounded-full mx-auto mt-3 mb-1 shrink-0" />
-        <div className="px-5 pt-3 pb-2 flex items-center justify-between shrink-0">
-          <p className="text-[#edf5ea] font-semibold text-base">Notifications</p>
-          <button onClick={onClose} className="w-7 h-7 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
-            <IcoX cls="w-3.5 h-3.5" />
-          </button>
-        </div>
-        <div className="overflow-y-auto px-4 pb-8 space-y-2">
-          {notifs.length === 0 ? (
-            <p className="text-[#4a6b4a] text-sm text-center py-8">Aucune notification.</p>
-          ) : notifs.map((n, i) => (
-            <div key={i}
-              className="w-full flex items-start gap-3 bg-[#1e3222] rounded-2xl px-4 py-3 text-left border border-[#2a4230]">
-              <span className={`mt-0.5 shrink-0 w-2 h-2 rounded-full ${n.gravite === 'critique' ? 'bg-[#f87171]' : 'bg-[#fbbf24]'}`} />
-              <span className="text-[#edf5ea] text-sm leading-snug flex-1">{n.libelle}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+    <button className={`k-nav${active === item.code ? ' on' : ''}${item.alert ? ' alert' : ''}`} onClick={() => onNav(item.code)}>
+      <item.Icon />
+      <span style={{ flex: 1 }}>{item.label}</span>
+    </button>
   );
 }
 
-export function Sidebar({ active, onNav, nomEntreprise, nomUtilisateur, onLogout }: {
-  active: string; onNav: (code: string) => void; nomEntreprise: string; nomUtilisateur: string; onLogout: () => void;
+export function Sidebar({ active, onNav, nomEntreprise, nomUtilisateur, masquer, onLogout }: {
+  active: string; onNav: (code: string) => void; nomEntreprise: string; nomUtilisateur: string;
+  masquer: string[]; onLogout: () => void;
 }) {
+  const [q, setQ] = useState('');
+  const filtre = (label: string) => !q.trim() || label.toLowerCase().includes(q.trim().toLowerCase());
+
   return (
-    <aside className="hidden md:flex w-60 flex-col bg-[#0a1408] border-r border-[#1e3222] shrink-0">
-      <div className="px-5 py-5 border-b border-[#1e3222]">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-[#b4e033] rounded-lg flex items-center justify-center text-[#0e1c0f]">
-            <IcoLayers cls="w-4 h-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[#edf5ea] font-semibold text-sm leading-tight truncate">{nomEntreprise}</p>
-            <p className="text-[#4a6b4a] text-xs">Zone CEMAC</p>
-          </div>
+    <aside className="k-side">
+      <div className="k-brand">
+        <span className="mark"><IcoLayers /></span>
+        <div style={{ minWidth: 0 }}>
+          <b>Kombi</b>
+          <small style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nomEntreprise}</small>
         </div>
       </div>
 
-      <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5 overflow-y-auto">
-        {PRIMARY_TABS.map(({ code, label, Icon, badge }) => (
-          <button key={code} onClick={() => onNav(code)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${active === code ? 'bg-[#b4e033] text-[#0e1c0f]' : 'text-[#6b9165] hover:bg-[#1e3222] hover:text-[#edf5ea]'}`}>
-            <Icon />
-            <span className="flex-1 text-left">{label}</span>
-            {badge !== undefined && (
-              <span className={`text-xs rounded-full px-1.5 py-0.5 font-semibold ${active === code ? 'bg-[#0e1c0f]/20 text-[#0e1c0f]' : 'bg-[#fbbf24]/20 text-[#fbbf24]'}`}>{badge}</span>
-            )}
-          </button>
-        ))}
+      <label className="k-search">
+        <IcoSearch cls="w-4 h-4" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher…" aria-label="Rechercher un écran" />
+        <kbd>⌘K</kbd>
+      </label>
 
-        <div className="my-3 border-t border-[#1e3222]" />
-        <p className="px-3 text-[#3d5c44] text-xs font-medium uppercase tracking-wide mb-1">Modules</p>
-
-        {MENU_MODULES.map(({ code, label, Icon }) => (
-          <button key={code} onClick={() => onNav(code)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${active === code ? 'bg-[#b4e033] text-[#0e1c0f]' : 'text-[#6b9165] hover:bg-[#1e3222] hover:text-[#edf5ea]'}`}>
-            <Icon />
-            <span className="flex-1 text-left">{label}</span>
-          </button>
-        ))}
-
-        <div className="my-3 border-t border-[#1e3222]" />
-        <p className="px-3 text-[#3d5c44] text-xs font-medium uppercase tracking-wide mb-1">Finances</p>
-
-        {MENU_FINANCES.map(({ code, label, Icon }) => (
-          <button key={code} onClick={() => onNav(code)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${active === code ? 'bg-[#b4e033] text-[#0e1c0f]' : 'text-[#6b9165] hover:bg-[#1e3222] hover:text-[#edf5ea]'}`}>
-            <Icon />
-            <span className="flex-1 text-left">{label}</span>
-          </button>
-        ))}
-
-        <div className="my-3 border-t border-[#1e3222]" />
-        <p className="px-3 text-[#3d5c44] text-xs font-medium uppercase tracking-wide mb-1">Administration</p>
-
-        {MENU_ADMIN.map(({ code, label, Icon }) => (
-          <button key={code} onClick={() => onNav(code)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${active === code ? 'bg-[#b4e033] text-[#0e1c0f]' : 'text-[#6b9165] hover:bg-[#1e3222] hover:text-[#edf5ea]'}`}>
-            <Icon />
-            <span className="flex-1 text-left">{label}</span>
-          </button>
-        ))}
+      <nav style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, margin: '0 -4px', padding: '0 4px' }}>
+        {SECTIONS.map((s) => {
+          const items = s.items.filter((i) => filtre(i.label) && !masquer.includes(i.code));
+          if (items.length === 0) return null;
+          return (
+            <div key={s.titre}>
+              <p className="k-sec">{s.titre}</p>
+              {items.map((item) => <NavButton key={item.code} item={item} active={active} onNav={onNav} masquer={masquer} />)}
+            </div>
+          );
+        })}
       </nav>
 
-      <div className="px-4 py-4 border-t border-[#1e3222] space-y-3">
-        <div className="flex items-center gap-3">
-          <Avatar name={nomUtilisateur} size="sm" />
-          <div className="flex-1 min-w-0">
-            <p className="text-[#edf5ea] text-sm font-medium truncate">{nomUtilisateur}</p>
-          </div>
-          <span className="w-2 h-2 rounded-full bg-[#4ade80] shrink-0" title="En ligne" />
+      <div className="k-upsell">
+        <b>Passez à Kombi Pro</b>
+        <p>Multi-boutiques, exports comptables et alertes WhatsApp.</p>
+        <button onClick={() => onNav('parametres')}>Découvrir</button>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--k-line)' }}>
+        <Avatar name={nomUtilisateur} size="sm" />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nomUtilisateur}</p>
         </div>
-        <button onClick={onLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[#6b9165] hover:bg-[#1e3222] hover:text-[#f87171] transition-all">
-          <IcoLogOut />
-          <span className="flex-1 text-left">Se déconnecter</span>
+        <button className="k-icobtn" style={{ width: 34, height: 34 }} onClick={onLogout} aria-label="Se déconnecter" title="Se déconnecter">
+          <IcoLogOut cls="w-4 h-4" />
         </button>
       </div>
     </aside>
   );
 }
 
-export function TopBar({ active, isOnline, entrepriseId, nomUtilisateur, onNav }: {
-  active: string; isOnline: boolean; entrepriseId: string | undefined; nomUtilisateur: string; onNav: (code: string) => void;
+function NotifSheet({ notifs, onClose }: { notifs: NotificationActive[]; onClose: () => void }) {
+  return (
+    <div className="k-sheet open" onClick={onClose}>
+      <div className="scrim" />
+      <div className="panel" style={{ left: 'auto', right: 0, width: '86%', maxWidth: 360 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <p style={{ fontWeight: 700, fontSize: 16 }}>Notifications</p>
+          <button className="k-icobtn" style={{ width: 34, height: 34 }} onClick={onClose} aria-label="Fermer"><IcoX cls="w-4 h-4" /></button>
+        </div>
+        {notifs.length === 0 ? (
+          <p className="k-empty">Aucune notification.</p>
+        ) : notifs.map((n, i) => (
+          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--k-surface-soft)', border: '1px solid var(--k-line)', borderRadius: 14, padding: '12px 14px', marginBottom: 8 }}>
+            <span style={{ marginTop: 5, width: 8, height: 8, borderRadius: 999, flex: '0 0 auto', background: n.gravite === 'critique' ? 'var(--k-danger)' : 'var(--k-warn)' }} />
+            <span style={{ fontSize: 13.5, lineHeight: 1.4 }}>{n.libelle}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function TopBar({ active, isOnline, entrepriseId, nomUtilisateur }: {
+  active: string; isOnline: boolean; entrepriseId: string | undefined; nomUtilisateur: string;
 }) {
   const item = ALL_NAV.find((i) => i.code === active);
   const [open, setOpen] = useState(false);
@@ -186,183 +180,94 @@ export function TopBar({ active, isOnline, entrepriseId, nomUtilisateur, onNav }
   const hasCritical = notifs.some((n) => n.gravite === 'critique');
 
   return (
-    <div className="md:hidden flex flex-col border-b border-[#1e3222] bg-[#0a1408]">
-      {!isOnline && (
-        <div className="bg-[#fbbf24]/10 border-b border-[#fbbf24]/20 px-4 py-2 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#fbbf24]" />
-          <span className="text-[#fbbf24] text-xs font-medium">Mode hors-ligne — données sauvegardées localement</span>
-        </div>
-      )}
-      <div className="flex items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-[#b4e033] rounded-lg flex items-center justify-center text-[#0e1c0f]">
-            <IcoLayers cls="w-3.5 h-3.5" />
-          </div>
-          <span className="text-[#edf5ea] font-semibold text-sm">{item?.label}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <button onClick={() => setOpen(true)}
-              className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
-              <IcoBell />
-            </button>
-            {notifs.length > 0 && (
-              <span className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-0.5 rounded-full flex items-center justify-center text-[9px] font-bold text-white ${hasCritical ? 'bg-[#f87171]' : 'bg-[#fbbf24]'}`}>
-                {notifs.length}
-              </span>
-            )}
-          </div>
-          <Avatar name={nomUtilisateur} size="sm" />
-        </div>
-      </div>
-
-      {open && <NotifSheet notifs={notifs} onClose={() => setOpen(false)} />}
-    </div>
-  );
-}
-
-export function BottomNav({ active, onNav, masquer = [], onLogout }: {
-  active: string; onNav: (code: string) => void; masquer?: string[]; onLogout: () => void;
-}) {
-  const [showMenu, setShowMenu] = useState(false);
-  const mainItems = PRIMARY_TABS.filter((n) => !masquer.includes(n.code));
-  const menuModules = MENU_MODULES.filter((n) => !masquer.includes(n.code));
-  const menuFinances = MENU_FINANCES.filter((n) => !masquer.includes(n.code));
-  const menuAdmin = MENU_ADMIN.filter((n) => !masquer.includes(n.code));
-  const overflowItems = [...menuModules, ...menuFinances, ...menuAdmin];
-  const menuActive = showMenu || overflowItems.some((n) => n.code === active);
-
-  const navigate = (code: string) => { onNav(code); setShowMenu(false); };
-
-  if (mainItems.length === 0) return null;
-
-  const half = Math.ceil(mainItems.length / 2);
-  const firstHalf = mainItems.slice(0, half);
-  const secondHalf = mainItems.slice(half);
-
-  return (
     <>
-      <nav className="md:hidden fixed bottom-4 left-1/2 -translate-x-1/2 w-[92vw] max-w-sm bg-[#0a1408]/95 backdrop-blur-md border border-[#2a4230] flex z-20 rounded-3xl shadow-xl shadow-black/40 px-1">
-        {firstHalf.map(({ code, short, Icon, badge }) => (
-          <button key={code} onClick={() => navigate(code)}
-            className={`flex-1 flex flex-col items-center gap-1 py-2.5 transition-colors relative ${active === code ? 'text-[#b4e033]' : 'text-[#4a6b4a]'}`}>
-            <div className={`w-10 h-7 rounded-full flex items-center justify-center transition-colors ${active === code ? 'bg-[#b4e033]/15' : ''}`}>
-              <Icon />
-              {badge !== undefined && active !== code && (
-                <span className="absolute top-2 right-[calc(50%-20px)] w-4 h-4 flex items-center justify-center text-[9px] font-bold rounded-full bg-[#fbbf24] text-[#0e1c0f]">{badge}</span>
-              )}
-            </div>
-            <span className="text-[9px] font-medium leading-none">{short}</span>
-          </button>
-        ))}
-
-        {overflowItems.length > 0 && (
-          <button onClick={() => setShowMenu((v) => !v)}
-            className="flex-1 flex flex-col items-center gap-1 py-2 transition-colors relative">
-            <div className={`w-12 h-8 rounded-full flex items-center justify-center transition-all ${menuActive ? 'bg-[#b4e033] text-[#0e1c0f]' : 'bg-[#1e3222] text-[#6b9165]'}`}>
-              <IcoGrid cls="w-4 h-4" />
-            </div>
-            <span className={`text-[9px] font-medium leading-none ${menuActive ? 'text-[#b4e033]' : 'text-[#4a6b4a]'}`}>Menu</span>
-          </button>
-        )}
-
-        {secondHalf.map(({ code, short, Icon, badge }) => (
-          <button key={code} onClick={() => navigate(code)}
-            className={`flex-1 flex flex-col items-center gap-1 py-2.5 transition-colors relative ${active === code ? 'text-[#b4e033]' : 'text-[#4a6b4a]'}`}>
-            <div className={`w-10 h-7 rounded-full flex items-center justify-center transition-colors ${active === code ? 'bg-[#b4e033]/15' : ''}`}>
-              <Icon />
-              {badge !== undefined && active !== code && (
-                <span className="absolute top-2 right-[calc(50%-20px)] w-4 h-4 flex items-center justify-center text-[9px] font-bold rounded-full bg-[#fbbf24] text-[#0e1c0f]">{badge}</span>
-              )}
-            </div>
-            <span className="text-[9px] font-medium leading-none">{short}</span>
-          </button>
-        ))}
-      </nav>
-
-      {showMenu && overflowItems.length > 0 && (
-        <div className="md:hidden fixed inset-0 z-30 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowMenu(false)} />
-          <div className="relative bg-[#162419] rounded-t-3xl overflow-hidden max-h-[80vh] flex flex-col">
-            <div className="w-10 h-1 bg-[#2a4230] rounded-full mx-auto mt-3 mb-1 shrink-0" />
-            <div className="px-5 pt-3 pb-2 flex items-center justify-between shrink-0">
-              <p className="text-[#edf5ea] font-semibold text-base">Menu</p>
-              <button onClick={() => setShowMenu(false)} className="w-7 h-7 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
-                <IcoX cls="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <div className="overflow-y-auto px-4 pb-8">
-              {menuModules.length > 0 && (
-                <>
-                  <p className="text-[#3d5c44] text-xs font-medium uppercase tracking-wider px-1 mb-2 mt-1">Modules</p>
-                  <div className="space-y-2 mb-4">
-                    {menuModules.map((item) => <MenuItemButton key={item.code} item={item} active={active} onClick={() => navigate(item.code)} />)}
-                  </div>
-                </>
-              )}
-              {menuFinances.length > 0 && (
-                <>
-                  <p className="text-[#3d5c44] text-xs font-medium uppercase tracking-wider px-1 mb-2 mt-1">Finances</p>
-                  <div className="space-y-2 mb-4">
-                    {menuFinances.map((item) => <MenuItemButton key={item.code} item={item} active={active} onClick={() => navigate(item.code)} />)}
-                  </div>
-                </>
-              )}
-              {menuAdmin.length > 0 && (
-                <>
-                  <p className="text-[#3d5c44] text-xs font-medium uppercase tracking-wider px-1 mb-2">Administration</p>
-                  <div className="space-y-2 mb-4">
-                    {menuAdmin.map((item) => <MenuItemButton key={item.code} item={item} active={active} onClick={() => navigate(item.code)} />)}
-                  </div>
-                </>
-              )}
-              <button onClick={() => { setShowMenu(false); onLogout(); }}
-                className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl bg-[#1e3222] border border-[#2a4230] text-[#f87171] active:scale-[.98] transition-all">
-                <div className="w-10 h-10 rounded-full bg-[#2a4230] flex items-center justify-center shrink-0">
-                  <IcoLogOut />
-                </div>
-                <span className="flex-1 text-left font-medium text-sm">Se déconnecter</span>
-              </button>
-            </div>
-          </div>
+      {!isOnline && (
+        <div style={{ background: 'var(--k-warn-soft)', color: 'var(--k-warn)', fontSize: 12, fontWeight: 500, padding: '7px 16px', textAlign: 'center' }}>
+          Mode hors-ligne — données sauvegardées localement
         </div>
       )}
+      <div className="k-topbar">
+        <span className="mark"><IcoLayers cls="w-4 h-4" /></span>
+        <b style={{ flex: 1 }}>{item?.label ?? 'Kombi'}</b>
+        <button className="k-icobtn" style={{ width: 38, height: 38, position: 'relative' }} onClick={() => setOpen(true)} aria-label="Notifications">
+          <IcoBell cls="w-4 h-4" />
+          {notifs.length > 0 && (
+            <span style={{ position: 'absolute', top: -2, right: -2, minWidth: 16, height: 16, padding: '0 3px', borderRadius: 999, display: 'grid', placeItems: 'center', fontSize: 9, fontWeight: 700, color: '#fff', background: hasCritical ? 'var(--k-danger)' : 'var(--k-warn)' }}>{notifs.length}</span>
+          )}
+        </button>
+        <Avatar name={nomUtilisateur} size="sm" />
+      </div>
+      {open && <NotifSheet notifs={notifs} onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-function MenuItemButton({ item, active, onClick }: { item: NavItem; active: string; onClick: () => void }) {
-  const { code, label, Icon, badge } = item;
-  const isActive = active === code;
+export function BottomNav({ active, onNav, masquer, nomEntreprise, onLogout }: {
+  active: string; onNav: (code: string) => void; masquer: string[]; nomEntreprise: string; onLogout: () => void;
+}) {
+  const [menu, setMenu] = useState(false);
+  const tabs = PRIMARY_TABS.filter((n) => !masquer.includes(n.code));
+  const go = (code: string) => { onNav(code); setMenu(false); };
+  const menuActive = SECTIONS.flatMap((s) => s.items).some((i) => i.code === active && !PRIMARY_TABS.some((t) => t.code === i.code));
+
   return (
-    <button onClick={onClick}
-      className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl transition-all active:scale-[.98] ${isActive ? 'bg-[#b4e033] text-[#0e1c0f]' : 'bg-[#1e3222] text-[#edf5ea] border border-[#2a4230]'}`}>
-      <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isActive ? 'bg-[#0e1c0f]/15' : 'bg-[#2a4230]'}`}>
-        <Icon />
+    <>
+      <nav className="k-bottomnav">
+        {tabs.map(({ code, short, Icon }) => (
+          <button key={code} className={active === code ? 'on' : ''} onClick={() => go(code)}>
+            <Icon /><span>{short}</span>
+          </button>
+        ))}
+        <button className={menuActive ? 'on' : ''} onClick={() => setMenu(true)}>
+          <IcoGrid /><span>Menu</span>
+        </button>
+      </nav>
+
+      <div className={`k-sheet${menu ? ' open' : ''}`}>
+        <div className="scrim" onClick={() => setMenu(false)} />
+        <div className="panel">
+          <div className="k-brand" style={{ paddingTop: 0 }}>
+            <span className="mark"><IcoLayers /></span>
+            <div style={{ minWidth: 0 }}><b>Kombi</b><small style={{ display: 'block' }}>{nomEntreprise}</small></div>
+            <button className="k-icobtn" style={{ width: 34, height: 34, marginLeft: 'auto' }} onClick={() => setMenu(false)} aria-label="Fermer"><IcoX cls="w-4 h-4" /></button>
+          </div>
+          {SECTIONS.map((s) => {
+            const items = s.items.filter((i) => !masquer.includes(i.code));
+            if (items.length === 0) return null;
+            return (
+              <div key={s.titre}>
+                <p className="k-sec">{s.titre}</p>
+                {items.map((item) => (
+                  <button key={item.code} className={`k-nav${active === item.code ? ' on' : ''}${item.alert ? ' alert' : ''}`} onClick={() => go(item.code)}>
+                    <item.Icon /><span style={{ flex: 1 }}>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+          <button className="k-nav" style={{ color: 'var(--k-danger)', marginTop: 8 }} onClick={() => { setMenu(false); onLogout(); }}>
+            <IcoLogOut /><span style={{ flex: 1 }}>Se déconnecter</span>
+          </button>
+        </div>
       </div>
-      <span className="flex-1 text-left font-medium text-sm">{label}</span>
-      {badge !== undefined && (
-        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${isActive ? 'bg-[#0e1c0f]/20 text-[#0e1c0f]' : 'bg-[#f87171]/20 text-[#f87171]'}`}>{badge}</span>
-      )}
-      <IcoChevR cls={`w-4 h-4 shrink-0 ${isActive ? 'text-[#0e1c0f]/50' : 'text-[#4a6b4a]'}`} />
-    </button>
+    </>
   );
 }
 
-export function AppShell({ active, onNav, nomEntreprise, nomUtilisateur, entrepriseId, isOnline, masquer, onLogout, children }: {
+export function AppShell({ active, onNav, nomEntreprise, nomUtilisateur, entrepriseId, isOnline, masquer = [], onLogout, children }: {
   active: string; onNav: (code: string) => void; nomEntreprise: string; nomUtilisateur: string;
   entrepriseId: string | undefined; isOnline: boolean; masquer?: string[]; onLogout: () => void; children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen flex bg-[#0e1c0f]">
-      <Sidebar active={active} onNav={onNav} nomEntreprise={nomEntreprise} nomUtilisateur={nomUtilisateur} onLogout={onLogout} />
-      <div className="flex-1 flex flex-col min-w-0">
-        <TopBar active={active} isOnline={isOnline} entrepriseId={entrepriseId} nomUtilisateur={nomUtilisateur} onNav={onNav} />
-        <main className="flex-1 overflow-y-auto pb-28 md:pb-6">{children}</main>
+    <div className="kombi-app k-shell">
+      <Sidebar active={active} onNav={onNav} nomEntreprise={nomEntreprise} nomUtilisateur={nomUtilisateur} masquer={masquer} onLogout={onLogout} />
+      <div className="k-body">
+        <TopBar active={active} isOnline={isOnline} entrepriseId={entrepriseId} nomUtilisateur={nomUtilisateur} />
+        <main className="k-main">{children}</main>
       </div>
-      <BottomNav active={active} onNav={onNav} masquer={masquer} onLogout={onLogout} />
+      <BottomNav active={active} onNav={onNav} masquer={masquer} nomEntreprise={nomEntreprise} onLogout={onLogout} />
     </div>
   );
 }
 
-export { PRIMARY_TABS, MENU_MODULES, MENU_FINANCES, MENU_ADMIN };
+export { PRIMARY_TABS, SECTIONS };

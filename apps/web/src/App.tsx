@@ -122,12 +122,12 @@ function Espace() {
   const active = entreprises.find((e) => e.id === activeId) ?? entreprises[0]!;
   localStorage.setItem('kombi.entreprise', active.id);
 
-  function deconnexion() {
+  async function deconnexion() {
     localStorage.removeItem('kombi.entreprise');
     localStorage.removeItem('kombi.entreprises');
     localStorage.removeItem('kombi.logged');
-    void signOut();
-    location.reload();
+    try { await signOut(); }
+    finally { location.reload(); }
   }
 
   const role = active.role as RoleMembre;
@@ -156,15 +156,15 @@ function Espace() {
     <AppShell active={onglet} onNav={setOnglet} nomEntreprise={active.raison_sociale}
       nomUtilisateur={nomUtilisateur} entrepriseId={active.id} isOnline={navigator.onLine} masquer={masquer}
       onLogout={deconnexion}>
-      <div className="px-4 pt-4 md:px-8 md:pt-6">
+      <div>
         <OfflineBanner />
         {onglet === 'dashboard' && justCreated ? <WelcomeBanner onNav={(m) => { setJustCreated(false); setOnglet(m); }} />
-          : onglet === 'dashboard' ? <Dashboard entreprise={active} onCaisse={() => setOnglet('caisse')} onNav={setOnglet} />
+          : onglet === 'dashboard' ? <Dashboard entreprise={active} nomUtilisateur={nomUtilisateur} onCaisse={() => setOnglet('caisse')} onNav={setOnglet} />
           : onglet === 'caisse' ? <Caisse entreprise={active} onHistorique={() => setOnglet('ventes')} />
           : onglet === 'ventes' ? <Ventes entreprise={active} role={role} onRetour={() => setOnglet('caisse')} />
           : onglet === 'stock' ? <Stock entreprise={active} />
           : onglet === 'factures' ? <Factures entreprise={active} />
-          : onglet === 'commandes' ? <Commandes entreprise={active} onRetour={() => setOnglet('dashboard')} />
+          : onglet === 'commandes' ? <Commandes entreprise={active} role={role} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'depenses' ? <Depenses entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'creances' ? <Creances entreprise={active} onRetour={() => setOnglet('dashboard')} />
           : onglet === 'dettes' ? <Dettes entreprise={active} onRetour={() => setOnglet('dashboard')} />
