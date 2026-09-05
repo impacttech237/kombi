@@ -8,44 +8,35 @@ import {
   YAxis, CartesianGrid,
 } from 'recharts';
 import { formaterFCFA } from '@kombi/shared';
+import { AreaChart as BklitAreaChart, Area as BklitArea } from './charts/area-chart.js';
+import { BarChart as BklitBarChart } from './charts/bar-chart.js';
+import { Bar as BklitBar } from './charts/bar.js';
+import { BarXAxis } from './charts/bar-x-axis.js';
+import { Grid as BklitGrid } from './charts/grid.js';
+import { XAxis as BklitXAxis } from './charts/x-axis.js';
+import { ChartTooltip as BklitTooltip } from './charts/tooltip/chart-tooltip.js';
+import { Gauge } from './charts/gauge.js';
 
 export function SalesAreaChart({ data, days }: { data: number[]; days: string[] }) {
-  const chartData = data.map((value, i) => ({ day: days[i], value }));
+  const chartData = data.map((value, i) => ({
+    date: new Date(Date.now() - (data.length - 1 - i) * 86_400_000),
+    day: days[i] ?? '',
+    value,
+  }));
   return (
-    <ResponsiveContainer width="100%" height={148}>
-      <AreaChart data={chartData} margin={{ top: 16, right: 4, bottom: 0, left: 0 }}>
-        <defs>
-          <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#b4e033" stopOpacity={0.28} />
-            <stop offset="90%" stopColor="#b4e033" stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid vertical={false} stroke="#2a4230" strokeDasharray="3 3" strokeWidth={0.8} />
-        <XAxis dataKey="day" tick={{ fill: '#4a6b4a', fontSize: 11, fontWeight: 500 }} axisLine={false} tickLine={false} />
-        <Tooltip
-          cursor={{ stroke: '#b4e033', strokeWidth: 1, strokeDasharray: '4 4' }}
-          content={({ active, payload, label }) => {
-            if (!active || !payload?.length) return null;
-            return (
-              <div className="bg-[#b4e033] rounded-lg px-3 py-1.5 shadow-lg">
-                <p className="text-[#0e1c0f] text-xs font-bold font-mono">{formaterFCFA(payload[0]!.value as number)}</p>
-                <p className="text-[#0e1c0f]/70 text-[10px]">{label}</p>
-              </div>
-            );
-          }}
-        />
-        <Area type="monotone" dataKey="value" stroke="#b4e033" strokeWidth={2.5}
-          fill="url(#salesGrad)"
-          dot={(props: { cx?: number; cy?: number; index?: number }) => {
-            const { cx = 0, cy = 0, index = 0 } = props;
-            const today = index === data.length - 1;
-            return <circle key={index} cx={cx} cy={cy} r={today ? 5 : 3.5} fill={today ? '#b4e033' : '#162419'} stroke="#b4e033" strokeWidth={2} />;
-          }}
-          activeDot={{ r: 6, fill: '#b4e033', stroke: '#0e1c0f', strokeWidth: 2 }}
-        />
-      </AreaChart>
-    </ResponsiveContainer>
+    <div className="h-[148px] [--chart-grid:#2a4230] [--chart-crosshair:#b4e033]">
+      <BklitAreaChart data={chartData} aspectRatio="auto" style={{ height: 148 }} margin={{ top: 12, right: 12, bottom: 28, left: 12 }}>
+        <BklitGrid horizontal stroke="#2a4230" strokeDasharray="3,3" />
+        <BklitArea dataKey="value" fill="#b4e033" stroke="#b4e033" fillOpacity={0.28} showMarkers fadeEdges />
+        <BklitXAxis numTicks={Math.min(7, data.length)} />
+        <BklitTooltip indicatorColor="#b4e033" indicatorDasharray="4,4" rows={(p) => [{ label: String(p.day ?? 'Ventes'), value: formaterFCFA(Number(p.value ?? 0)), color: '#b4e033' }]} />
+      </BklitAreaChart>
+    </div>
   );
+}
+
+export function PerformanceGauge({ value, label }: { value: number; label: string }) {
+  return <div className="h-24"><Gauge orientation="linear" value={Math.max(0, Math.min(100, value))} centerValue={Math.round(value)} suffix="%" defaultLabel={label} totalNotches={36} spacing={10} notchCornerRadius={3} activeFill="#b4e033" inactiveFill="#2a4230" inactiveFillOpacity={0.5} /></div>;
 }
 
 export function CashFlowRing({ totalIn, totalOut }: { totalIn: number; totalOut: number }) {
@@ -233,25 +224,14 @@ export function DepensesCategorieDonut({ data, onSelect }: {
 /** Évolution mensuelle d'une valeur (dépenses, CA…) sur plusieurs mois — barres verticales. */
 export function EvolutionMensuelleChart({ data }: { data: { moisLabel: string; total: number }[] }) {
   return (
-    <ResponsiveContainer width="100%" height={140}>
-      <BarChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 0 }}>
-        <CartesianGrid vertical={false} stroke="#2a4230" strokeDasharray="3 3" strokeWidth={0.8} />
-        <XAxis dataKey="moisLabel" tick={{ fill: '#4a6b4a', fontSize: 10, fontWeight: 500 }} axisLine={false} tickLine={false} />
-        <Tooltip
-          cursor={{ fill: '#b4e033', fillOpacity: 0.05 }}
-          content={({ active, payload, label }) => {
-            if (!active || !payload?.length) return null;
-            return (
-              <div className="bg-[#b4e033] rounded-lg px-3 py-1.5 shadow-lg">
-                <p className="text-[#0e1c0f] text-xs font-bold font-mono">{formaterFCFA(payload[0]!.value as number)}</p>
-                <p className="text-[#0e1c0f]/70 text-[10px]">{label}</p>
-              </div>
-            );
-          }}
-        />
-        <Bar dataKey="total" radius={[4, 4, 0, 0]} maxBarSize={28} fill="#b4e033" fillOpacity={0.75} />
-      </BarChart>
-    </ResponsiveContainer>
+    <div className="h-[140px] [--chart-grid:#2a4230] [--chart-crosshair:#b4e033]">
+      <BklitBarChart data={data} xDataKey="moisLabel" aspectRatio="auto" className="h-[140px]" margin={{ top: 8, right: 8, bottom: 28, left: 8 }} barGap={0.28}>
+        <BklitGrid horizontal stroke="#2a4230" strokeDasharray="3,3" />
+        <BklitBar dataKey="total" fill="#b4e033" lineCap={5} />
+        <BarXAxis />
+        <BklitTooltip showDatePill={false} indicatorColor="#b4e033" rows={(p) => [{ label: String(p.moisLabel ?? ''), value: formaterFCFA(Number(p.total ?? 0)), color: '#b4e033' }]} />
+      </BklitBarChart>
+    </div>
   );
 }
 

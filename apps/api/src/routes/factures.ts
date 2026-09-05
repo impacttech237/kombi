@@ -29,9 +29,9 @@ function prefixe(raisonSociale: string): string {
 
 async function emetteur(c: { env: AppEnv['Bindings'] }, entrepriseId: string) {
   return (c.env as AppEnv['Bindings']).DB
-    .prepare('SELECT raison_sociale, niu, assujetti_tva, note_facture FROM entreprise WHERE id = ?')
+    .prepare('SELECT raison_sociale, niu, assujetti_tva, note_facture, en_tete_facture, couleur_facture FROM entreprise WHERE id = ?')
     .bind(entrepriseId)
-    .first<{ raison_sociale: string; niu: string | null; assujetti_tva: number; note_facture: string | null }>();
+    .first<{ raison_sociale: string; niu: string | null; assujetti_tva: number; note_facture: string | null; en_tete_facture: string | null; couleur_facture: string | null }>();
 }
 
 factures.get('/', requirePermission('facture:read'), async (c) => {
@@ -135,7 +135,10 @@ factures.get('/:id/pdf', requirePermission('facture:read'), async (c) => {
   const f = (await stubEntreprise(c.env, entrepriseId).getFacture(c.req.param('id'))) as DonneesFacture | null;
   if (!f) return c.json({ erreur: 'Facture introuvable' }, 404);
   const ent = await emetteur(c, entrepriseId);
-  const pdf = await genererFacturePDF(f, { raisonSociale: ent?.raison_sociale ?? 'Kombi', niu: ent?.niu, noteFacture: ent?.note_facture });
+  const pdf = await genererFacturePDF(f, {
+    raisonSociale: ent?.raison_sociale ?? 'Kombi', niu: ent?.niu, noteFacture: ent?.note_facture,
+    enTeteFacture: ent?.en_tete_facture, couleurFacture: ent?.couleur_facture,
+  });
   return new Response(pdf, {
     headers: {
       'content-type': 'application/pdf',

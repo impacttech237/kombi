@@ -14,7 +14,9 @@ import Dexie, { type Table } from 'dexie';
  */
 export type TypeMutation =
   | 'vente' | 'depense' | 'tiers' | 'stock_entree'
-  | 'paiement_vente' | 'paiement_facture' | 'paiement_achat';
+  | 'paiement_vente' | 'paiement_facture' | 'paiement_achat' | 'commande'
+  | 'operation_tache' | 'operation_commentaire' | 'operation_cout' | 'operation_echeance'
+  | 'operation_piece' | 'equipe_disponibilite' | 'equipe_frais';
 
 export interface Mutation {
   clientUuid: string;

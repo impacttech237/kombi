@@ -1494,6 +1494,10 @@ export class EntrepriseDO extends DurableObject {
   async creerCommande(cmd: {
     type?: 'commande' | 'mission'; tiersId?: string | null; libelle: string;
     montant?: number | null; datePrevue?: string | null; clientUuid?: string | null;
+    description?: string | null; priorite?: string; dateDebut?: string | null; dateRendezVous?: string | null;
+    datePaiement?: string | null; lieu?: string | null; responsableId?: string | null;
+    responsableNom?: string | null; acompte?: number; remboursement?: number;
+    coutBudget?: number; reference?: string | null;
   }): Promise<string> {
     if (cmd.clientUuid) {
       const ex = this.sql.exec('SELECT id FROM commande WHERE client_uuid = ?', cmd.clientUuid).toArray()[0] as { id: string } | undefined;
@@ -1501,32 +1505,160 @@ export class EntrepriseDO extends DurableObject {
     }
     const id = uid();
     this.sql.exec(
-      `INSERT INTO commande (id, type, tiers_id, libelle, montant, date_prevue, client_uuid)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO commande (id, type, tiers_id, libelle, montant, date_prevue, client_uuid,
+        description, priorite, date_debut, date_rendez_vous, date_paiement, lieu,
+        responsable_id, responsable_nom, acompte, remboursement, cout_budget, reference)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id, cmd.type ?? 'commande', cmd.tiersId ?? null, cmd.libelle,
       cmd.montant ?? null, cmd.datePrevue ?? null, cmd.clientUuid ?? null,
+      cmd.description ?? null, cmd.priorite ?? 'normale', cmd.dateDebut ?? null,
+      cmd.dateRendezVous ?? null, cmd.datePaiement ?? null, cmd.lieu ?? null,
+      cmd.responsableId ?? null, cmd.responsableNom ?? null, cmd.acompte ?? 0, cmd.remboursement ?? 0,
+      cmd.coutBudget ?? 0, cmd.reference ?? `OPE-${new Date().getFullYear()}-${id.slice(0,6).toUpperCase()}`,
     );
+    this.historiserOperation(id, 'creation', 'Opération créée');
     return id;
   }
 
   async listerCommandes(): Promise<Record<string, unknown>[]> {
     return this.sql.exec(
-      `SELECT c.id, c.type, c.libelle, c.statut, c.montant, c.date_prevue, t.nom AS tiers_nom
+      `SELECT c.*, t.nom AS tiers_nom, t.telephone AS tiers_telephone,
+              (SELECT COUNT(*) FROM tache_operation x WHERE x.commande_id=c.id) AS nb_taches,
+              (SELECT COUNT(*) FROM tache_operation x WHERE x.commande_id=c.id AND x.statut='terminee') AS nb_taches_terminees,
+              (SELECT COUNT(*) FROM tache_operation x WHERE x.commande_id=c.id AND x.statut='bloquee') AS nb_taches_bloquees,
+              COALESCE((SELECT SUM(x.montant) FROM cout_operation x WHERE x.commande_id=c.id),0) AS cout_reel,
+              COALESCE((SELECT SUM(x.montant) FROM echeance_operation x WHERE x.commande_id=c.id AND x.type='encaissement' AND x.statut='payee'),0) AS encaissements_echeancier,
+              COALESCE((SELECT SUM(x.montant) FROM echeance_operation x WHERE x.commande_id=c.id AND x.type='remboursement' AND x.statut='payee'),0) AS remboursements_echeancier
          FROM commande c LEFT JOIN tiers t ON t.id = c.tiers_id
         ORDER BY c.created_at DESC`,
     ).toArray() as never;
   }
 
   async changerStatutCommande(id: string, statut: string): Promise<void> {
-    const ok = ['en_attente', 'en_cours', 'livree', 'annulee'];
+    const ok = ['en_attente', 'en_cours', 'controle', 'prete', 'livree', 'bloquee', 'annulee'];
     if (!ok.includes(statut)) throw new Error('Statut invalide');
     this.sql.exec("UPDATE commande SET statut = ?, updated_at = datetime('now') WHERE id = ?", statut, id);
+    this.historiserOperation(id, 'statut', statut);
+  }
+
+  async modifierCommande(id: string, cmd: Record<string, unknown>): Promise<void> {
+    const permis: Record<string,string> = { libelle:'libelle',description:'description',priorite:'priorite',dateDebut:'date_debut',datePrevue:'date_prevue',dateRendezVous:'date_rendez_vous',datePaiement:'date_paiement',lieu:'lieu',responsableId:'responsable_id',responsableNom:'responsable_nom',montant:'montant',acompte:'acompte',remboursement:'remboursement',coutBudget:'cout_budget',motifBlocage:'motif_blocage',valideeClientLe:'validee_client_le',preuveLivraison:'preuve_livraison' };
+    if (!this.sql.exec('SELECT 1 FROM commande WHERE id=?',id).toArray()[0]) throw new Error('Opération introuvable');
+    const entrees=Object.entries(cmd).filter(([k])=>permis[k]);
+    if (!entrees.length) return;
+    this.sql.exec(`UPDATE commande SET ${entrees.map(([k])=>`${permis[k]}=?`).join(',')}, updated_at=datetime('now') WHERE id=?`,...entrees.map(([,v])=>v ?? null),id);
+    this.historiserOperation(id,'modification',entrees.map(([k])=>k).join(', '));
+  }
+
+  async dupliquerCommande(id: string): Promise<string> {
+    const c=this.sql.exec('SELECT * FROM commande WHERE id=?',id).toArray()[0] as Record<string,unknown>|undefined;
+    if(!c) throw new Error('Opération introuvable');
+    const nouveau=await this.creerCommande({type:c.type as 'commande'|'mission',tiersId:c.tiers_id as string|null,libelle:`Copie — ${c.libelle}`,montant:c.montant as number|null,description:c.description as string|null,priorite:c.priorite as string,lieu:c.lieu as string|null,responsableId:c.responsable_id as string|null,responsableNom:c.responsable_nom as string|null,coutBudget:c.cout_budget as number});
+    const ts=this.sql.exec('SELECT * FROM tache_operation WHERE commande_id=? ORDER BY ordre',id).toArray() as Record<string,unknown>[];const correspondance=new Map<string,string>();
+    for(const t of ts){const nid=await this.creerTacheOperation(nouveau,{titre:t.titre as string,description:t.description as string|null,priorite:t.priorite as string,responsableId:t.responsable_id as string|null,responsableNom:t.responsable_nom as string|null,dateEcheance:t.date_echeance as string|null,dependDeId:correspondance.get(t.depend_de_id as string)});correspondance.set(t.id as string,nid)}
+    return nouveau;
+  }
+
+  async archiverCommande(id:string, archivee:boolean):Promise<void>{this.sql.exec("UPDATE commande SET archivee=?,updated_at=datetime('now') WHERE id=?",archivee?1:0,id);this.historiserOperation(id,archivee?'archivage':'restauration',null)}
+
+  async creerTacheOperation(commandeId: string, t: {
+    titre: string; description?: string | null; priorite?: string; responsableId?: string | null;
+    responsableNom?: string | null; dateEcheance?: string | null; dependDeId?: string | null;
+    parentId?:string|null; dureeMinutes?:number; recurrence?:string|null; assignes?:{id:string;nom:string}[];
+  }): Promise<string> {
+    if (!this.sql.exec('SELECT 1 FROM commande WHERE id=?', commandeId).toArray()[0]) throw new Error('Opération introuvable');
+    const id = uid();
+    const ordre = (this.sql.exec('SELECT COALESCE(MAX(ordre),-1)+1 AS n FROM tache_operation WHERE commande_id=?', commandeId).toArray()[0] as { n: number }).n;
+    this.sql.exec(
+      `INSERT INTO tache_operation (id, commande_id, titre, description, priorite, responsable_id, responsable_nom, date_echeance, ordre, depend_de_id,parent_id,duree_minutes,recurrence)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?)`,
+      id, commandeId, t.titre, t.description ?? null, t.priorite ?? 'normale', t.responsableId ?? null,
+      t.responsableNom ?? null, t.dateEcheance ?? null, ordre, t.dependDeId ?? null,t.parentId??null,t.dureeMinutes??0,t.recurrence??null,
+    );
+    for(const a of t.assignes??[])this.sql.exec('INSERT OR IGNORE INTO assignation_tache(tache_id,utilisateur_id,nom) VALUES(?,?,?)',id,a.id,a.nom);
+    this.recalculerProgressionOperation(commandeId);
+    return id;
+  }
+
+  async listerTachesOperations(): Promise<Record<string, unknown>[]> {
+    return this.sql.exec("SELECT t.*,(SELECT GROUP_CONCAT(a.nom,' · ') FROM assignation_tache a WHERE a.tache_id=t.id) AS assignes_noms FROM tache_operation t ORDER BY date_echeance IS NULL,date_echeance,ordre").toArray() as never;
+  }
+
+  async changerStatutTache(id: string, statut: string): Promise<void> {
+    if (!['a_faire', 'en_cours', 'bloquee', 'terminee'].includes(statut)) throw new Error('Statut de tâche invalide');
+    const row = this.sql.exec('SELECT commande_id FROM tache_operation WHERE id=?', id).toArray()[0] as { commande_id: string } | undefined;
+    if (!row) throw new Error('Tâche introuvable');
+    if (statut === 'en_cours' || statut === 'terminee') {
+      const dependance = this.sql.exec(
+        `SELECT d.statut FROM tache_operation t JOIN tache_operation d ON d.id=t.depend_de_id WHERE t.id=?`, id,
+      ).toArray()[0] as { statut: string } | undefined;
+      if (dependance && dependance.statut !== 'terminee') throw new Error('La tâche précédente doit être terminée');
+    }
+    this.sql.exec("UPDATE tache_operation SET statut=?, updated_at=datetime('now') WHERE id=?", statut, id);
+    this.recalculerProgressionOperation(row.commande_id);
+    if(statut==='terminee'){
+      const t=this.sql.exec('SELECT * FROM tache_operation WHERE id=?',id).toArray()[0] as Record<string,unknown>;
+      if(t.recurrence&&t.date_echeance){const d=new Date(`${t.date_echeance}T12:00:00`);if(t.recurrence==='quotidienne')d.setDate(d.getDate()+1);if(t.recurrence==='hebdomadaire')d.setDate(d.getDate()+7);if(t.recurrence==='mensuelle')d.setMonth(d.getMonth()+1);await this.creerTacheOperation(row.commande_id,{titre:t.titre as string,description:t.description as string|null,priorite:t.priorite as string,responsableId:t.responsable_id as string|null,responsableNom:t.responsable_nom as string|null,dateEcheance:d.toISOString().slice(0,10),dureeMinutes:t.duree_minutes as number,recurrence:t.recurrence as string});}
+    }
+  }
+
+  async modifierTacheOperation(id:string,d:Record<string,unknown>):Promise<void>{const map:Record<string,string>={titre:'titre',description:'description',priorite:'priorite',dateEcheance:'date_echeance',dureeMinutes:'duree_minutes',recurrence:'recurrence',responsableId:'responsable_id',responsableNom:'responsable_nom',dependDeId:'depend_de_id',parentId:'parent_id'};const es=Object.entries(d).filter(([k])=>map[k]);if(es.length)this.sql.exec(`UPDATE tache_operation SET ${es.map(([k])=>`${map[k]}=?`).join(',')},updated_at=datetime('now') WHERE id=?`,...es.map(([,v])=>v??null),id)}
+  async supprimerTacheOperation(id:string):Promise<void>{const r=this.sql.exec('SELECT commande_id FROM tache_operation WHERE id=?',id).toArray()[0] as {commande_id:string}|undefined;if(!r)return;this.sql.exec('UPDATE tache_operation SET depend_de_id=NULL,parent_id=NULL WHERE depend_de_id=? OR parent_id=?',id,id);this.sql.exec('DELETE FROM tache_operation WHERE id=?',id);this.recalculerProgressionOperation(r.commande_id)}
+
+  async ajouterCommentaireOperation(commandeId: string, message: string, auteurId?: string, auteurNom?: string): Promise<string> {
+    if (!this.sql.exec('SELECT 1 FROM commande WHERE id=?', commandeId).toArray()[0]) throw new Error('Opération introuvable');
+    const id = uid();
+    this.sql.exec('INSERT INTO commentaire_operation (id,commande_id,auteur_id,auteur_nom,message) VALUES (?,?,?,?,?)', id, commandeId, auteurId ?? null, auteurNom ?? null, message);
+    return id;
+  }
+  async listerCommentairesOperations(): Promise<Record<string, unknown>[]> {
+    return this.sql.exec('SELECT id,commande_id,auteur_id,auteur_nom,message,created_at AS cree_le FROM commentaire_operation ORDER BY created_at').toArray() as never;
+  }
+  private historiserOperation(commandeId:string,action:string,detail?:string|null,auteurNom?:string|null):void{this.sql.exec('INSERT INTO historique_operation(id,commande_id,action,detail,auteur_nom) VALUES(?,?,?,?,?)',uid(),commandeId,action,detail??null,auteurNom??null)}
+  async listerHistoriqueOperations():Promise<Record<string,unknown>[]>{return this.sql.exec('SELECT * FROM historique_operation ORDER BY created_at DESC').toArray() as never}
+  async ajouterCoutOperation(commandeId:string,c:{categorie:string;libelle:string;montant:number;date:string;fournisseurNom?:string|null;depenseId?:string|null}):Promise<string>{if(!this.sql.exec('SELECT 1 FROM commande WHERE id=?',commandeId).toArray()[0])throw new Error('Opération introuvable');const id=uid();this.sql.exec('INSERT INTO cout_operation(id,commande_id,categorie,libelle,montant,date,fournisseur_nom,depense_id) VALUES(?,?,?,?,?,?,?,?)',id,commandeId,c.categorie,c.libelle,c.montant,c.date,c.fournisseurNom??null,c.depenseId??null);if(c.depenseId)this.sql.exec('UPDATE depense SET commande_id=? WHERE id=?',commandeId,c.depenseId);this.historiserOperation(commandeId,'cout',`${c.libelle} : ${c.montant}`);return id}
+  async listerCoutsOperations():Promise<Record<string,unknown>[]>{return this.sql.exec('SELECT * FROM cout_operation ORDER BY date DESC').toArray() as never}
+  async supprimerCoutOperation(id:string):Promise<void>{const r=this.sql.exec('SELECT commande_id FROM cout_operation WHERE id=?',id).toArray()[0] as {commande_id:string}|undefined;if(r){this.sql.exec('DELETE FROM cout_operation WHERE id=?',id);this.historiserOperation(r.commande_id,'suppression_cout',id)}}
+  async ajouterEcheanceOperation(commandeId:string,e:{type:string;libelle:string;montant:number;datePrevue:string}):Promise<string>{if(!this.sql.exec('SELECT 1 FROM commande WHERE id=?',commandeId).toArray()[0])throw new Error('Opération introuvable');const id=uid();this.sql.exec('INSERT INTO echeance_operation(id,commande_id,type,libelle,montant,date_prevue) VALUES(?,?,?,?,?,?)',id,commandeId,e.type,e.libelle,e.montant,e.datePrevue);this.historiserOperation(commandeId,'echeance',`${e.libelle} : ${e.montant}`);return id}
+  async listerEcheancesOperations():Promise<Record<string,unknown>[]>{return this.sql.exec('SELECT * FROM echeance_operation ORDER BY date_prevue').toArray() as never}
+  async payerEcheanceOperation(id:string,modePaiement:string,datePaiement?:string|null):Promise<void>{const e=this.sql.exec('SELECT commande_id,type,montant FROM echeance_operation WHERE id=?',id).toArray()[0] as {commande_id:string;type:string;montant:number}|undefined;if(!e)throw new Error('Échéance introuvable');this.sql.exec("UPDATE echeance_operation SET statut='payee',mode_paiement=?,date_paiement=? WHERE id=?",modePaiement,datePaiement??new Date().toISOString().slice(0,10),id);if(e.type==='encaissement')this.sql.exec('UPDATE commande SET acompte=acompte+? WHERE id=?',e.montant,e.commande_id);else this.sql.exec('UPDATE commande SET remboursement=remboursement+? WHERE id=?',e.montant,e.commande_id);this.historiserOperation(e.commande_id,'paiement',`${e.type} : ${e.montant}`)}
+  async ajouterPieceOperation(commandeId:string,cle:string,nom:string,typeMime:string,categorie:string):Promise<string>{const id=uid();this.sql.exec('INSERT INTO piece_operation(id,commande_id,cle,nom,type_mime,categorie) VALUES(?,?,?,?,?,?)',id,commandeId,cle,nom,typeMime,categorie);return id}
+  async listerPiecesOperations():Promise<Record<string,unknown>[]>{return this.sql.exec('SELECT * FROM piece_operation ORDER BY created_at DESC').toArray() as never}
+  async getPieceOperation(id:string):Promise<string|null>{return (this.sql.exec('SELECT cle FROM piece_operation WHERE id=?',id).toArray()[0] as {cle:string}|undefined)?.cle??null}
+  async supprimerPieceOperation(id:string):Promise<string|null>{const cle=await this.getPieceOperation(id);this.sql.exec('DELETE FROM piece_operation WHERE id=?',id);return cle}
+  async ajouterDisponibiliteEquipe(d:{utilisateurId:string;nom:string;type:string;debut:string;fin:string;motif?:string|null}):Promise<string>{const id=uid();this.sql.exec('INSERT INTO disponibilite_equipe(id,utilisateur_id,nom,type,debut,fin,motif) VALUES(?,?,?,?,?,?,?)',id,d.utilisateurId,d.nom,d.type,d.debut,d.fin,d.motif??null);return id}
+  async listerDisponibilitesEquipe():Promise<Record<string,unknown>[]>{return this.sql.exec('SELECT * FROM disponibilite_equipe ORDER BY debut').toArray() as never}
+  async supprimerDisponibiliteEquipe(id:string):Promise<void>{this.sql.exec('DELETE FROM disponibilite_equipe WHERE id=?',id)}
+  async ajouterFraisEquipe(d:{utilisateurId:string;nom:string;type:string;libelle:string;montant:number;modePaiement:string;date:string;depenseId?:string|null}):Promise<string>{const id=uid();this.sql.exec('INSERT INTO frais_equipe(id,utilisateur_id,nom,type,libelle,montant,mode_paiement,date,depense_id) VALUES(?,?,?,?,?,?,?,?,?)',id,d.utilisateurId,d.nom,d.type,d.libelle,d.montant,d.modePaiement,d.date,d.depenseId??null);return id}
+  async listerFraisEquipe():Promise<Record<string,unknown>[]>{return this.sql.exec('SELECT * FROM frais_equipe ORDER BY date DESC').toArray() as never}
+  async commandeExiste(id: string): Promise<boolean> { return !!this.sql.exec('SELECT 1 FROM commande WHERE id=?', id).toArray()[0]; }
+  async attacherPieceCommande(id: string, cle: string | null): Promise<void> { this.sql.exec('UPDATE commande SET piece_cle=? WHERE id=?', cle, id); }
+  async getPieceCommande(id: string): Promise<string | null> { return (this.sql.exec('SELECT piece_cle FROM commande WHERE id=?', id).toArray()[0] as { piece_cle: string | null } | undefined)?.piece_cle ?? null; }
+
+  async creerFactureDepuisCommande(id: string, clientUuid?: string | null): Promise<string> {
+    const c = this.sql.exec('SELECT tiers_id,libelle,montant,facture_id FROM commande WHERE id=?', id).toArray()[0] as { tiers_id:string|null;libelle:string;montant:number|null;facture_id:string|null } | undefined;
+    if (!c) throw new Error('Opération introuvable');
+    if (c.facture_id) return c.facture_id;
+    if (!c.tiers_id) throw new Error('Un client est requis pour créer la facture');
+    if (!c.montant || c.montant <= 0) throw new Error('Un montant est requis pour créer la facture');
+    const factureId = await this.creerFacture({ type:'facture', tiersId:c.tiers_id, lignes:[{designation:c.libelle,quantite:1,prixUnitaire:c.montant}], clientUuid });
+    this.sql.exec('UPDATE commande SET facture_id=? WHERE id=?', factureId, id);
+    return factureId;
+  }
+
+  private recalculerProgressionOperation(commandeId: string): void {
+    const r = this.sql.exec(
+      `SELECT COUNT(*) AS total, SUM(CASE WHEN statut='terminee' THEN 1 ELSE 0 END) AS faites
+         FROM tache_operation WHERE commande_id=?`, commandeId,
+    ).toArray()[0] as { total: number; faites: number | null };
+    const progression = r.total ? Math.round(((r.faites ?? 0) / r.total) * 100) : 0;
+    this.sql.exec("UPDATE commande SET progression=?, updated_at=datetime('now') WHERE id=?", progression, commandeId);
   }
 
   /** Nombre de commandes actives (non livrées, non annulées) — pour le tableau de bord. */
   async commandesActives(): Promise<number> {
     const r = this.sql.exec(
-      "SELECT COUNT(*) AS n FROM commande WHERE statut IN ('en_attente','en_cours')",
+      "SELECT COUNT(*) AS n FROM commande WHERE statut NOT IN ('livree','annulee')",
     ).toArray()[0] as { n: number };
     return r.n;
   }
@@ -1924,7 +2056,11 @@ export class EntrepriseDO extends DurableObject {
   /** CA HT, coût, marge, dépenses et résultat approximatif sur une fenêtre [début, fin). */
   private statsPeriode(debut: string, fin: string): { ca: number; cogs: number; marge: number; depenses: number; resultat: number } {
     const ca = (this.sql.exec(
-      `SELECT COALESCE(SUM(total_ht), 0) AS ca FROM vente WHERE statut != 'annulee' AND date >= ? AND date < ?`,
+      `SELECT COALESCE(SUM(CASE WHEN l.sens = 'credit' THEN l.montant ELSE -l.montant END), 0) AS ca
+         FROM ligne_ecriture l
+         JOIN compte_comptable c ON c.id = l.compte_id
+         JOIN ecriture e ON e.id = l.ecriture_id
+        WHERE c.classe = 7 AND e.statut = 'validee' AND e.date_operation >= ? AND e.date_operation < ?`,
       debut, fin,
     ).toArray()[0] as { ca: number }).ca;
     const cogs = (this.sql.exec(
@@ -2223,8 +2359,9 @@ export class EntrepriseDO extends DurableObject {
     const aujourdhui = this.dateCourante();
     const limite = new Date(Date.parse(aujourdhui) + horizonJours * 86_400_000).toISOString().slice(0, 10);
 
-    const creances = await this.listerVentesACredit() as { date_echeance: string | null; total_ttc: number; regle: number }[];
-    const entreesAttendues = creances
+    const ventesCredit = await this.listerVentesACredit() as { date_echeance: string | null; total_ttc: number; regle: number }[];
+    const facturesImpayees = await this.listerFacturesImpayees() as { date_echeance: string | null; total_ttc: number; regle: number }[];
+    const entreesAttendues = [...ventesCredit, ...facturesImpayees]
       .filter((c) => c.date_echeance !== null && c.date_echeance >= aujourdhui && c.date_echeance <= limite)
       .reduce((s, c) => s + (c.total_ttc - c.regle), 0);
 
@@ -2570,6 +2707,23 @@ export class EntrepriseDO extends DurableObject {
     return this.sql.exec(
       `SELECT id, exercice_id, date_operation, libelle, source, statut, total_debit, total_credit
          FROM ecriture WHERE statut = 'validee' ORDER BY created_at DESC`,
+    ).toArray() as never;
+  }
+
+  /** Mouvements effectivement passés sur les quatre comptes de trésorerie. */
+  async listerMouvementsTresorerie(limite = 100): Promise<Record<string, unknown>[]> {
+    return this.sql.exec(
+      `SELECT e.id, e.date_operation AS date, e.libelle, e.source, c.numero AS compte_numero,
+              SUM(CASE WHEN l.sens = 'debit' THEN l.montant ELSE -l.montant END) AS montant_net
+         FROM ecriture e
+         JOIN ligne_ecriture l ON l.ecriture_id = e.id
+         JOIN compte_comptable c ON c.id = l.compte_id
+        WHERE e.statut = 'validee' AND c.numero IN ('571', '5521', '5522', '521')
+        GROUP BY e.id, e.date_operation, e.libelle, e.source, c.numero
+       HAVING montant_net <> 0
+        ORDER BY e.date_operation DESC, e.created_at DESC
+        LIMIT ?`,
+      limite,
     ).toArray() as never;
   }
 

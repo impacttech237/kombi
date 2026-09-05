@@ -13,8 +13,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formaterFCFA as fmt } from '@kombi/shared';
 import {
-  soldesTresorerie, listerVentesRecentes, listerDepenses, enregistrerPointage,
-  type EntrepriseResume, type TresorerieJour, type VenteRecente, type Depense,
+  soldesTresorerie, listerMouvementsTresorerie, enregistrerPointage,
+  type EntrepriseResume, type TresorerieJour, type MouvementTresorerie,
 } from '../lib/api.js';
 import { MODE_PAIEMENT_LABEL, MODE_PAIEMENT_COULEUR } from '../components/charts.js';
 import { IcoDn, IcoUp, IcoPlus, IcoX, Avatar } from '../components/icons.js';
@@ -66,32 +66,27 @@ export function Tresorerie({ entreprise, onCaisse, onDepenses }: {
   entreprise: EntrepriseResume; onCaisse: () => void; onDepenses: () => void;
 }) {
   const [tresor, setTresor] = useState<TresorerieJour | null>(null);
-  const [ventes, setVentes] = useState<VenteRecente[]>([]);
-  const [depenses, setDepenses] = useState<Depense[]>([]);
+  const [mouvements, setMouvements] = useState<MouvementTresorerie[]>([]);
   const [txFilter, setTxFilter] = useState<'all' | 'in' | 'out'>('all');
   const [frontCard, setFrontCard] = useState(0);
   const [pointageOuvert, setPointageOuvert] = useState(false);
 
   useEffect(() => {
     soldesTresorerie(entreprise.id).then(setTresor).catch(() => {});
-    listerVentesRecentes(entreprise.id).then(setVentes).catch(() => {});
-    listerDepenses(entreprise.id).then(setDepenses).catch(() => {});
+    listerMouvementsTresorerie(entreprise.id).then(setMouvements).catch(() => {});
   }, [entreprise.id]);
 
   const total = tresor ? COMPTES.reduce((s, c) => s + (tresor[c.code] ?? 0), 0) : 0;
 
   const txs: Tx[] = useMemo(() => {
-    const v: Tx[] = ventes.filter((v) => v.mode_paiement).map((v) => ({
-      id: `v-${v.id}`, date: v.date, time: new Date(v.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-      description: v.tiers_nom ? `Vente · ${v.tiers_nom}` : 'Vente au comptant', type: 'in', amount: v.total_ttc,
-      method: v.mode_paiement!, client: v.tiers_nom,
-    }));
-    const d: Tx[] = depenses.map((d) => ({
-      id: `d-${d.id}`, date: d.date, time: new Date(d.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-      description: d.libelle, type: 'out', amount: d.montant, method: d.mode_paiement, client: d.tiers_nom,
-    }));
-    return [...v, ...d].sort((a, b) => b.date.localeCompare(a.date));
-  }, [ventes, depenses]);
+    const modes: Record<string, string> = { '571': 'especes', '5521': 'orange_money', '5522': 'mtn_momo', '521': 'virement' };
+    return mouvements.map((m) => ({
+      id: `${m.id}-${m.compte_numero}`, date: m.date,
+      time: m.date.includes('T') || m.date.includes(' ') ? new Date(m.date.replace(' ', 'T')).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '—',
+      description: m.libelle, type: (m.montant_net > 0 ? 'in' : 'out') as Tx['type'], amount: Math.abs(m.montant_net),
+      method: modes[m.compte_numero] ?? m.compte_numero, client: null,
+    })).sort((a, b) => b.date.localeCompare(a.date));
+  }, [mouvements]);
 
   const filtered = txs.filter((t) => txFilter === 'all' || t.type === txFilter);
   const grouped = filtered.reduce<Record<string, Tx[]>>((acc, t) => {
@@ -158,7 +153,7 @@ export function Tresorerie({ entreprise, onCaisse, onDepenses }: {
         <div className="h-px my-4" style={{ background: 'rgba(255,255,255,0.06)' }} />
 
         <div className="text-center mb-5">
-          <p className="text-[#4a6b4a] text-[10px] font-medium uppercase tracking-widest mb-1.5">Total disponible</p>
+          <p className="text-[#4a6b4a] text-[10px] font-medium uppercase tracking-widest mb-1.5">{total < 0 ? 'Découvert de trésorerie' : 'Total disponible'}</p>
           <p className="text-white font-mono font-bold leading-none" style={{ fontSize: '2.4rem' }}>{fmt(total)}</p>
         </div>
 

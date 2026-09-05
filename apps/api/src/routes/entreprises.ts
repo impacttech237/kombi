@@ -61,6 +61,8 @@ const zParametres = z.object({
   adherentCga: z.boolean().optional(),
   assujettiTva: z.boolean().optional(),
   noteFacture: z.string().trim().max(400).nullish(),
+  enTeteFacture: z.string().trim().max(120).nullish(),
+  couleurFacture: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Couleur invalide').optional(),
 });
 
 /**
@@ -85,6 +87,8 @@ entreprises.patch('/:id', async (c) => {
   if (p.adherentCga !== undefined) { champs.push('adherent_cga = ?'); valeurs.push(p.adherentCga ? 1 : 0); }
   if (p.assujettiTva !== undefined) { champs.push('assujetti_tva = ?'); valeurs.push(p.assujettiTva ? 1 : 0); }
   if (p.noteFacture !== undefined) { champs.push('note_facture = ?'); valeurs.push(p.noteFacture || null); }
+  if (p.enTeteFacture !== undefined) { champs.push('en_tete_facture = ?'); valeurs.push(p.enTeteFacture || null); }
+  if (p.couleurFacture !== undefined) { champs.push('couleur_facture = ?'); valeurs.push(p.couleurFacture.toUpperCase()); }
   if (!champs.length) return c.json({ erreur: 'Aucun champ à mettre à jour' }, 400);
 
   await c.env.DB.prepare(`UPDATE entreprise SET ${champs.join(', ')} WHERE id = ?`)
@@ -100,7 +104,7 @@ entreprises.get('/:id/parametres', async (c) => {
   if (!role) return c.json({ erreur: 'Accès refusé' }, 403);
 
   const ent = await c.env.DB.prepare(
-    'SELECT raison_sociale, niu, secteur, nature_activite, regime_fiscal, adherent_cga, assujetti_tva, note_facture FROM entreprise WHERE id = ?',
+    'SELECT raison_sociale, niu, secteur, nature_activite, regime_fiscal, adherent_cga, assujetti_tva, note_facture, en_tete_facture, couleur_facture FROM entreprise WHERE id = ?',
   ).bind(entrepriseId).first();
   if (!ent) return c.json({ erreur: 'Entreprise introuvable' }, 404);
   return c.json(ent);

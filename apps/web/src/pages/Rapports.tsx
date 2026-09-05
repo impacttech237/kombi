@@ -70,6 +70,7 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
   const [rapport, setRapport] = useState<Rapport | null>(null);
   const [erreur, setErreur] = useState('');
   const [exportEnCours, setExportEnCours] = useState<'pdf' | 'csv' | null>(null);
+  const [exportReussi, setExportReussi] = useState('');
 
   const effectif: TypeRapport = type === 'comparaison' ? 'mensuel' : type;
   const agencesDisponibles = (rapport?.depenses.parAgence ?? []).filter((a) => a.agence !== 'Sans agence').map((a) => a.agence);
@@ -91,14 +92,14 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
   }, [entreprise.id, type, ref.annee, ref.mois, plageDebut, plageFin, agenceFiltre]);
 
   async function exporterPdf() {
-    setExportEnCours('pdf');
-    try { window.open(await urlRapportPdf(entreprise.id, paramsActuels()), '_blank'); }
+    setExportEnCours('pdf'); setExportReussi('');
+    try { window.open(await urlRapportPdf(entreprise.id, paramsActuels()), '_blank'); setExportReussi('Rapport PDF ouvert.'); }
     catch (e) { setErreur(e instanceof Error ? e.message : 'Erreur'); }
     finally { setExportEnCours(null); }
   }
   async function exporterCsv() {
-    setExportEnCours('csv');
-    try { await telechargerRapportCsv(entreprise.id, paramsActuels()); }
+    setExportEnCours('csv'); setExportReussi('');
+    try { await telechargerRapportCsv(entreprise.id, paramsActuels()); setExportReussi('Export CSV téléchargé.'); }
     catch (e) { setErreur(e instanceof Error ? e.message : 'Erreur'); }
     finally { setExportEnCours(null); }
   }
@@ -174,6 +175,7 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
       )}
 
       {erreur && <p className="text-[#f87171] text-sm px-4 md:px-8">{erreur}</p>}
+      {exportReussi && <p role="status" className="text-[#4ade80] text-sm px-4 md:px-8">{exportReussi}</p>}
 
       <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-24 md:pb-8 space-y-4 pt-2">
         {rapport === null ? (

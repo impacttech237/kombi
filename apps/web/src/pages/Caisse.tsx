@@ -16,11 +16,11 @@ import { IcoSearch, IcoPlus, IcoMinus, IcoX, IcoOk, IcoFile, IcoTrend, Avatar } 
 interface LignePanier extends LigneCaisse { remisePct?: number; }
 type ModePaiement = 'especes' | 'orange_money' | 'mtn_momo' | 'virement';
 
-const MODES: { code: ModePaiement; label: string; icone: string }[] = [
-  { code: 'especes', label: 'Espèces', icone: '💵' },
-  { code: 'orange_money', label: 'Orange Money', icone: '🟠' },
-  { code: 'mtn_momo', label: 'MTN MoMo', icone: '🟡' },
-  { code: 'virement', label: 'Virement', icone: '🏦' },
+const MODES: { code: ModePaiement; label: string; couleur: string }[] = [
+  { code: 'especes', label: 'Espèces', couleur: '#234b3d' },
+  { code: 'orange_money', label: 'Orange Money', couleur: '#e08a1e' },
+  { code: 'mtn_momo', label: 'MTN MoMo', couleur: '#9ac91f' },
+  { code: 'virement', label: 'Virement', couleur: '#5fa8e0' },
 ];
 
 interface Recu {
@@ -37,6 +37,7 @@ function prixApresRemises(l: LignePanier, remiseGlobalePct: number): number {
 }
 
 function ReceiptScreen({ entreprise, recu, onNew }: { entreprise: EntrepriseResume; recu: Recu; onNew: () => void }) {
+  const [erreurImpression, setErreurImpression] = useState('');
   const hasDisc = recu.remise > 0 || recu.lignes.some((l) => (l.remisePct ?? 0) > 0);
   const texteRecu = [
     entreprise.raison_sociale, entreprise.niu ? `NIU : ${entreprise.niu}` : null, '',
@@ -45,6 +46,20 @@ function ReceiptScreen({ entreprise, recu, onNew }: { entreprise: EntrepriseResu
     recu.tvaApplicable ? `TVA 19,25% : ${fmt(recu.totalTva)}` : null,
     `Total : ${fmt(recu.total)}`,
   ].filter(Boolean).join('\n');
+
+  function imprimerRecu() {
+    setErreurImpression('');
+    // Ouvrir la fenêtre directement dans le geste utilisateur évite le blocage des popups que
+    // provoquait parfois window.print() depuis la PWA / le navigateur intégré.
+    const fenetre = window.open('', '_blank', 'width=480,height=720');
+    if (!fenetre) { setErreurImpression("L’impression a été bloquée par le navigateur. Autorisez les fenêtres contextuelles."); return; }
+    const echapper = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+    const lignes = recu.lignes.map((l) => `<tr><td>${echapper(l.designation)}<small>${fmt(l.prixUnitaire)} × ${l.quantite}</small></td><td>${fmt(l.quantite * l.prixUnitaire)}</td></tr>`).join('');
+    fenetre.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Reçu — ${echapper(entreprise.raison_sociale)}</title><style>
+      @page{margin:10mm}body{font:14px Arial,sans-serif;color:#111;max-width:360px;margin:0 auto;padding:18px}h1{font-size:20px;margin:0;text-align:center}header{text-align:center;border-bottom:1px dashed #999;padding-bottom:14px;margin-bottom:12px}small{display:block;color:#666;margin-top:3px}table{width:100%;border-collapse:collapse}td{padding:9px 0;border-bottom:1px solid #ddd}td:last-child{text-align:right;font-weight:700;white-space:nowrap}.total{display:flex;justify-content:space-between;font-size:18px;font-weight:700;padding:14px 0}.meta{border-top:1px dashed #999;padding-top:12px;line-height:1.7}.merci{text-align:center;margin-top:20px;color:#555}@media print{body{padding:0}}
+    </style></head><body><header><h1>${echapper(entreprise.raison_sociale)}</h1>${entreprise.niu ? `<div>NIU : ${echapper(entreprise.niu)}</div>` : ''}<small>${echapper(recu.datetime)}</small></header><table>${lignes}</table><div class="total"><span>Total</span><span>${fmt(recu.total)}</span></div><div class="meta">Règlement : ${recu.aCredit ? `À crédit — ${echapper(recu.client ?? '')}` : echapper(MODES.find((m) => m.code === recu.mode)?.label ?? '')}${!recu.aCredit ? `<br>Montant reçu : ${fmt(recu.recu)}` : ''}${recu.rendu > 0 ? `<br>Monnaie rendue : ${fmt(recu.rendu)}` : ''}</div><p class="merci">Merci pour votre confiance.</p><script>window.addEventListener('load',()=>{window.print();window.addEventListener('afterprint',()=>window.close(),{once:true})})<\/script></body></html>`);
+    fenetre.document.close();
+  }
 
   return (
     <div className="flex-1 overflow-y-auto pb-28 md:pb-8">
@@ -125,11 +140,12 @@ function ReceiptScreen({ entreprise, recu, onNew }: { entreprise: EntrepriseResu
       </div>
 
       <div className="space-y-2 px-4 md:px-0">
-        <button onClick={() => window.print()}
+        <button onClick={imprimerRecu}
           className="w-full bg-[#1e3222] border border-[#2a4230] text-[#edf5ea] rounded-2xl py-3.5 flex items-center justify-center gap-2.5 text-sm font-medium active:scale-95 transition-all">
           <IcoFile cls="w-4 h-4 text-[#6b9165]" />
           Imprimer le reçu
         </button>
+        {erreurImpression && <p role="alert" className="text-[#f87171] text-xs text-center">{erreurImpression}</p>}
         <button onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(texteRecu)}`, '_blank')}
           className="w-full border text-sm font-semibold rounded-2xl py-3.5 flex items-center justify-center gap-2.5 active:scale-95 transition-all"
           style={{ background: 'rgba(74,222,128,0.08)', borderColor: 'rgba(74,222,128,0.25)', color: '#4ade80' }}>
@@ -533,10 +549,10 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
                   <div>
                     <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-wide mb-3">Mode de paiement</p>
                     <div className="grid grid-cols-2 gap-2">
-                      {MODES.map(({ code, label, icone }) => (
+                      {MODES.map(({ code, label, couleur }) => (
                         <button key={code} onClick={() => setMode(code)}
                           className={`flex items-center gap-2.5 p-3.5 rounded-xl border text-left transition-all ${mode === code ? 'border-[#b4e033] bg-[#b4e033]/10' : 'border-[#2a4230] bg-[#1e3222]'}`}>
-                          <span className="text-lg">{icone}</span>
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: couleur }} />
                           <span className={`text-sm font-medium ${mode === code ? 'text-[#b4e033]' : 'text-[#6b9165]'}`}>{label}</span>
                         </button>
                       ))}

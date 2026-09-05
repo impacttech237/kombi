@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import { formaterFCFA as fmt } from '@kombi/shared';
 import { listerDecisions, type EntrepriseResume, type Decision } from '../lib/api.js';
-import { IcoChevR, IcoAlert } from '../components/icons.js';
+import { IcoChevR, IcoAlert, IcoOk } from '../components/icons.js';
 
 const URGENCE_STYLE: Record<Decision['urgence'], { fond: string; bord: string; texte: string; label: string }> = {
   haute: { fond: 'bg-[#f87171]/8', bord: 'border-[#f87171]/30', texte: 'text-[#f87171]', label: 'Urgent' },
@@ -41,7 +41,7 @@ export function ADecider({ entreprise, onRetour, onNav }: {
           <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
         ) : problemes.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-[#4ade80] text-2xl mb-2">✓</p>
+            <span className="inline-flex w-12 h-12 rounded-full items-center justify-center mb-3" style={{ background: 'var(--k-ok-soft)', color: 'var(--k-ok)' }}><IcoOk cls="w-6 h-6" /></span>
             <p className="text-[#edf5ea] text-sm font-medium">Rien d'urgent aujourd'hui</p>
             <p className="text-[#4a6b4a] text-xs mt-1">Aucun problème prioritaire détecté sur vos données actuelles.</p>
           </div>

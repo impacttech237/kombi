@@ -505,6 +505,141 @@ CREATE TABLE IF NOT EXISTS budget_mensuel (
 )
 `;
 
+/** v19 — Centre de pilotage opérationnel : dossier, responsabilités, échéances et tâches. */
+const MIGRATION_V19_OPERATIONS = `
+CREATE TABLE commande_v19 (
+  id TEXT PRIMARY KEY, type TEXT NOT NULL DEFAULT 'commande' CHECK (type IN ('commande','mission')),
+  tiers_id TEXT REFERENCES tiers(id), libelle TEXT NOT NULL,
+  statut TEXT NOT NULL DEFAULT 'en_attente'
+    CHECK (statut IN ('en_attente','en_cours','controle','prete','livree','bloquee','annulee')),
+  montant INTEGER, date_prevue TEXT, vente_id TEXT REFERENCES vente(id), client_uuid TEXT,
+  description TEXT, priorite TEXT NOT NULL DEFAULT 'normale', date_debut TEXT,
+  date_rendez_vous TEXT, date_paiement TEXT, lieu TEXT, responsable_id TEXT, responsable_nom TEXT,
+  acompte INTEGER NOT NULL DEFAULT 0, remboursement INTEGER NOT NULL DEFAULT 0,
+  progression INTEGER NOT NULL DEFAULT 0, motif_blocage TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+--##
+INSERT INTO commande_v19 (id,type,tiers_id,libelle,statut,montant,date_prevue,vente_id,client_uuid,created_at,updated_at)
+ SELECT id,type,tiers_id,libelle,statut,montant,date_prevue,vente_id,client_uuid,created_at,updated_at FROM commande
+--##
+DROP TABLE commande
+--##
+ALTER TABLE commande_v19 RENAME TO commande
+--##
+CREATE UNIQUE INDEX idx_commande_client_uuid ON commande(client_uuid) WHERE client_uuid IS NOT NULL
+--##
+CREATE TABLE IF NOT EXISTS tache_operation (
+  id TEXT PRIMARY KEY, commande_id TEXT NOT NULL REFERENCES commande(id) ON DELETE CASCADE,
+  titre TEXT NOT NULL, description TEXT, statut TEXT NOT NULL DEFAULT 'a_faire'
+    CHECK (statut IN ('a_faire','en_cours','bloquee','terminee')),
+  priorite TEXT NOT NULL DEFAULT 'normale' CHECK (priorite IN ('basse','normale','haute','urgente')),
+  responsable_id TEXT, responsable_nom TEXT, date_echeance TEXT, ordre INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+--##
+CREATE INDEX IF NOT EXISTS idx_tache_operation_commande ON tache_operation(commande_id)
+`;
+
+/** v20 — collaboration terrain, dépendances, preuve et facture liée. */
+const MIGRATION_V20_OPERATION_COLLABORATION = `
+ALTER TABLE commande ADD COLUMN piece_cle TEXT
+--##
+ALTER TABLE commande ADD COLUMN facture_id TEXT
+--##
+ALTER TABLE tache_operation ADD COLUMN depend_de_id TEXT REFERENCES tache_operation(id)
+--##
+CREATE TABLE IF NOT EXISTS commentaire_operation (
+  id TEXT PRIMARY KEY, commande_id TEXT NOT NULL REFERENCES commande(id) ON DELETE CASCADE,
+  auteur_id TEXT, auteur_nom TEXT, message TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+--##
+CREATE INDEX IF NOT EXISTS idx_commentaire_operation ON commentaire_operation(commande_id, created_at)
+`;
+
+/** v21 — cycle économique complet d'une opération et traçabilité. */
+const MIGRATION_V21_OPERATION_PILOTAGE = `
+ALTER TABLE commande ADD COLUMN reference TEXT
+--##
+ALTER TABLE commande ADD COLUMN cout_budget INTEGER NOT NULL DEFAULT 0
+--##
+ALTER TABLE commande ADD COLUMN archivee INTEGER NOT NULL DEFAULT 0
+--##
+ALTER TABLE commande ADD COLUMN validee_client_le TEXT
+--##
+ALTER TABLE commande ADD COLUMN preuve_livraison TEXT
+--##
+ALTER TABLE tache_operation ADD COLUMN parent_id TEXT REFERENCES tache_operation(id)
+--##
+ALTER TABLE tache_operation ADD COLUMN duree_minutes INTEGER NOT NULL DEFAULT 0
+--##
+ALTER TABLE tache_operation ADD COLUMN recurrence TEXT
+--##
+CREATE TABLE IF NOT EXISTS cout_operation (
+  id TEXT PRIMARY KEY, commande_id TEXT NOT NULL REFERENCES commande(id) ON DELETE CASCADE,
+  categorie TEXT NOT NULL, libelle TEXT NOT NULL, montant INTEGER NOT NULL CHECK(montant > 0),
+  date TEXT NOT NULL, fournisseur_nom TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+--##
+CREATE INDEX IF NOT EXISTS idx_cout_operation_commande ON cout_operation(commande_id,date)
+--##
+CREATE TABLE IF NOT EXISTS echeance_operation (
+  id TEXT PRIMARY KEY, commande_id TEXT NOT NULL REFERENCES commande(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK(type IN ('encaissement','remboursement')),
+  libelle TEXT NOT NULL, montant INTEGER NOT NULL CHECK(montant > 0), date_prevue TEXT NOT NULL,
+  statut TEXT NOT NULL DEFAULT 'a_venir' CHECK(statut IN ('a_venir','payee','annulee')),
+  date_paiement TEXT, mode_paiement TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+--##
+CREATE INDEX IF NOT EXISTS idx_echeance_operation_commande ON echeance_operation(commande_id,date_prevue)
+--##
+CREATE TABLE IF NOT EXISTS historique_operation (
+  id TEXT PRIMARY KEY, commande_id TEXT NOT NULL REFERENCES commande(id) ON DELETE CASCADE,
+  action TEXT NOT NULL, detail TEXT, auteur_nom TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+--##
+CREATE INDEX IF NOT EXISTS idx_historique_operation_commande ON historique_operation(commande_id,created_at)
+`;
+
+/** v22 — équipe étendue et dossier documentaire multiple. */
+const MIGRATION_V22_OPERATION_TERRAIN = `
+CREATE TABLE IF NOT EXISTS assignation_tache (
+  tache_id TEXT NOT NULL REFERENCES tache_operation(id) ON DELETE CASCADE,
+  utilisateur_id TEXT NOT NULL, nom TEXT NOT NULL,
+  PRIMARY KEY(tache_id,utilisateur_id)
+)
+--##
+CREATE TABLE IF NOT EXISTS piece_operation (
+  id TEXT PRIMARY KEY, commande_id TEXT NOT NULL REFERENCES commande(id) ON DELETE CASCADE,
+  cle TEXT NOT NULL, nom TEXT NOT NULL, type_mime TEXT NOT NULL, categorie TEXT NOT NULL DEFAULT 'autre',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+--##
+CREATE INDEX IF NOT EXISTS idx_piece_operation_commande ON piece_operation(commande_id,created_at)
+--##
+CREATE TABLE IF NOT EXISTS disponibilite_equipe (
+  id TEXT PRIMARY KEY, utilisateur_id TEXT NOT NULL, nom TEXT NOT NULL,
+  type TEXT NOT NULL CHECK(type IN ('absence','indisponible','disponible')),
+  debut TEXT NOT NULL, fin TEXT NOT NULL, motif TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+`;
+const MIGRATION_V23_OPERATION_COMPTABILITE = `
+ALTER TABLE cout_operation ADD COLUMN depense_id TEXT
+--##
+ALTER TABLE depense ADD COLUMN commande_id TEXT
+`;
+const MIGRATION_V24_EQUIPE_FRAIS = `
+CREATE TABLE IF NOT EXISTS frais_equipe (
+  id TEXT PRIMARY KEY, utilisateur_id TEXT NOT NULL, nom TEXT NOT NULL,
+  type TEXT NOT NULL CHECK(type IN ('avance','note_frais')),
+  libelle TEXT NOT NULL, montant INTEGER NOT NULL CHECK(montant>0), mode_paiement TEXT NOT NULL,
+  date TEXT NOT NULL, statut TEXT NOT NULL DEFAULT 'valide' CHECK(statut IN ('brouillon','valide','rembourse')),
+  depense_id TEXT, created_at TEXT NOT NULL DEFAULT(datetime('now'))
+)
+`;
+
 /** Découpe le schéma en statements exécutables individuellement. */
 export function statementsSchema(): string[] {
   return TENANT_SCHEMA.split('--##')
@@ -574,7 +709,14 @@ export const MIGRATIONS_DO: readonly MigrationDO[] = [
   { v: 17, statements: statementsDe(MIGRATION_V17_DEPENSE_CONTEXTE) },
   // v18 — budgets mensuels (CA cible, plafond dépenses, marge cible).
   { v: 18, statements: statementsDe(MIGRATION_V18_BUDGET_MENSUEL) },
-  // v19… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
+  // v19 — centre de pilotage opérationnel (commandes/projets/missions + tâches).
+  { v: 19, statements: statementsDe(MIGRATION_V19_OPERATIONS) },
+  { v: 20, statements: statementsDe(MIGRATION_V20_OPERATION_COLLABORATION) },
+  { v: 21, statements: statementsDe(MIGRATION_V21_OPERATION_PILOTAGE) },
+  { v: 22, statements: statementsDe(MIGRATION_V22_OPERATION_TERRAIN) },
+  { v: 23, statements: statementsDe(MIGRATION_V23_OPERATION_COMPTABILITE) },
+  { v: 24, statements: statementsDe(MIGRATION_V24_EQUIPE_FRAIS) },
+  // v25… : ajouter ici les ALTER TABLE / CREATE TABLE des prochaines fonctionnalités.
 ];
 
 /** Version cible du schéma (la plus haute des migrations). */

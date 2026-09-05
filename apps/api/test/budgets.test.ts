@@ -44,6 +44,20 @@ describe('Analyse des dépenses — comparaison au budget du mois', () => {
 });
 
 describe('Prévision de trésorerie', () => {
+  it('inclut aussi le restant dû des factures à échéance dans l’horizon', async () => {
+    const e = doE('budget-prevision-facture');
+    await e.initialiser('budget-prevision-facture', 'commerce', 2026);
+    const client = await e.creerTiers({ type: 'client', nom: 'Client facturé' });
+    const factureId = await e.creerFacture({
+      type: 'facture', tiersId: client, dateEcheance: '2026-09-14',
+      lignes: [{ designation: 'Mission', quantite: 1, prixUnitaire: 50000 }],
+    });
+    await e.emettreFacture(factureId, 'TEST');
+    await e.payerFacture(factureId, 20000, 'orange_money');
+    const prevision = await e.previsionTresorerie(30);
+    expect(prevision.entreesAttendues).toBe(30000);
+  });
+
   it('inclut les créances à échéance dans l\'horizon et exclut celles hors horizon', async () => {
     const e = doE('budget-prevision-1');
     await e.initialiser('budget-prevision-1', 'commerce', 2026);

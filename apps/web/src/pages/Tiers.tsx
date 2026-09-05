@@ -226,8 +226,8 @@ function FicheTiers({ entreprise, tiersId, onRetour }: {
               <p className="text-[#4a6b4a] text-xs uppercase tracking-wide font-medium">
                 {fiche.type === 'fournisseur' ? 'Fournisseur' : fiche.type === 'les_deux' ? 'Client & fournisseur' : 'Client'}
               </p>
-              {fiche.telephone && <p className="text-[#edf5ea] text-sm">📞 {fiche.telephone}</p>}
-              {fiche.email && <p className="text-[#edf5ea] text-sm">✉️ {fiche.email}</p>}
+              {fiche.telephone && <p className="text-[#edf5ea] text-sm">Tél. : {fiche.telephone}</p>}
+              {fiche.email && <p className="text-[#edf5ea] text-sm">Email : {fiche.email}</p>}
               {fiche.niu && <p className="text-[#edf5ea] text-sm">NIU : {fiche.niu}</p>}
               {fiche.adresse && <p className="text-[#edf5ea] text-sm">{fiche.adresse}</p>}
             </div>

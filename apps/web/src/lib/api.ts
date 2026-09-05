@@ -42,12 +42,13 @@ export const creerEntreprise = (data: {
 export interface ParametresEntreprise {
   raison_sociale: string; niu: string | null; secteur: string; nature_activite: string;
   regime_fiscal: string; adherent_cga: number; assujetti_tva: number; note_facture: string | null;
+  en_tete_facture: string | null; couleur_facture: string | null;
 }
 export const getParametresEntreprise = (entrepriseId: string) =>
   api<ParametresEntreprise>(`/api/entreprises/${entrepriseId}/parametres`);
 export const majParametresEntreprise = (
   entrepriseId: string,
-  data: { niu?: string | null; adherentCga?: boolean; assujettiTva?: boolean; noteFacture?: string | null },
+  data: { niu?: string | null; adherentCga?: boolean; assujettiTva?: boolean; noteFacture?: string | null; enTeteFacture?: string | null; couleurFacture?: string },
 ) => api<{ ok: boolean }>(`/api/entreprises/${entrepriseId}`, { method: 'PATCH', body: data });
 
 // ── Équipe (membres & rôles) ──
@@ -120,6 +121,12 @@ export const tresorerieDuJour = (entrepriseId: string) =>
 /** Soldes réels (cumul depuis l'ouverture de l'exercice, pas seulement le jour). */
 export const soldesTresorerie = (entrepriseId: string) =>
   api<TresorerieJour>('/api/etats/tresorerie-solde', { entrepriseId });
+
+export interface MouvementTresorerie {
+  id: string; date: string; libelle: string; source: string; compte_numero: string; montant_net: number;
+}
+export const listerMouvementsTresorerie = (entrepriseId: string) =>
+  api<{ mouvements: MouvementTresorerie[] }>('/api/etats/tresorerie-mouvements', { entrepriseId }).then((r) => r.mouvements);
 
 // ── Cockpit dirigeant (voir docs/PLAN-cockpit-dirigeant.md) ──
 export interface AlertePilotage { type: string; gravite: 'attention' | 'critique'; libelle: string; }
@@ -383,18 +390,67 @@ export const journalAudit = (entrepriseId: string) =>
 export interface Commande {
   id: string; type: string; libelle: string; statut: string;
   montant: number | null; date_prevue: string | null; tiers_nom: string | null;
+  description: string | null; priorite: string; date_debut: string | null; date_rendez_vous: string | null;
+  date_paiement: string | null; lieu: string | null; responsable_id: string | null; responsable_nom: string | null;
+  tiers_telephone: string | null; piece_cle: string | null; facture_id: string | null;
+  reference: string | null; cout_budget: number; cout_reel: number; archivee: number;
+  validee_client_le: string | null; preuve_livraison: string | null;
+  encaissements_echeancier: number; remboursements_echeancier: number;
+  acompte: number; remboursement: number; progression: number; motif_blocage: string | null;
+  nb_taches: number; nb_taches_terminees: number; nb_taches_bloquees: number;
 }
+export interface TacheOperation {
+  id: string; commande_id: string; titre: string; description: string | null; statut: string; priorite: string;
+  responsable_id: string | null; responsable_nom: string | null; date_echeance: string | null; ordre: number;
+  depend_de_id: string | null;
+  parent_id:string|null;duree_minutes:number;recurrence:string|null;assignes_noms:string|null;
+}
+export interface CommentaireOperation { id: string; commande_id: string; message: string; auteur_nom: string | null; cree_le: string; }
+export interface CoutOperation { id:string;commande_id:string;categorie:string;libelle:string;montant:number;date:string;fournisseur_nom:string|null; }
+export interface EcheanceOperation { id:string;commande_id:string;type:'encaissement'|'remboursement';libelle:string;montant:number;date_prevue:string;statut:'a_venir'|'payee'|'annulee';date_paiement:string|null;mode_paiement:string|null; }
+export interface HistoriqueOperation { id:string;commande_id:string;action:string;detail:string|null;auteur_nom:string|null;created_at:string; }
+export interface PieceOperation { id:string;commande_id:string;nom:string;type_mime:string;categorie:string;created_at:string; }
+export interface DisponibiliteEquipe { id:string;utilisateur_id:string;nom:string;type:string;debut:string;fin:string;motif:string|null; }
+export interface FraisEquipe { id:string;utilisateur_id:string;nom:string;type:'avance'|'note_frais';libelle:string;montant:number;mode_paiement:string;date:string;statut:string; }
+export interface MembreOperation { id: string; nom: string; role: string; }
 export const listerCommandes = (entrepriseId: string) =>
-  api<{ commandes: Commande[] }>('/api/commandes', { entrepriseId }).then((r) => r.commandes);
+  api<{ commandes: Commande[]; taches: TacheOperation[]; commentaires: CommentaireOperation[]; couts:CoutOperation[];echeances:EcheanceOperation[];historique:HistoriqueOperation[];pieces:PieceOperation[];disponibilites:DisponibiliteEquipe[];fraisEquipe:FraisEquipe[] }>('/api/commandes', { entrepriseId });
 export const creerCommande = (
   entrepriseId: string,
   data: {
-    type: string; libelle: string; montant?: number; tiersId?: string; datePrevue?: string;
-    clientUuid?: string;
+    type: string; libelle: string; montant?: number; tiersId?: string; datePrevue?: string; clientUuid?: string;
+    description?: string; priorite?: string; dateDebut?: string; dateRendezVous?: string; datePaiement?: string;
+    lieu?: string; responsableId?: string; responsableNom?: string; acompte?: number; remboursement?: number; coutBudget?:number;
   },
 ) => api<{ commandeId: string }>('/api/commandes', { method: 'POST', body: data, entrepriseId });
 export const changerStatutCommande = (entrepriseId: string, id: string, statut: string) =>
   api<{ ok: boolean }>(`/api/commandes/${id}/statut`, { method: 'POST', body: { statut }, entrepriseId });
+export const listerEquipeOperations = (entrepriseId: string) =>
+  api<{ membres: MembreOperation[] }>('/api/commandes/equipe', { entrepriseId }).then((r) => r.membres);
+export const creerTacheOperation = (entrepriseId: string, commandeId: string, data: {
+  titre: string; description?: string; priorite?: string; responsableId?: string; responsableNom?: string; dateEcheance?: string; dependDeId?: string;parentId?:string;dureeMinutes?:number;recurrence?:'quotidienne'|'hebdomadaire'|'mensuelle';assignes?:{id:string;nom:string}[];
+}) => api<{ tacheId: string }>(`/api/commandes/${commandeId}/taches`, { method: 'POST', body: data, entrepriseId });
+export const changerStatutTache = (entrepriseId: string, id: string, statut: string) =>
+  api<{ ok: boolean }>(`/api/commandes/taches/${id}/statut`, { method: 'POST', body: { statut }, entrepriseId });
+export const modifierTacheOperation=(entrepriseId:string,id:string,data:Record<string,unknown>)=>api<{ok:boolean}>(`/api/commandes/taches/${id}`,{method:'PATCH',body:data,entrepriseId});
+export const supprimerTacheOperation=(entrepriseId:string,id:string)=>api<{ok:boolean}>(`/api/commandes/taches/${id}`,{method:'DELETE',entrepriseId});
+export const ajouterCommentaireOperation = (entrepriseId: string, id: string, data: { message: string; auteurNom?: string }) =>
+  api<{ commentaireId: string }>(`/api/commandes/${id}/commentaires`, { method: 'POST', body: data, entrepriseId });
+export const creerFactureOperation = (entrepriseId: string, id: string, clientUuid: string) =>
+  api<{ factureId: string }>(`/api/commandes/${id}/facture`, { method: 'POST', body: { clientUuid }, entrepriseId });
+export const modifierCommande = (entrepriseId:string,id:string,data:Record<string,unknown>)=>api<{ok:boolean}>(`/api/commandes/${id}`,{method:'PATCH',body:data,entrepriseId});
+export const dupliquerCommande = (entrepriseId:string,id:string)=>api<{commandeId:string}>(`/api/commandes/${id}/dupliquer`,{method:'POST',entrepriseId});
+export const archiverCommande = (entrepriseId:string,id:string)=>api<{ok:boolean}>(`/api/commandes/${id}/archiver`,{method:'POST',entrepriseId});
+export const ajouterCoutOperation = (entrepriseId:string,id:string,data:{categorie:string;libelle:string;montant:number;date:string;fournisseurNom?:string;modePaiement?:string;clientUuid?:string})=>api<{coutId:string}>(`/api/commandes/${id}/couts`,{method:'POST',body:data,entrepriseId});
+export const supprimerCoutOperation = (entrepriseId:string,id:string)=>api<{ok:boolean}>(`/api/commandes/couts/${id}`,{method:'DELETE',entrepriseId});
+export const ajouterEcheanceOperation = (entrepriseId:string,id:string,data:{type:'encaissement'|'remboursement';libelle:string;montant:number;datePrevue:string})=>api<{echeanceId:string}>(`/api/commandes/${id}/echeances`,{method:'POST',body:data,entrepriseId});
+export const payerEcheanceOperation = (entrepriseId:string,id:string,data:{modePaiement:string;datePaiement?:string})=>api<{ok:boolean}>(`/api/commandes/echeances/${id}/payer`,{method:'POST',body:data,entrepriseId});
+export async function televerserPiecesOperation(entrepriseId:string,id:string,fichier:File,categorie='autre'){const res=await fetch(`${BASE}/api/commandes/${id}/pieces`,{method:'POST',headers:{'x-entreprise-id':entrepriseId,'content-type':fichier.type,'x-file-name':encodeURIComponent(fichier.name),'x-piece-category':categorie},credentials:'include',body:fichier});if(!res.ok)throw new Error(((await res.json().catch(()=>({}))) as {erreur?:string}).erreur??'Envoi impossible');return res.json() as Promise<{pieceId:string}>}
+export async function urlPieceOperationMultiple(entrepriseId:string,id:string){const r=await fetch(`${BASE}/api/commandes/pieces/${id}`,{headers:{'x-entreprise-id':entrepriseId},credentials:'include'});if(!r.ok)throw new Error('Pièce indisponible');return URL.createObjectURL(await r.blob())}
+export const supprimerPieceOperationMultiple=(entrepriseId:string,id:string)=>api<{ok:boolean}>(`/api/commandes/pieces/${id}`,{method:'DELETE',entrepriseId});
+export const ajouterDisponibiliteEquipe=(entrepriseId:string,data:{utilisateurId:string;nom:string;type:'absence'|'indisponible'|'disponible';debut:string;fin:string;motif?:string})=>api<{id:string}>('/api/commandes/equipe/disponibilites',{method:'POST',body:data,entrepriseId});
+export const supprimerDisponibiliteEquipe=(entrepriseId:string,id:string)=>api<{ok:boolean}>(`/api/commandes/equipe/disponibilites/${id}`,{method:'DELETE',entrepriseId});
+export const ajouterFraisEquipe=(entrepriseId:string,data:{utilisateurId:string;nom:string;type:'avance'|'note_frais';libelle:string;montant:number;modePaiement:string;date:string;clientUuid:string})=>api<{id:string}>('/api/commandes/equipe/frais',{method:'POST',body:data,entrepriseId});
 
 // ── Dépenses ──
 export interface Depense {
@@ -482,6 +538,10 @@ const aidesPieceVente = creerAidesPiece('/api/ventes');
 export const televerserPieceVente = aidesPieceVente.televerser;
 export const urlPieceVente = aidesPieceVente.url;
 export const supprimerPieceVente = aidesPieceVente.supprimer;
+
+const aidesPieceOperation = creerAidesPiece('/api/commandes');
+export const televerserPieceOperation = aidesPieceOperation.televerser;
+export const urlPieceOperation = aidesPieceOperation.url;
 
 // ── Pièces justificatives (écran centralisé — dépenses + achats + ventes) ──
 export interface PieceJustificative {

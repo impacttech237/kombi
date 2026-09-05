@@ -32,8 +32,8 @@ const BADGE: Record<string, { label: string; cls: string }> = {
 };
 
 const MODES_PAIEMENT: [string, string, string][] = [
-  ['especes', 'Espèces', '💵'], ['orange_money', 'Orange Money', '🟠'], ['mtn_momo', 'MTN MoMo', '🟡'],
-  ['virement', 'Virement', '🏦'], ['cheque', 'Chèque', '📋'],
+  ['especes', 'Espèces', '#234b3d'], ['orange_money', 'Orange Money', '#e08a1e'], ['mtn_momo', 'MTN MoMo', '#9ac91f'],
+  ['virement', 'Virement', '#5fa8e0'], ['cheque', 'Chèque', '#a78bfa'],
 ];
 
 function courte(date: string | null) {
@@ -108,7 +108,7 @@ export function Factures({ entreprise }: { entreprise: EntrepriseResume }) {
           </div>
           <div>
             <p className="text-[#4a6b4a] text-xs">Encaissé</p>
-            <p className="text-[#4ade80] font-mono font-semibold text-sm mt-0.5">{fmt(paid.reduce((s, i) => s + i.total_ttc, 0))}</p>
+            <p className="text-[#4ade80] font-mono font-semibold text-sm mt-0.5">{fmt(factures.reduce((s, i) => s + i.regle, 0))}</p>
           </div>
         </div>
       </div>
@@ -231,6 +231,10 @@ function DetailOverlay({ entreprise, doc, onClose, onEmettre, onEncaisser, onAvo
   entreprise: EntrepriseResume; doc: FactureResume; onClose: () => void;
   onEmettre: () => void; onEncaisser: () => void; onAvoir: () => void;
 }) {
+  const [apercuUrl, setApercuUrl] = useState<string | null>(null);
+  const [apercuCharge, setApercuCharge] = useState(false);
+  const [erreurPdf, setErreurPdf] = useState('');
+  useEffect(() => () => { if (apercuUrl) URL.revokeObjectURL(apercuUrl); }, [apercuUrl]);
   const isDevis = doc.type === 'devis';
   const isAvoir = !!doc.avoir_de_id;
   const isBrouillon = doc.statut === 'brouillon';
@@ -247,7 +251,19 @@ function DetailOverlay({ entreprise, doc, onClose, onEmettre, onEncaisser, onAvo
     : BADGE[doc.statut] ?? { label: doc.statut, cls: 'bg-[#4a6b4a]/20 text-[#6b9165]' };
 
   async function voirPdf() {
-    try { window.open(await urlPdfFacture(entreprise.id, doc.id), '_blank'); } catch { /* ignore */ }
+    const fenetre = window.open('', '_blank');
+    try {
+      const url = await urlPdfFacture(entreprise.id, doc.id);
+      if (fenetre) fenetre.location.href = url;
+      else { URL.revokeObjectURL(url); setErreurPdf('Ouverture bloquée par le navigateur. Utilisez l’aperçu intégré.'); }
+    } catch (e) { fenetre?.close(); setErreurPdf(e instanceof Error ? e.message : 'PDF indisponible'); }
+  }
+  async function basculerApercu() {
+    if (apercuUrl) { URL.revokeObjectURL(apercuUrl); setApercuUrl(null); return; }
+    setApercuCharge(true); setErreurPdf('');
+    try { setApercuUrl(await urlPdfFacture(entreprise.id, doc.id)); }
+    catch (e) { setErreurPdf(e instanceof Error ? e.message : 'Aperçu indisponible'); }
+    finally { setApercuCharge(false); }
   }
   async function whatsapp() {
     const texte = `Bonjour, voici votre ${doc.type} ${doc.numero ?? ''} d'un montant de ${fmt(doc.total_ttc)}. Merci !`;
@@ -327,6 +343,20 @@ function DetailOverlay({ entreprise, doc, onClose, onEmettre, onEncaisser, onAvo
             <p className="text-[#4a6b4a] text-sm">Voir le PDF pour le détail complet, conforme DGI.</p>
           </div>
         )}
+
+        {!isBrouillon && (
+          <div className="mx-4 mt-3">
+            <button onClick={basculerApercu} disabled={apercuCharge}
+              className="w-full bg-[#1e3222] text-[#edf5ea] rounded-xl py-3 text-sm font-medium border border-[#2a4230] disabled:opacity-50">
+              {apercuCharge ? 'Chargement…' : apercuUrl ? 'Masquer l’aperçu' : 'Prévisualiser la facture'}
+            </button>
+            {erreurPdf && <p role="alert" className="text-[#f87171] text-xs mt-2">{erreurPdf}</p>}
+            {apercuUrl && (
+              <iframe title={`Aperçu ${doc.numero ?? doc.type}`} src={apercuUrl}
+                className="w-full h-[70vh] bg-white rounded-xl mt-3 border border-[#2a4230]" />
+            )}
+          </div>
+        )}
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 bg-[#162419] border-t border-[#1e3222] px-4 py-3 flex gap-2">
@@ -385,10 +415,10 @@ function PaySheet({ doc, onClose, onConfirm }: {
         <div>
           <label className="text-[#6b9165] text-xs font-medium block mb-2">Mode de paiement</label>
           <div className="grid grid-cols-3 gap-2">
-            {MODES_PAIEMENT.map(([key, label, icon]) => (
+            {MODES_PAIEMENT.map(([key, label, couleur]) => (
               <button key={key} onClick={() => setMode(key)}
-                className={`flex flex-col items-center gap-1 py-2.5 rounded-xl text-xs font-medium border transition-all ${mode === key ? 'bg-[#b4e033]/10 border-[#b4e033] text-[#b4e033]' : 'bg-[#1e3222] border-[#2a4230] text-[#6b9165]'}`}>
-                <span className="text-base">{icon}</span>{label}
+                className={`flex flex-col items-center gap-1.5 py-2.5 rounded-xl text-xs font-medium border transition-all ${mode === key ? 'bg-[#b4e033]/10 border-[#b4e033] text-[#b4e033]' : 'bg-[#1e3222] border-[#2a4230] text-[#6b9165]'}`}>
+                <span className="w-2.5 h-2.5 rounded-full" style={{ background: couleur }} />{label}
               </button>
             ))}
           </div>
@@ -712,6 +742,7 @@ function CreateWizard({ entreprise, onClose, onCreated }: {
                   { label: 'Type', val: type === 'facture' ? 'Facture' : 'Devis' },
                   { label: 'Client', val: selClient?.nom ?? '—' },
                   { label: 'Lignes', val: `${lignes.filter((l) => l.desc.trim()).length} ligne(s)` },
+                  { label: type === 'devis' ? 'Valable jusqu’au' : 'Échéance', val: dueDate || 'Non renseignée' },
                   { label: tvaApplicable ? 'Total TTC' : 'Total', val: fmt(total) },
                 ].map((r) => (
                   <div key={r.label} className="flex justify-between px-4 py-2.5 text-sm">

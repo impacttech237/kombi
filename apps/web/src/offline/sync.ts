@@ -6,7 +6,9 @@
 
 import { db, mutationsEnAttente, notifierFile as notifier, type Mutation } from './db.js';
 import {
-  enregistrerVente, creerDepense, creerTiers, approvisionner, payerVente, payerFacture, payerAchat,
+  enregistrerVente, creerDepense, creerTiers, approvisionner, payerVente, payerFacture, payerAchat, creerCommande,
+  creerTacheOperation, ajouterCommentaireOperation, ajouterCoutOperation, ajouterEcheanceOperation,
+  televerserPiecesOperation, ajouterDisponibiliteEquipe, ajouterFraisEquipe,
 } from '../lib/api.js';
 
 let enCours = false;
@@ -15,6 +17,16 @@ let enCours = false;
 async function rejouer(m: Mutation): Promise<void> {
   const p = m.payload;
   switch (m.type) {
+    case 'operation_tache': await creerTacheOperation(m.entrepriseId,p.commandeId as string,p.data as Parameters<typeof creerTacheOperation>[2]);return;
+    case 'operation_commentaire': await ajouterCommentaireOperation(m.entrepriseId,p.commandeId as string,{message:p.message as string});return;
+    case 'operation_cout': await ajouterCoutOperation(m.entrepriseId,p.commandeId as string,{...(p.data as Parameters<typeof ajouterCoutOperation>[2]),clientUuid:m.clientUuid});return;
+    case 'operation_echeance': await ajouterEcheanceOperation(m.entrepriseId,p.commandeId as string,p.data as Parameters<typeof ajouterEcheanceOperation>[2]);return;
+    case 'operation_piece': await televerserPiecesOperation(m.entrepriseId,p.commandeId as string,p.fichier as File,p.categorie as string);return;
+    case 'equipe_disponibilite': await ajouterDisponibiliteEquipe(m.entrepriseId,p.data as Parameters<typeof ajouterDisponibiliteEquipe>[1]);return;
+    case 'equipe_frais': await ajouterFraisEquipe(m.entrepriseId,{...(p.data as Parameters<typeof ajouterFraisEquipe>[1]),clientUuid:m.clientUuid});return;
+    case 'commande':
+      await creerCommande(m.entrepriseId, { ...(p as Record<string, unknown>), clientUuid: m.clientUuid } as Parameters<typeof creerCommande>[1]);
+      return;
     case 'vente':
       await enregistrerVente(m.entrepriseId, {
         lignes: p.lignes as never,

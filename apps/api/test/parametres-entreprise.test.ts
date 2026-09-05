@@ -28,15 +28,21 @@ describe('Paramètres fiscaux entreprise (NIU, CGA, TVA)', () => {
     expect(paramsAvant.assujetti_tva).toBe(0);
 
     const maj = await SELF.fetch(`http://localhost/api/entreprises/${entrepriseId}`, {
-      method: 'PATCH', headers, body: JSON.stringify({ niu: 'M012345678901X', adherentCga: true, assujettiTva: true }),
+      method: 'PATCH', headers, body: JSON.stringify({
+        niu: 'M012345678901X', adherentCga: true, assujettiTva: true,
+        enTeteFacture: 'Douala · +237 600 00 00 00', couleurFacture: '#3366AA', noteFacture: 'Merci pour votre confiance.',
+      }),
     });
     expect(maj.status).toBe(200);
 
     const apres = await SELF.fetch(`http://localhost/api/entreprises/${entrepriseId}/parametres`, { headers });
-    const paramsApres = await apres.json<{ niu: string; adherent_cga: number; assujetti_tva: number }>();
+    const paramsApres = await apres.json<{ niu: string; adherent_cga: number; assujetti_tva: number; en_tete_facture: string; couleur_facture: string; note_facture: string }>();
     expect(paramsApres.niu).toBe('M012345678901X');
     expect(paramsApres.adherent_cga).toBe(1);
     expect(paramsApres.assujetti_tva).toBe(1);
+    expect(paramsApres.en_tete_facture).toBe('Douala · +237 600 00 00 00');
+    expect(paramsApres.couleur_facture).toBe('#3366AA');
+    expect(paramsApres.note_facture).toBe('Merci pour votre confiance.');
   });
 
   it('un non-membre ne peut pas lire ni modifier les paramètres d\'une autre entreprise', async () => {

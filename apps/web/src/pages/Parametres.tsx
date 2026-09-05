@@ -38,6 +38,8 @@ export function Parametres({ entreprise, onRetour }: { entreprise: EntrepriseRes
   const [adherentCga, setAdherentCga] = useState(false);
   const [assujettiTva, setAssujettiTva] = useState(false);
   const [noteFacture, setNoteFacture] = useState('');
+  const [enTeteFacture, setEnTeteFacture] = useState('');
+  const [couleurFacture, setCouleurFacture] = useState('#10784F');
   const [charge, setCharge] = useState(false);
   const [erreur, setErreur] = useState('');
   const [succes, setSucces] = useState(false);
@@ -46,6 +48,7 @@ export function Parametres({ entreprise, onRetour }: { entreprise: EntrepriseRes
     getParametresEntreprise(entreprise.id).then((p) => {
       setParams(p); setNiu(p.niu ?? ''); setAdherentCga(p.adherent_cga === 1); setAssujettiTva(p.assujetti_tva === 1);
       setNoteFacture(p.note_facture ?? '');
+      setEnTeteFacture(p.en_tete_facture ?? ''); setCouleurFacture(p.couleur_facture ?? '#10784F');
     }).catch((e) => setErreur(e instanceof Error ? e.message : 'Erreur'));
   }, [entreprise.id]);
 
@@ -54,6 +57,7 @@ export function Parametres({ entreprise, onRetour }: { entreprise: EntrepriseRes
     try {
       await majParametresEntreprise(entreprise.id, {
         niu: niu.trim() || null, adherentCga, assujettiTva, noteFacture: noteFacture.trim() || null,
+        enTeteFacture: enTeteFacture.trim() || null, couleurFacture,
       });
       setSucces(true);
     } catch (e) {
@@ -69,7 +73,7 @@ export function Parametres({ entreprise, onRetour }: { entreprise: EntrepriseRes
         <button onClick={onRetour} className="w-9 h-9 shrink-0 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
           <IcoChevR cls="w-4 h-4 rotate-180" />
         </button>
-        <h1 className="text-[#edf5ea] text-lg font-bold flex-1">Paramètres fiscaux</h1>
+        <h1 className="text-[#edf5ea] text-lg font-bold flex-1">Paramètres entreprise</h1>
       </div>
 
       {!params ? (
@@ -103,6 +107,21 @@ export function Parametres({ entreprise, onRetour }: { entreprise: EntrepriseRes
               </p>
             </div>
           )}
+
+          <div>
+            <p className="text-[#edf5ea] text-sm font-semibold mb-3">Personnalisation des factures et devis</p>
+            <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Texte d’en-tête</label>
+            <input value={enTeteFacture} onChange={(e) => setEnTeteFacture(e.target.value)} maxLength={120}
+              placeholder="Adresse, téléphone, slogan…" className={inputCls} />
+          </div>
+
+          <div>
+            <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Couleur du document</label>
+            <div className="flex items-center gap-3 bg-[#1e3222] rounded-xl px-4 py-3 border border-[#2a4230]">
+              <input type="color" value={couleurFacture} onChange={(e) => setCouleurFacture(e.target.value)} className="w-10 h-8 bg-transparent cursor-pointer" />
+              <span className="text-[#edf5ea] font-mono text-sm">{couleurFacture.toUpperCase()}</span>
+            </div>
+          </div>
 
           <div>
             <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Note personnalisée sur vos factures</label>

@@ -9,10 +9,16 @@ export interface DonneesFacture {
   tiers_nom?: string; tiers_niu?: string; tiers_adresse?: string;
   lignes: { designation: string; quantite: number; prix_unitaire: number; taux_tva: number; montant_ht: number }[];
 }
-export interface Emetteur { raisonSociale: string; niu?: string | null; noteFacture?: string | null; }
+export interface Emetteur {
+  raisonSociale: string; niu?: string | null; noteFacture?: string | null;
+  enTeteFacture?: string | null; couleurFacture?: string | null;
+}
 
 const fmt = (n: number) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' FCFA';
-const VERT = rgb(0.063, 0.471, 0.31); // #10784f approx accent
+function couleurPdf(hex?: string | null) {
+  const valide = /^#[0-9a-f]{6}$/i.test(hex ?? '') ? hex! : '#10784F';
+  return rgb(parseInt(valide.slice(1, 3), 16) / 255, parseInt(valide.slice(3, 5), 16) / 255, parseInt(valide.slice(5, 7), 16) / 255);
+}
 
 /**
  * pdf-lib plante (throw) sur tout caractère hors du jeu WinAnsi de la police Helvetica standard
@@ -34,21 +40,23 @@ export async function genererFacturePDF(f: DonneesFacture, e: Emetteur): Promise
   const { width } = page.getSize();
   const M = 48;
   let y = 800;
+  const accent = couleurPdf(e.couleurFacture);
 
   const txt = (s: string, x: number, yy: number, size = 10, b = false, color = rgb(0, 0.14, 0.01)) =>
     page.drawText(safe(s), { x, y: yy, size, font: b ? bold : font, color });
 
   // En-tête émetteur
-  txt(e.raisonSociale, M, y, 18, true, VERT);
-  if (e.niu) txt(`NIU : ${e.niu}`, M, y - 20, 9);
-  txt(f.type === 'devis' ? 'DEVIS' : 'FACTURE', width - M - 120, y, 20, true, VERT);
+  txt(e.raisonSociale, M, y, 18, true, accent);
+  if (e.enTeteFacture) txt(e.enTeteFacture, M, y - 17, 8);
+  if (e.niu) txt(`NIU : ${e.niu}`, M, y - (e.enTeteFacture ? 31 : 20), 9);
+  txt(f.type === 'devis' ? 'DEVIS' : 'FACTURE', width - M - 120, y, 20, true, accent);
   txt(f.numero ?? '(brouillon)', width - M - 120, y - 22, 11, true);
   y -= 60;
 
   // Dates + client
   txt(`Date : ${f.date_emission ?? '-'}`, M, y, 9);
   if (f.date_echeance) txt(`Échéance : ${f.date_echeance}`, M, y - 13, 9);
-  txt('CLIENT', width - M - 200, y, 9, true, VERT);
+  txt('CLIENT', width - M - 200, y, 9, true, accent);
   txt(f.tiers_nom ?? '-', width - M - 200, y - 14, 10, true);
   if (f.tiers_niu) txt(`NIU : ${f.tiers_niu}`, width - M - 200, y - 27, 9);
   if (f.tiers_adresse) txt(f.tiers_adresse, width - M - 200, y - 39, 9);
@@ -79,8 +87,8 @@ export async function genererFacturePDF(f: DonneesFacture, e: Emetteur): Promise
     txt('TVA (19,25 %)', 380, y - 24, 10);
     txt(fmt(f.total_tva), width - M - 110, y - 24, 10);
   }
-  txt('Total TTC', 380, y - 42, 12, true, VERT);
-  txt(fmt(f.total_ttc), width - M - 110, y - 42, 12, true, VERT);
+  txt('Total TTC', 380, y - 42, 12, true, accent);
+  txt(fmt(f.total_ttc), width - M - 110, y - 42, 12, true, accent);
 
   // Pied — note personnalisée de l'entreprise (coordonnées bancaires, remerciement, conditions…,
   // voir Paramètres fiscaux), puis la mention système. Repliée sur plusieurs lignes au besoin

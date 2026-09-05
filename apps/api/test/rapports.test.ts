@@ -4,6 +4,25 @@ import { describe, it, expect } from 'vitest';
 function doE(id: string) { return env.ENTREPRISE.get(env.ENTREPRISE.idFromName(id)); }
 
 describe('Rapport agrégé — période simple', () => {
+  it('inclut une facture autonome émise, sans doubler une facture-document issue d’une vente', async () => {
+    const e = doE('rapport-factures');
+    await e.initialiser('rapport-factures', 'commerce', 2026);
+    const client = await e.creerTiers({ type: 'client', nom: 'Client facturé' });
+    const factureId = await e.creerFacture({
+      type: 'facture', tiersId: client, dateEcheance: '2026-09-20',
+      lignes: [{ designation: 'Prestation autonome', quantite: 1, prixUnitaire: 100000 }],
+    });
+    await e.emettreFacture(factureId, 'TEST');
+    const { venteId } = await e.enregistrerVente({
+      lignes: [{ designation: 'Vente caisse', quantite: 1, prixUnitaire: 25000 }],
+      modePaiement: 'especes', tiersId: client, dateOperation: '2026-09-04',
+    });
+    await e.creerFactureDepuisVente(venteId, 'TEST');
+
+    const rapport = await e.rapport({ type: 'mensuel', periode: { debut: '2026-09-01', fin: '2026-10-01' } }) as { stats: { ca: number } };
+    expect(rapport.stats.ca).toBe(125000);
+  });
+
   it('agrège CA/marge/dépenses, produits, clients sur la période demandée', async () => {
     const e = doE('rapport-1');
     await e.initialiser('rapport-1', 'commerce', 2026);

@@ -104,8 +104,8 @@ export function Comptabilite({ entreprise, vueInitiale }: {
                   <h3 className="text-[#edf5ea] font-semibold text-sm">Compte de résultat</h3>
                   <p className="text-[#4a6b4a] text-xs mt-0.5">Produits et charges · Classes 6 &amp; 7</p>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full font-semibold ${profit > 0 ? 'bg-[#4ade80]/10 text-[#4ade80]' : 'bg-[#f87171]/10 text-[#f87171]'}`}>
-                  {profit > 0 ? 'Bénéfice' : 'Déficit'}
+                <span className={`text-xs px-2 py-1 rounded-full font-semibold ${profit > 0 ? 'bg-[#4ade80]/10 text-[#4ade80]' : profit < 0 ? 'bg-[#f87171]/10 text-[#f87171]' : 'bg-[#1e3222] text-[#6b9165]'}`}>
+                  {profit > 0 ? 'Bénéfice' : profit < 0 ? 'Déficit' : 'Équilibre'}
                 </span>
               </div>
               <div className="p-4 space-y-4">

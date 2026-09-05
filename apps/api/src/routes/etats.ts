@@ -24,6 +24,12 @@ etats.get('/tresorerie-solde', requirePermission('compta:read'), async (c) => {
   return c.json(t);
 });
 
+/** Historique exhaustif des entrées/sorties ayant réellement mouvementé la trésorerie. */
+etats.get('/tresorerie-mouvements', requirePermission('compta:read'), async (c) => {
+  const mouvements = await stubEntreprise(c.env, c.get('entrepriseId')).listerMouvementsTresorerie();
+  return c.json({ mouvements });
+});
+
 /** Journal d'audit immuable : entrées + preuve d'intégrité de la chaîne de hash. */
 etats.get('/audit', requirePermission('audit:read'), async (c) => {
   const e = stubEntreprise(c.env, c.get('entrepriseId'));

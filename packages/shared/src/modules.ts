@@ -36,7 +36,7 @@ export const MODULES: Record<CodeModule, DefinitionModule> = {
   ventes: { code: 'ventes', nom: 'Ventes & caisse', coeur: true, dependances: [] },
   tiers: { code: 'tiers', nom: 'Clients & fournisseurs', coeur: true, dependances: [] },
   facturation: { code: 'facturation', nom: 'Facturation & devis', coeur: true, dependances: ['tiers'] },
-  commandes: { code: 'commandes', nom: 'Commandes / missions', coeur: true, dependances: ['tiers'] },
+  commandes: { code: 'commandes', nom: 'Opérations', coeur: true, dependances: ['tiers'] },
   comptabilite: { code: 'comptabilite', nom: 'Comptabilité', coeur: true, dependances: [] },
   fiscalite: { code: 'fiscalite', nom: 'Fiscalité', coeur: true, dependances: ['comptabilite'] },
   stock: { code: 'stock', nom: 'Stock', coeur: false, dependances: [] },

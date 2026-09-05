@@ -4,6 +4,19 @@ import { describe, it, expect } from 'vitest';
 function doE(id: string) { return env.ENTREPRISE.get(env.ENTREPRISE.idFromName(id)); }
 
 describe('Trésorerie du jour (espèces + MoMo/Orange)', () => {
+  it('liste aussi les encaissements de facture et règlements, pas seulement ventes et dépenses', async () => {
+    const e = doE('treso-mouvements');
+    await e.initialiser('treso-mouvements', 'commerce', 2026);
+    const client = await e.creerTiers({ type: 'client', nom: 'Client' });
+    const f = await e.creerFacture({ type: 'facture', tiersId: client, lignes: [{ designation: 'Mission', quantite: 1, prixUnitaire: 10000 }] });
+    await e.emettreFacture(f, 'TEST');
+    await e.payerFacture(f, 4000, 'orange_money');
+    const mouvements = await e.listerMouvementsTresorerie() as { source: string; compte_numero: string; montant_net: number }[];
+    expect(mouvements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: 'facture', compte_numero: '5521', montant_net: 4000 }),
+    ]));
+  });
+
   it('agrège le mouvement net par mode de paiement pour les opérations du jour', async () => {
     const e = doE('treso-1');
     await e.initialiser('treso-1', 'commerce', 2026);

@@ -4,6 +4,20 @@ import { describe, it, expect } from 'vitest';
 function doE(id: string) { return env.ENTREPRISE.get(env.ENTREPRISE.idFromName(id)); }
 
 describe('Facturation & devis', () => {
+  it('conserve l’échéance lors de l’émission et calcule le retard', async () => {
+    const e = doE('fact-echeance');
+    await e.initialiser('fact-echeance', 'commerce', 2026);
+    const t = await e.creerTiers({ type: 'client', nom: 'Client retard' });
+    const f = await e.creerFacture({
+      type: 'facture', tiersId: t, dateEcheance: '2026-08-31',
+      lignes: [{ designation: 'Mission', quantite: 1, prixUnitaire: 10000 }],
+    });
+    await e.emettreFacture(f, 'TEST');
+    const ligne = (await e.listerFactures() as { id: string; date_echeance: string | null; enRetard: boolean }[]).find((x) => x.id === f)!;
+    expect(ligne.date_echeance).toBe('2026-08-31');
+    expect(ligne.enRetard).toBe(true);
+  });
+
   it('numérotation strictement séquentielle et gap-less', async () => {
     const e = doE('fact-1');
     await e.initialiser('fact-1', 'commerce', 2026);

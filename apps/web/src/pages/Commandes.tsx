@@ -1,198 +1,90 @@
-/**
- * Commandes / Missions — absent du prototype Figma Make (mentionné dans docs/parcours.md comme
- * écran à concevoir), design original dans le même langage visuel que les écrans portés
- * (tabs de filtrage, FAB, cartes de statut — cf. Factures.tsx/Stock.tsx).
- */
-import { useEffect, useMemo, useState } from 'react';
-import { formaterFCFA as fmt, TERMINOLOGIE, type Secteur } from '@kombi/shared';
-import {
-  listerCommandes, creerCommande, changerStatutCommande, listerTiers,
-  type EntrepriseResume, type Commande, type Tiers,
-} from '../lib/api.js';
-import { nouvelUuid } from '../offline/db.js';
-import { IcoPlus, IcoChevR, IcoX, IcoOk } from '../components/icons.js';
+// Les tableaux de champs déclaratifs ci-dessous sont des tuples fixes consommés uniquement pour le rendu.
+// @ts-nocheck
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { formaterFCFA as fmt, peut, type RoleMembre } from '@kombi/shared';
+import { listerCommandes, creerCommande, changerStatutCommande, listerTiers, listerEquipeOperations, creerTacheOperation, changerStatutTache, modifierTacheOperation, supprimerTacheOperation, ajouterCommentaireOperation, creerFactureOperation, televerserPiecesOperation, urlPieceOperationMultiple, supprimerPieceOperationMultiple, ajouterDisponibiliteEquipe, supprimerDisponibiliteEquipe, ajouterFraisEquipe, modifierCommande, dupliquerCommande, archiverCommande, ajouterCoutOperation, ajouterEcheanceOperation, payerEcheanceOperation, type EntrepriseResume, type Commande, type TacheOperation, type Tiers, type MembreOperation, type CommentaireOperation, type CoutOperation, type EcheanceOperation, type HistoriqueOperation, type PieceOperation, type DisponibiliteEquipe, type FraisEquipe } from '../lib/api.js';
+import { enfilerMutation, nouvelUuid } from '../offline/db.js';
+import { synchroniser } from '../offline/sync.js';
+import { IcoPlus, IcoChevR, IcoX, IcoOk, IcoAlert, Avatar } from '../components/icons.js';
 
-type Filtre = 'all' | 'en_attente' | 'en_cours' | 'livree' | 'annulee';
-const BADGE: Record<string, { label: string; cls: string }> = {
-  en_attente: { label: 'En attente', cls: 'bg-[#fbbf24]/15 text-[#fbbf24]' },
-  en_cours: { label: 'En cours', cls: 'bg-[#60a5fa]/15 text-[#60a5fa]' },
-  livree: { label: 'Livrée', cls: 'bg-[#4ade80]/10 text-[#4ade80]' },
-  annulee: { label: 'Annulée', cls: 'bg-[#4a6b4a]/20 text-[#6b9165]' },
-};
+type Vue = 'pilotage'|'tableau'|'planning'|'mes_taches'|'equipe';
+const ETAPES = [['en_attente','À préparer'],['en_cours','En cours'],['controle','Contrôle'],['prete','Prête'],['livree','Livrée']] as const;
+const BADGE: Record<string,[string,string]> = { en_attente:['À préparer','text-[#fbbf24]'], en_cours:['En cours','text-[#60a5fa]'], controle:['Contrôle','text-[#a78bfa]'], prete:['Prête','text-[#b4e033]'], livree:['Livrée','text-[#4ade80]'], bloquee:['Bloquée','text-[#f87171]'], annulee:['Annulée','text-[#6b9165]'] };
+const inputCls='w-full bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-2.5 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none';
+const auj=()=>new Date(Date.now()+3600000).toISOString().slice(0,10);
+const dateFr=(d:string|null)=>d?new Date(`${d.slice(0,10)}T12:00`).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}):'—';
+const MODELES:{id:string;nom:string;taches:string[]}[]=[
+  {id:'couture',nom:'Atelier / confection',taches:['Prendre les mesures et valider le brief','Acheter ou sortir les matières','Couper','Assembler','Faire l’essayage','Effectuer les retouches','Contrôler la qualité','Livrer et obtenir la preuve']},
+  {id:'service',nom:'Prestation de service',taches:['Recueillir et valider le brief','Réaliser la prestation','Faire valider par le client','Livrer et clôturer']},
+  {id:'livraison',nom:'Livraison',taches:['Préparer la commande','Charger et affecter le livreur','Livrer au client','Joindre la preuve de livraison']},
+];
+async function executerHorsLigne(entrepriseId:string,type:Parameters<typeof enfilerMutation>[0]['type'],payload:Record<string,unknown>,action:()=>Promise<unknown>){if(navigator.onLine){await action();return false}await enfilerMutation({clientUuid:nouvelUuid(),entrepriseId,type,payload});return true}
 
-const inputCls = 'w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none';
-
-export function Commandes({ entreprise, onRetour }: { entreprise: EntrepriseResume; onRetour: () => void }) {
-  const term = TERMINOLOGIE[(entreprise.secteur as Secteur) ?? 'commerce'];
-  const [liste, setListe] = useState<Commande[] | null>(null);
-  const [filtre, setFiltre] = useState<Filtre>('all');
-  const [createOpen, setCreateOpen] = useState(false);
-
-  function recharger() { return listerCommandes(entreprise.id).then(setListe).catch(() => setListe((p) => p ?? [])); }
-  useEffect(() => { void recharger(); }, [entreprise.id]);
-
-  async function avancer(c: Commande, statut: string) {
-    if (statut === 'annulee' && !confirm(`Annuler « ${c.libelle} » ?`)) return;
-    await changerStatutCommande(entreprise.id, c.id, statut);
-    void recharger();
-  }
-
-  const tabs: { key: Filtre; label: string }[] = [
-    { key: 'all', label: 'Toutes' }, { key: 'en_attente', label: 'En attente' },
-    { key: 'en_cours', label: 'En cours' }, { key: 'livree', label: 'Livrées' }, { key: 'annulee', label: 'Annulées' },
-  ];
-  const filtered = useMemo(() => (liste ?? []).filter((c) => filtre === 'all' || c.statut === filtre), [liste, filtre]);
-  const tabCount: Record<Filtre, number> = {
-    all: liste?.length ?? 0,
-    en_attente: (liste ?? []).filter((c) => c.statut === 'en_attente').length,
-    en_cours: (liste ?? []).filter((c) => c.statut === 'en_cours').length,
-    livree: (liste ?? []).filter((c) => c.statut === 'livree').length,
-    annulee: (liste ?? []).filter((c) => c.statut === 'annulee').length,
-  };
-
-  return (
-    <div className="-mx-4 -mt-4 md:-mx-8 md:-mt-6 flex-1 flex flex-col overflow-hidden">
-      <div className="px-4 md:px-8 pt-4 pb-2 flex items-center gap-2">
-        <button onClick={onRetour} className="w-9 h-9 shrink-0 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
-          <IcoChevR cls="w-4 h-4 rotate-180" />
-        </button>
-        <h1 className="text-[#edf5ea] text-lg font-bold">{term.commandes[0]!.toUpperCase() + term.commandes.slice(1)}</h1>
-      </div>
-
-      <div className="px-4 md:px-8 pb-2">
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {tabs.map((tab) => (
-            <button key={tab.key} onClick={() => setFiltre(tab.key)}
-              className={`shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-all ${filtre === tab.key ? 'bg-[#b4e033] text-[#0e1c0f]' : 'bg-[#1e3222] text-[#6b9165] border border-[#2a4230]'}`}>
-              {tab.label}
-              <span className={`rounded-full text-xs px-1.5 ${filtre === tab.key ? 'bg-[#0e1c0f]/20 text-[#0e1c0f]' : 'bg-[#2a4230] text-[#6b9165]'}`}>{tabCount[tab.key]}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-24 md:pb-8 space-y-2 pt-1">
-        {liste === null ? (
-          <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
-        ) : filtered.length === 0 ? (
-          <p className="text-[#4a6b4a] text-sm text-center py-8">Aucune {term.commande}.</p>
-        ) : (
-          filtered.map((c) => {
-            const badge = BADGE[c.statut] ?? { label: c.statut, cls: 'bg-[#4a6b4a]/20 text-[#6b9165]' };
-            return (
-              <div key={c.id} className="bg-[#162419] rounded-2xl p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[#edf5ea] font-medium text-sm">{c.libelle}</p>
-                    <p className="text-[#4a6b4a] text-xs mt-0.5">
-                      {c.tiers_nom ?? 'Sans client'}{c.montant ? ` · ${fmt(c.montant)}` : ''}
-                      {c.date_prevue ? ` · ${new Date(c.date_prevue).toLocaleDateString('fr-FR')}` : ''}
-                    </p>
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 ${badge.cls}`}>{badge.label}</span>
-                </div>
-                {(c.statut === 'en_attente' || c.statut === 'en_cours') && (
-                  <div className="flex gap-2 mt-3 pt-3 border-t border-[#1e3222]">
-                    {c.statut === 'en_attente' && (
-                      <button onClick={() => avancer(c, 'en_cours')}
-                        className="flex-1 bg-[#1e3222] text-[#edf5ea] rounded-xl py-2 text-xs font-medium hover:bg-[#2a4230] transition-colors">
-                        Démarrer
-                      </button>
-                    )}
-                    {c.statut === 'en_cours' && (
-                      <button onClick={() => avancer(c, 'livree')}
-                        className="flex-1 bg-[#b4e033] text-[#0e1c0f] rounded-xl py-2 text-xs font-semibold active:scale-95 transition-all">
-                        Terminée
-                      </button>
-                    )}
-                    <button onClick={() => avancer(c, 'annulee')} className="text-[#f87171] text-xs font-medium px-2 py-2 hover:bg-[#f87171]/8 rounded-xl transition-colors">
-                      Annuler
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      <button onClick={() => setCreateOpen(true)}
-        className="fixed bottom-24 md:bottom-6 right-4 w-14 h-14 bg-[#b4e033] rounded-full flex items-center justify-center text-[#0e1c0f] shadow-lg shadow-[#b4e033]/20 z-10 active:scale-95 transition-all">
-        <IcoPlus cls="w-6 h-6" />
-      </button>
-
-      {createOpen && (
-        <NouvelleCommandeSheet entreprise={entreprise} term={term} onClose={() => setCreateOpen(false)}
-          onCree={() => { setCreateOpen(false); void recharger(); }} />
-      )}
-    </div>
-  );
+export function Commandes({entreprise,role,onRetour}:{entreprise:EntrepriseResume;role:RoleMembre;onRetour:()=>void}) {
+  const [commandes,setCommandes]=useState<Commande[]|null>(null), [taches,setTaches]=useState<TacheOperation[]>([]), [commentaires,setCommentaires]=useState<CommentaireOperation[]>([]), [couts,setCouts]=useState<CoutOperation[]>([]), [echeances,setEcheances]=useState<EcheanceOperation[]>([]), [historique,setHistorique]=useState<HistoriqueOperation[]>([]), [pieces,setPieces]=useState<PieceOperation[]>([]),[disponibilites,setDisponibilites]=useState<DisponibiliteEquipe[]>([]),[fraisEquipe,setFraisEquipe]=useState<FraisEquipe[]>([]), [equipe,setEquipe]=useState<MembreOperation[]>([]);
+  const [vue,setVue]=useState<Vue>('pilotage'), [detail,setDetail]=useState<Commande|null>(null), [creation,setCreation]=useState(false),[recherche,setRecherche]=useState(''),[archives,setArchives]=useState(false);
+  async function charger(){const r=await listerCommandes(entreprise.id);setCommandes(r.commandes);setTaches(r.taches);setCommentaires(r.commentaires??[]);setCouts(r.couts??[]);setEcheances(r.echeances??[]);setHistorique(r.historique??[]);setPieces(r.pieces??[]);setDisponibilites(r.disponibilites??[]);setFraisEquipe(r.fraisEquipe??[]);}
+  useEffect(()=>{void charger();listerEquipeOperations(entreprise.id).then(setEquipe).catch(()=>setEquipe([]));},[entreprise.id]);
+  const visibles=(commandes??[]).filter(c=>(archives?!!c.archivee:!c.archivee)&&(!recherche||`${c.libelle} ${c.tiers_nom??''} ${c.reference??''}`.toLowerCase().includes(recherche.toLowerCase())));const actives=visibles.filter(c=>!['livree','annulee'].includes(c.statut));
+  const retards=actives.filter(c=>c.date_prevue&&c.date_prevue<auj()), bloquees=actives.filter(c=>c.statut==='bloquee'||c.nb_taches_bloquees>0);
+  const semaine=actives.filter(c=>c.date_prevue&&c.date_prevue>=auj()&&c.date_prevue<=new Date(Date.now()+7*864e5).toISOString().slice(0,10));
+  const reste=actives.reduce((s,c)=>s+Math.max(0,(c.montant??0)-c.acompte),0);
+  async function statutOp(c:Commande,s:string){await changerStatutCommande(entreprise.id,c.id,s);await charger();setDetail(null);}
+  async function statutTache(id:string,s:string){await changerStatutTache(entreprise.id,id,s);await charger();}
+  const vues:[Vue,string][]=[['pilotage','Pilotage'],['tableau','Tableau'],['planning','Planning'],['mes_taches','Mes tâches'],['equipe','Équipe']];
+  return <div className="-mx-4 -mt-4 md:-mx-8 md:-mt-6 flex-1 flex flex-col overflow-hidden">
+    <header className="px-4 md:px-8 pt-4 pb-2 flex items-center gap-2"><button aria-label="Retour" onClick={onRetour} className="w-9 h-9 rounded-full bg-[#1e3222] text-[#6b9165] flex items-center justify-center"><IcoChevR cls="w-4 h-4 rotate-180"/></button><div className="flex-1"><h1 className="text-[#edf5ea] text-lg font-bold">Opérations</h1><p className="text-[#4a6b4a] text-xs">Commandes, projets &amp; missions</p></div><button onClick={()=>setCreation(true)} className="bg-[#b4e033] text-[#0e1c0f] rounded-xl px-3 py-2 text-xs font-semibold flex gap-1"><IcoPlus cls="w-4 h-4"/>Nouvelle</button></header>
+    <nav className="px-4 md:px-8 pb-3 flex gap-2 overflow-x-auto">{vues.map(([k,l])=><button key={k} onClick={()=>setVue(k)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs ${vue===k?'bg-[#b4e033] text-[#0e1c0f]':'bg-[#1e3222] text-[#6b9165]'}`}>{l}</button>)}</nav><div className="px-4 md:px-8 pb-3 flex gap-2"><input aria-label="Rechercher une opération" className={`${inputCls} flex-1`} placeholder="Rechercher client, référence, opération…" value={recherche} onChange={e=>setRecherche(e.target.value)}/><button onClick={()=>setArchives(!archives)} className={`px-3 rounded-xl text-xs ${archives?'bg-[#b4e033] text-[#0e1c0f]':'bg-[#1e3222] text-[#6b9165]'}`}>Archives</button></div>
+    <main className="flex-1 overflow-y-auto px-4 md:px-8 pb-24">{commandes===null?<Vide t="Chargement…"/>:vue==='pilotage'?<Pilotage commandes={visibles} actives={actives} retards={retards} bloquees={bloquees} semaine={semaine} reste={reste} echeances={echeances} taches={taches} voir={setDetail}/>:vue==='tableau'?<Tableau commandes={visibles} voir={setDetail}/>:vue==='planning'?<Planning commandes={visibles} taches={taches} echeances={echeances} voir={setDetail}/>:vue==='mes_taches'?<MesTaches taches={taches} statut={statutTache}/>:<Equipe entrepriseId={entreprise.id} membres={equipe} commandes={visibles} taches={taches} disponibilites={disponibilites} recharger={charger}/>}</main>
+    {detail&&<Detail c={(commandes??[]).find(x=>x.id===detail.id)??detail} taches={taches.filter(t=>t.commande_id===detail.id)} commentaires={commentaires.filter(x=>x.commande_id===detail.id)} couts={couts.filter(x=>x.commande_id===detail.id)} echeances={echeances.filter(x=>x.commande_id===detail.id)} historique={historique.filter(x=>x.commande_id===detail.id)} pieces={pieces.filter(x=>x.commande_id===detail.id)} equipe={equipe} entrepriseId={entreprise.id} fermer={()=>setDetail(null)} statut={s=>statutOp(detail,s)} majTache={statutTache} recharger={charger}/>} {creation&&<Creation entreprise={entreprise} equipe={equipe} fermer={()=>setCreation(false)} fini={async()=>{setCreation(false);await charger();}}/>}
+  </div>;
 }
 
-function NouvelleCommandeSheet({ entreprise, term, onClose, onCree }: {
-  entreprise: EntrepriseResume; term: { commande: string }; onClose: () => void; onCree: () => void;
-}) {
-  const [libelle, setLibelle] = useState('');
-  const [montant, setMontant] = useState('');
-  const [tiersId, setTiersId] = useState('');
-  const [datePrevue, setDatePrevue] = useState('');
-  const [tiers, setTiers] = useState<Tiers[]>([]);
-  const [charge, setCharge] = useState(false);
-  const type = entreprise.secteur === 'service' ? 'mission' : 'commande';
-
-  useEffect(() => { listerTiers(entreprise.id).then(setTiers).catch(() => {}); }, [entreprise.id]);
-
-  async function creer() {
-    setCharge(true);
-    try {
-      await creerCommande(entreprise.id, {
-        type, libelle: libelle.trim(), montant: montant ? Number(montant) : undefined,
-        tiersId: tiersId || undefined, datePrevue: datePrevue || undefined, clientUuid: nouvelUuid(),
-      });
-      onCree();
-    } finally { setCharge(false); }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#0e1c0f]">
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#1e3222] bg-[#0a1408] shrink-0">
-        <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
-          <IcoChevR cls="w-4 h-4 rotate-180" />
-        </button>
-        <h2 className="text-[#edf5ea] font-semibold text-sm flex-1">Nouvelle {term.commande}</h2>
-        <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
-          <IcoX cls="w-3.5 h-3.5" />
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto px-4 pt-5 space-y-4">
-        <div>
-          <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Objet de la {term.commande}</label>
-          <input value={libelle} onChange={(e) => setLibelle(e.target.value)} placeholder="Ex. Livraison 10 sacs de riz" className={inputCls} />
-        </div>
-        {tiers.length > 0 && (
-          <div>
-            <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Client (optionnel)</label>
-            <select value={tiersId} onChange={(e) => setTiersId(e.target.value)} className={inputCls}>
-              <option value="">Sans client</option>
-              {tiers.map((t) => <option key={t.id} value={t.id}>{t.nom}</option>)}
-            </select>
-          </div>
-        )}
-        <div>
-          <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Montant estimé (optionnel)</label>
-          <input inputMode="numeric" value={montant} onChange={(e) => setMontant(e.target.value.replace(/\D/g, ''))} placeholder="40000" className={inputCls} />
-        </div>
-        <div>
-          <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Date prévue (optionnel)</label>
-          <input type="date" value={datePrevue} onChange={(e) => setDatePrevue(e.target.value)} className={`${inputCls} [color-scheme:dark]`} />
-        </div>
-      </div>
-      <div className="border-t border-[#1e3222] px-4 py-3 bg-[#0a1408] shrink-0">
-        <button onClick={creer} disabled={charge || !libelle.trim()}
-          className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40 flex items-center justify-center gap-2">
-          {charge ? '…' : <><IcoOk cls="w-4 h-4" /> Créer</>}
-        </button>
-      </div>
-    </div>
-  );
+function Pilotage({commandes,actives,retards,bloquees,semaine,reste,echeances,taches,voir}:{commandes:Commande[];actives:Commande[];retards:Commande[];bloquees:Commande[];semaine:Commande[];reste:number;echeances:EcheanceOperation[];taches:TacheOperation[];voir:(c:Commande)=>void}){const urg=[...retards,...bloquees,...semaine].filter((c,i,a)=>a.findIndex(x=>x.id===c.id)===i);const demain=new Date(Date.now()+864e5).toISOString().slice(0,10);const alertes=[...actives.filter(c=>!c.responsable_id).map(c=>({c,t:'Sans responsable'})),...actives.filter(c=>c.date_prevue===demain&&c.progression<70).map(c=>({c,t:`Livraison demain à seulement ${c.progression}%`})),...actives.filter(c=>(c.cout_reel??0)>(c.montant??0)).map(c=>({c,t:'Opération actuellement déficitaire'})),...echeances.filter(e=>e.statut==='a_venir'&&e.date_prevue<auj()).map(e=>({c:commandes.find(c=>c.id===e.commande_id),t:`Paiement en retard : ${e.libelle}`})).filter(x=>x.c),...taches.filter(t=>t.statut==='bloquee').map(t=>({c:commandes.find(c=>c.id===t.commande_id),t:`Tâche bloquée : ${t.titre}`})).filter(x=>x.c)];return <div className="space-y-4"><div className="grid grid-cols-2 lg:grid-cols-4 gap-2">{[['Actives',actives.length,'text-[#60a5fa]'],['À livrer · 7 jours',semaine.length,'text-[#b4e033]'],['En retard',retards.length,'text-[#f87171]'],['Bloquées',bloquees.length,'text-[#fbbf24]']].map(([l,n,c])=><div key={l} className="bg-[#162419] rounded-2xl p-4"><p className="text-[#4a6b4a] text-xs">{l}</p><p className={`font-mono text-2xl font-bold ${c}`}>{n}</p></div>)}</div><div className="bg-[#162419] rounded-2xl p-4 flex justify-between"><div><p className="text-[#4a6b4a] text-xs">À encaisser sur opérations actives</p><p className="text-[#edf5ea] font-mono text-xl font-bold">{fmt(reste)}</p></div><IcoAlert cls="w-6 h-6 text-[#fbbf24]"/></div><Section titre={`À décider · ${alertes.length}`} vide="Aucune décision urgente.">{alertes.map((a,i)=><button key={`${a.c!.id}-${i}`} onClick={()=>voir(a.c!)} className="w-full text-left bg-[#f87171]/10 border border-[#f87171]/20 rounded-xl p-3"><p className="text-[#fca5a5] text-xs font-semibold">{a.t}</p><p className="text-[#edf5ea] text-sm">{a.c!.libelle}</p></button>)}</Section><Section titre="Priorités" vide="Aucune urgence.">{urg.map(c=><Carte key={c.id} c={c} voir={voir}/>)}</Section><Section titre="Toutes les opérations" vide="Créez votre première opération.">{commandes.filter(c=>!c.archivee).map(c=><Carte key={c.id} c={c} voir={voir}/>)}</Section></div>}
+function Tableau({commandes,voir}:{commandes:Commande[];voir:(c:Commande)=>void}){return <div className="flex gap-3 overflow-x-auto items-start">{ETAPES.map(([s,l])=><section key={s} className="w-[280px] shrink-0 bg-[#101d12] rounded-2xl p-2"><h2 className="text-[#edf5ea] text-sm font-semibold px-2 py-2">{l} · {commandes.filter(c=>c.statut===s).length}</h2><div className="space-y-2">{commandes.filter(c=>c.statut===s).map(c=><Carte key={c.id} c={c} voir={voir}/>)}</div></section>)}</div>}
+function Planning({commandes,taches,echeances,voir}:{commandes:Commande[];taches:TacheOperation[];echeances:EcheanceOperation[];voir:(c:Commande)=>void}){const [decalage,setDecalage]=useState(0),base=new Date();base.setMonth(base.getMonth()+decalage,1);const an=base.getFullYear(),mois=base.getMonth(),premier=(new Date(an,mois,1).getDay()+6)%7,nb=new Date(an,mois+1,0).getDate(),cases=Array.from({length:42},(_,i)=>{const j=i-premier+1;return j>0&&j<=nb?j:null});const iso=(j:number)=>`${an}-${String(mois+1).padStart(2,'0')}-${String(j).padStart(2,'0')}`;return <div className="space-y-4"><section className="bg-[#162419] rounded-2xl p-3"><div className="flex justify-between items-center mb-3"><button onClick={()=>setDecalage(x=>x-1)} className="text-[#b4e033] px-3">‹</button><h2 className="text-[#edf5ea] font-semibold capitalize">{base.toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</h2><button onClick={()=>setDecalage(x=>x+1)} className="text-[#b4e033] px-3">›</button></div><div className="grid grid-cols-7 gap-1">{['L','M','M','J','V','S','D'].map((x,i)=><div key={i} className="text-center text-[#4a6b4a] text-[10px]">{x}</div>)}{cases.map((j,i)=>{const d=j?iso(j):'',ops=commandes.filter(c=>c.date_prevue?.slice(0,10)===d||c.date_rendez_vous?.slice(0,10)===d),ts=taches.filter(t=>t.date_echeance===d&&t.statut!=='terminee'),es=echeances.filter(e=>e.date_prevue===d&&e.statut==='a_venir');return <div key={i} className={`min-h-16 rounded-lg p-1 ${d===auj()?'border border-[#b4e033]':'bg-[#101d12]'}`}><span className="text-[#6b9165] text-[10px]">{j}</span>{ops.slice(0,1).map(o=><button key={o.id} onClick={()=>voir(o)} className="block w-full truncate text-left text-[#b4e033] text-[9px]">● {o.libelle}</button>)}{ts.length>0&&<p className="text-[#60a5fa] text-[9px]">{ts.length} tâche(s)</p>}{es.length>0&&<p className="text-[#fbbf24] text-[9px]">{es.length} paiement(s)</p>}</div>})}</div></section><Section titre="Prochaines échéances" vide="Aucune date planifiée.">{commandes.filter(c=>c.date_prevue||c.date_rendez_vous).sort((a,b)=>(a.date_prevue??a.date_rendez_vous??'').localeCompare(b.date_prevue??b.date_rendez_vous??'')).map(c=><Carte key={c.id} c={c} voir={voir}/>)}</Section></div>}
+function MesTaches({taches,statut}:{taches:TacheOperation[];statut:(id:string,s:string)=>void}){return <Section titre="Travail à réaliser" vide="Aucune tâche ouverte.">{taches.filter(t=>t.statut!=='terminee').map(t=><div key={t.id} className="bg-[#162419] rounded-2xl p-4"><p className="text-[#edf5ea] text-sm font-medium">{t.titre}</p><p className="text-[#4a6b4a] text-xs mt-1">{t.responsable_nom??'Toute l’équipe'} · {dateFr(t.date_echeance)}</p><div className="flex gap-2 mt-3">{t.statut==='a_faire'&&<Action on={()=>statut(t.id,'en_cours')}>Commencer</Action>}<Action on={()=>statut(t.id,'terminee')} vert>Terminer</Action>{t.statut!=='bloquee'&&<Action on={()=>statut(t.id,'bloquee')} rouge>Bloqué</Action>}</div></div>)}</Section>}
+function Equipe({entrepriseId,membres,commandes,taches,disponibilites,recharger}:{entrepriseId:string;membres:MembreOperation[];commandes:Commande[];taches:TacheOperation[];disponibilites:DisponibiliteEquipe[];recharger:()=>Promise<void>}) {
+  const [ouvert,setOuvert]=useState(''),[fraisPour,setFraisPour]=useState(''),[listeFrais,setListeFrais]=useState<FraisEquipe[]>([]);
+  const [f,setF]=useState({debut:'',fin:'',motif:'',type:'absence'}),[ff,setFf]=useState({type:'avance',libelle:'',montant:'',modePaiement:'especes',date:auj()});
+  useEffect(()=>{listerCommandes(entrepriseId).then(r=>setListeFrais(r.fraisEquipe??[])).catch(()=>{})},[entrepriseId]);
+  async function rafraichir(){await recharger();const r=await listerCommandes(entrepriseId);setListeFrais(r.fraisEquipe??[])}
+  return <div className="space-y-3"><div className="grid md:grid-cols-2 gap-3">{membres.map(m=>{const no=commandes.filter(c=>c.responsable_id===m.id&&!['livree','annulee'].includes(c.statut)).length,ouvertes=taches.filter(t=>(t.responsable_id===m.id||t.assignes_noms?.includes(m.nom))&&t.statut!=='terminee'),nt=ouvertes.length,retard=ouvertes.filter(t=>t.date_echeance&&t.date_echeance<auj()).length,surcharge=nt>5,indispo=disponibilites.filter(d=>d.utilisateur_id===m.id&&d.fin>=auj()),mf=listeFrais.filter(x=>x.utilisateur_id===m.id);return <div key={m.id} className={`bg-[#162419] rounded-2xl p-4 border ${surcharge?'border-[#f87171]/50':'border-transparent'}`}><div className="flex gap-3"><Avatar name={m.nom} size="sm"/><div className="flex-1"><div className="flex justify-between"><p className="text-[#edf5ea] text-sm">{m.nom}</p>{surcharge&&<span className="text-[#f87171] text-[10px]">Surchargé</span>}</div><p className="text-[#4a6b4a] text-xs capitalize">{m.role}</p><p className="text-[#b4e033] text-xs mt-2">{no} opération(s) · {nt} tâche(s)</p>{retard>0&&<p className="text-[#f87171] text-xs">{retard} tâche(s) en retard</p>}{indispo.map(d=><div key={d.id} className="flex justify-between"><p className="text-[#fbbf24] text-xs">{d.type} · {dateFr(d.debut)} → {dateFr(d.fin)}</p><button aria-label="Supprimer la disponibilité" onClick={async()=>{await supprimerDisponibiliteEquipe(entrepriseId,d.id);await rafraichir()}} className="text-[#f87171] text-xs">×</button></div>)}{mf.slice(0,3).map(x=><p key={x.id} className="text-[#6b9165] text-xs">{x.type==='avance'?'Avance':'Note de frais'} · {fmt(x.montant)}</p>)}<div className="h-1.5 bg-[#1e3222] mt-2 rounded"><div className={`h-full rounded ${surcharge?'bg-[#f87171]':'bg-[#b4e033]'}`} style={{width:`${Math.min(100,nt/8*100)}%`}}/></div><div className="flex gap-3"><button onClick={()=>setOuvert(ouvert===m.id?'':m.id)} className="text-[#6b9165] text-xs mt-3">+ Absence</button><button onClick={()=>setFraisPour(fraisPour===m.id?'':m.id)} className="text-[#6b9165] text-xs mt-3">+ Avance / frais</button></div></div></div>{ouvert===m.id&&<div className="grid grid-cols-2 gap-2 mt-3"><select className={inputCls} value={f.type} onChange={e=>setF({...f,type:e.target.value})}><option value="absence">Absence</option><option value="indisponible">Indisponible</option><option value="disponible">Disponible</option></select><input className={inputCls} placeholder="Motif" value={f.motif} onChange={e=>setF({...f,motif:e.target.value})}/><input type="date" className={inputCls} value={f.debut} onChange={e=>setF({...f,debut:e.target.value})}/><input type="date" className={inputCls} value={f.fin} onChange={e=>setF({...f,fin:e.target.value})}/><button disabled={!f.debut||!f.fin} onClick={async()=>{await ajouterDisponibiliteEquipe(entrepriseId,{utilisateurId:m.id,nom:m.nom,type:f.type as 'absence',debut:f.debut,fin:f.fin,motif:f.motif});setOuvert('');await rafraichir()}} className="col-span-2 bg-[#b4e033] text-[#0e1c0f] rounded-xl py-2 disabled:opacity-40">Enregistrer</button></div>}{fraisPour===m.id&&<div className="grid grid-cols-2 gap-2 mt-3"><select className={inputCls} value={ff.type} onChange={e=>setFf({...ff,type:e.target.value})}><option value="avance">Avance employé</option><option value="note_frais">Note de frais</option></select><select className={inputCls} value={ff.modePaiement} onChange={e=>setFf({...ff,modePaiement:e.target.value})}><option value="especes">Espèces</option><option value="mtn_momo">MTN MoMo</option><option value="orange_money">Orange Money</option><option value="banque">Banque</option></select><input className={inputCls} placeholder="Motif de l’avance / dépense" value={ff.libelle} onChange={e=>setFf({...ff,libelle:e.target.value})}/><input className={inputCls} inputMode="numeric" placeholder="Montant" value={ff.montant} onChange={e=>setFf({...ff,montant:e.target.value.replace(/\D/g,'')})}/><button disabled={!ff.libelle||!Number(ff.montant)} onClick={async()=>{await ajouterFraisEquipe(entrepriseId,{utilisateurId:m.id,nom:m.nom,type:ff.type as 'avance',libelle:ff.libelle,montant:Number(ff.montant),modePaiement:ff.modePaiement,date:ff.date,clientUuid:nouvelUuid()});setFraisPour('');setFf({...ff,libelle:'',montant:''});await rafraichir()}} className="col-span-2 bg-[#b4e033] text-[#0e1c0f] rounded-xl py-2 disabled:opacity-40">Enregistrer et comptabiliser</button></div>}</div>})}</div></div>
 }
+
+function Detail({c,taches,commentaires,couts,echeances,historique,pieces,equipe,entrepriseId,fermer,statut,majTache,recharger}:{c:Commande;taches:TacheOperation[];commentaires:CommentaireOperation[];couts:CoutOperation[];echeances:EcheanceOperation[];historique:HistoriqueOperation[];pieces:PieceOperation[];equipe:MembreOperation[];entrepriseId:string;fermer:()=>void;statut:(s:string)=>void;majTache:(id:string,s:string)=>Promise<void>;recharger:()=>Promise<void>}) {
+  const [ajout,setAjout]=useState(false),[titre,setTitre]=useState(''),[resp,setResp]=useState(''),[date,setDate]=useState(''),[depend,setDepend]=useState(''),[parent,setParent]=useState(''),[duree,setDuree]=useState(''),[recurrence,setRecurrence]=useState(''),[assignes,setAssignes]=useState<string[]>([]),[message,setMessage]=useState(''),[info,setInfo]=useState(''),[edite,setEdite]=useState(false),[coutForm,setCoutForm]=useState({libelle:'',montant:'',categorie:'matiere',modePaiement:'especes'}),[echForm,setEchForm]=useState({libelle:'Solde client',montant:'',datePrevue:'',type:'encaissement'});
+  const idx=ETAPES.findIndex(([s])=>s===c.statut);
+  const nomTache=(id:string|null)=>taches.find(x=>x.id===id)?.titre;
+  async function joindre(fichier:File){setInfo('Envoi…');try{const attente=await executerHorsLigne(entrepriseId,'operation_piece',{commandeId:c.id,fichier,categorie:'preuve'},()=>televerserPiecesOperation(entrepriseId,c.id,fichier,'preuve'));if(!attente)await recharger();setInfo(attente?'Pièce conservée hors ligne, en attente de synchronisation.':'Pièce ajoutée au dossier.')}catch(e){setInfo(e instanceof Error?e.message:'Échec de l’envoi')}}
+  async function voirPiece(id:string){try{window.open(await urlPieceOperationMultiple(entrepriseId,id),'_blank','noopener')}catch(e){setInfo(e instanceof Error?e.message:'Pièce indisponible')}}
+  async function facturer(){setInfo('Création de la facture…');try{await creerFactureOperation(entrepriseId,c.id,nouvelUuid());await recharger();setInfo('Facture brouillon créée dans Factures & Devis.')}catch(e){setInfo(e instanceof Error?e.message:'Facturation impossible')}}
+  async function majStatutTache(id:string,statut:string){try{await majTache(id,statut);setInfo('')}catch(e){setInfo(e instanceof Error?e.message:'Modification impossible')}}
+  function whatsapp(){const tel=(c.tiers_telephone??'').replace(/\D/g,'');const reste=Math.max(0,(c.montant??0)-c.acompte+c.remboursement);const msg=`Bonjour ${c.tiers_nom??''}, point sur « ${c.libelle} » : ${c.progression}% réalisé${c.date_prevue?`, livraison prévue le ${dateFr(c.date_prevue)}`:''}${reste?`, solde de ${fmt(reste)}`:''}.`;window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`,'_blank','noopener')}
+  function imprimerDocument(type:'Bon de commande'|'Bon de livraison'|'Fiche d’intervention'){const w=window.open('','_blank');if(!w)return setInfo('Autorisez les fenêtres pour imprimer le document.');w.document.write(`<!doctype html><html><head><title>${type}</title><style>body{font-family:Arial;padding:40px;color:#172018}h1{border-bottom:3px solid #9acd20;padding-bottom:12px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.box{border:1px solid #bbb;padding:12px;margin:12px 0}.sign{margin-top:80px;display:flex;justify-content:space-between}</style></head><body><h1>${type}</h1><p><b>Référence :</b> ${c.reference??c.id}</p><div class="grid"><div class="box"><b>Client</b><br>${c.tiers_nom??'Interne'}<br>${c.tiers_telephone??''}</div><div class="box"><b>Opération</b><br>${c.libelle}<br>Livraison : ${dateFr(c.date_prevue)}</div></div><h2>Travaux / articles</h2><ol>${taches.map(t=>`<li>${t.titre} — ${t.statut}</li>`).join('')}</ol><p><b>Montant :</b> ${fmt(c.montant??0)} &nbsp; <b>Reste :</b> ${fmt(Math.max(0,(c.montant??0)-c.acompte+c.remboursement))}</p><div class="sign"><span>Responsable / cachet</span><span>Client — reçu et approuvé</span></div><script>window.print()</script></body></html>`);w.document.close()}
+  return <div className="fixed inset-0 z-50 bg-[#0e1c0f] flex flex-col"><header className="p-4 border-b border-[#1e3222] flex gap-3"><button onClick={fermer} className="text-[#6b9165]"><IcoChevR cls="w-5 h-5 rotate-180"/></button><div className="flex-1"><p className="text-[#edf5ea] font-semibold">{c.libelle}</p><p className="text-[#4a6b4a] text-xs">{c.tiers_nom??'Opération interne'}</p></div><span className={`text-xs ${BADGE[c.statut]?.[1]}`}>{BADGE[c.statut]?.[0]}</span></header><main className="flex-1 overflow-y-auto p-4 max-w-3xl w-full mx-auto space-y-4">
+    <div className="flex justify-between items-center"><span className="text-[#4a6b4a] text-xs font-mono">{c.reference}</span><button onClick={()=>setEdite(!edite)} className="text-[#b4e033] text-xs">{edite?'Fermer':'Modifier'}</button></div>{edite&&<Edition c={c} equipe={equipe} enregistrer={async data=>{await modifierCommande(entrepriseId,c.id,data);await recharger();setEdite(false)}}/>}<div className="grid grid-cols-2 md:grid-cols-4 gap-2">{[['Responsable',c.responsable_nom??'Non assigné'],['Livraison',dateFr(c.date_prevue)],['Priorité',c.priorite],['Lieu',c.lieu??'—']].map(([l,v])=><Info key={l} l={l} v={v}/>)}</div>{c.description&&<p className="bg-[#162419] rounded-xl p-4 text-[#6b9165] text-sm">{c.description}</p>}
+    <div className="bg-[#162419] rounded-2xl p-4"><p className="text-[#6b9165] text-xs mb-2">Progression <span className="float-right text-[#b4e033]">{c.progression}%</span></p><div className="h-2 bg-[#1e3222] rounded"><div className="h-full bg-[#b4e033] rounded" style={{width:`${c.progression}%`}}/></div></div>
+    <div className="bg-[#162419] rounded-2xl p-4 grid grid-cols-2 md:grid-cols-5 gap-2"><Somme l="Chiffre d’affaires" n={c.montant??0}/><Somme l="Coût prévu" n={c.cout_budget??0}/><Somme l="Coût réel" n={c.cout_reel??0}/><Somme l="Marge réelle" n={(c.montant??0)-(c.cout_reel??0)}/><Somme l="Reste client" n={Math.max(0,(c.montant??0)-c.acompte+c.remboursement)}/></div>
+    <div className="bg-[#162419] rounded-2xl p-4"><div className="flex justify-between"><h2 className="text-[#edf5ea] text-sm font-semibold">Tâches · {taches.filter(t=>t.statut==='terminee').length}/{taches.length}</h2><button onClick={()=>setAjout(!ajout)} className="text-[#b4e033] text-xs">+ Ajouter</button></div>{ajout&&<div className="space-y-2 mt-3"><input className={inputCls} value={titre} onChange={e=>setTitre(e.target.value)} placeholder="Travail à effectuer"/><div className="grid md:grid-cols-2 gap-2"><input type="date" className={inputCls} value={date} onChange={e=>setDate(e.target.value)}/><input className={inputCls} inputMode="numeric" placeholder="Durée estimée (minutes)" value={duree} onChange={e=>setDuree(e.target.value.replace(/\D/g,''))}/><select className={inputCls} value={depend} onChange={e=>setDepend(e.target.value)}><option value="">Aucune dépendance</option>{taches.map(t=><option key={t.id} value={t.id}>Après : {t.titre}</option>)}</select><select className={inputCls} value={parent} onChange={e=>setParent(e.target.value)}><option value="">Tâche principale</option>{taches.map(t=><option key={t.id} value={t.id}>Sous-tâche de : {t.titre}</option>)}</select><select className={inputCls} value={recurrence} onChange={e=>setRecurrence(e.target.value)}><option value="">Non récurrente</option><option value="quotidienne">Chaque jour</option><option value="hebdomadaire">Chaque semaine</option><option value="mensuelle">Chaque mois</option></select></div><div><p className="text-[#6b9165] text-xs mb-1">Participants</p><div className="flex flex-wrap gap-2">{equipe.map(m=><button key={m.id} type="button" onClick={()=>setAssignes(x=>x.includes(m.id)?x.filter(i=>i!==m.id):[...x,m.id])} className={`px-2 py-1 rounded-lg text-xs ${assignes.includes(m.id)?'bg-[#b4e033] text-[#0e1c0f]':'bg-[#1e3222] text-[#6b9165]'}`}>{m.nom}</button>)}</div></div><button disabled={!titre.trim()} onClick={async()=>{const membres=equipe.filter(x=>assignes.includes(x.id)),m=membres[0];await creerTacheOperation(entrepriseId,c.id,{titre,responsableId:m?.id,responsableNom:m?.nom,dateEcheance:date||undefined,dependDeId:depend||undefined,parentId:parent||undefined,dureeMinutes:Number(duree)||0,recurrence:recurrence||undefined,assignes:membres.map(x=>({id:x.id,nom:x.nom}))});setTitre('');setAjout(false);setAssignes([]);await recharger();}} className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-xl py-2 disabled:opacity-40">Créer la tâche</button></div>}{taches.map(t=><div key={t.id} className={`flex gap-3 py-3 border-t border-[#1e3222] mt-3 ${t.parent_id?'ml-6':''}`}><button aria-label={`${t.statut==='terminee'?'Rouvrir':'Terminer'} : ${t.titre}`} onClick={()=>void majStatutTache(t.id,t.statut==='terminee'?'a_faire':'terminee')} className={`w-5 h-5 rounded border flex items-center justify-center ${t.statut==='terminee'?'bg-[#b4e033]':'border-[#4a6b4a]'}`}>{t.statut==='terminee'&&<IcoOk cls="w-3 h-3"/>}</button><div className="flex-1"><p className={t.statut==='terminee'?'line-through text-[#4a6b4a] text-sm':'text-[#edf5ea] text-sm'}>{t.parent_id?'↳ ':''}{t.titre}</p><p className="text-[#4a6b4a] text-xs">{t.assignes_noms??t.responsable_nom??'Non assignée'} · {dateFr(t.date_echeance)}{t.duree_minutes?` · ${t.duree_minutes} min`:''}{t.recurrence?` · ${t.recurrence}`:''}{t.depend_de_id?` · Après « ${nomTache(t.depend_de_id)} »`:''}</p></div></div>)}</div>
+    <div className="grid md:grid-cols-2 gap-3"><div className="bg-[#162419] rounded-2xl p-4 space-y-2"><h2 className="text-[#edf5ea] text-sm font-semibold">Coûts de l’opération</h2><p className="text-[#4a6b4a] text-[10px]">Chaque coût alimente automatiquement Dépenses, Trésorerie et Comptabilité.</p>{couts.map(x=><div key={x.id} className="flex justify-between text-xs"><span className="text-[#6b9165]">{x.libelle} · {x.categorie}</span><span className="text-[#edf5ea] font-mono">{fmt(x.montant)}</span></div>)}<input className={inputCls} placeholder="Matières, transport, sous-traitance…" value={coutForm.libelle} onChange={e=>setCoutForm({...coutForm,libelle:e.target.value})}/><div className="grid grid-cols-2 gap-2"><input className={inputCls} inputMode="numeric" placeholder="Montant" value={coutForm.montant} onChange={e=>setCoutForm({...coutForm,montant:e.target.value.replace(/\D/g,'')})}/><select className={inputCls} value={coutForm.categorie} onChange={e=>setCoutForm({...coutForm,categorie:e.target.value})}>{['matiere','transport','main_oeuvre','sous_traitance','autre'].map(x=><option key={x}>{x}</option>)}</select><select aria-label="Paiement du coût" className={`${inputCls} col-span-2`} value={coutForm.modePaiement} onChange={e=>setCoutForm({...coutForm,modePaiement:e.target.value})}><option value="especes">Espèces</option><option value="mtn_momo">MTN MoMo</option><option value="orange_money">Orange Money</option><option value="banque">Banque</option></select></div><button disabled={!coutForm.libelle||!Number(coutForm.montant)} onClick={async()=>{await ajouterCoutOperation(entrepriseId,c.id,{...coutForm,montant:Number(coutForm.montant),date:auj(),clientUuid:nouvelUuid()});setCoutForm({libelle:'',montant:'',categorie:'matiere',modePaiement:'especes'});await recharger()}} className="w-full bg-[#1e3222] text-[#b4e033] py-2 rounded-xl text-xs disabled:opacity-40">Enregistrer le coût et la dépense</button></div>
+    <div className="bg-[#162419] rounded-2xl p-4 space-y-2"><h2 className="text-[#edf5ea] text-sm font-semibold">Échéancier</h2>{echeances.map(x=><div key={x.id} className="flex justify-between items-center text-xs"><span className="text-[#6b9165]">{x.libelle} · {dateFr(x.date_prevue)}</span>{x.statut==='payee'?<span className="text-[#4ade80]">Payée</span>:<button onClick={async()=>{await payerEcheanceOperation(entrepriseId,x.id,{modePaiement:'especes'});await recharger()}} className="text-[#b4e033]">Marquer payée · {fmt(x.montant)}</button>}</div>)}<input className={inputCls} placeholder="Acompte, solde, remboursement…" value={echForm.libelle} onChange={e=>setEchForm({...echForm,libelle:e.target.value})}/><div className="grid grid-cols-2 gap-2"><input className={inputCls} inputMode="numeric" placeholder="Montant" value={echForm.montant} onChange={e=>setEchForm({...echForm,montant:e.target.value.replace(/\D/g,'')})}/><input type="date" className={inputCls} value={echForm.datePrevue} onChange={e=>setEchForm({...echForm,datePrevue:e.target.value})}/></div><button disabled={!echForm.libelle||!Number(echForm.montant)||!echForm.datePrevue} onClick={async()=>{await ajouterEcheanceOperation(entrepriseId,c.id,{...echForm,montant:Number(echForm.montant),type:echForm.type as 'encaissement'});setEchForm({libelle:'Solde client',montant:'',datePrevue:'',type:'encaissement'});await recharger()}} className="w-full bg-[#1e3222] text-[#b4e033] py-2 rounded-xl text-xs disabled:opacity-40">Planifier le paiement</button></div></div>
+    <div className="bg-[#162419] rounded-2xl p-4 space-y-3"><h2 className="text-[#edf5ea] text-sm font-semibold">Journal & preuves</h2><div className="flex gap-2"><input className={inputCls} value={message} onChange={e=>setMessage(e.target.value)} placeholder="Avancement, incident, décision…"/><button disabled={!message.trim()} onClick={async()=>{await ajouterCommentaireOperation(entrepriseId,c.id,{message});setMessage('');await recharger()}} className="bg-[#b4e033] text-[#0e1c0f] px-4 rounded-xl disabled:opacity-40">Publier</button></div>{commentaires.map(x=><div key={x.id} className="border-l-2 border-[#2a4230] pl-3"><p className="text-[#edf5ea] text-sm">{x.message}</p><p className="text-[#4a6b4a] text-[10px]">{x.auteur_nom??'Équipe'} · {new Date(x.cree_le).toLocaleString('fr-FR')}</p></div>)}<div className="grid md:grid-cols-2 gap-2">{pieces.map(p=><div key={p.id} className="bg-[#1e3222] rounded-xl p-2 flex items-center gap-2"><button onClick={()=>void voirPiece(p.id)} className="flex-1 text-left text-[#edf5ea] text-xs truncate">{p.nom}</button><button aria-label={`Supprimer ${p.nom}`} onClick={async()=>{await supprimerPieceOperationMultiple(entrepriseId,p.id);await recharger()}} className="text-[#f87171] text-xs">×</button></div>)}</div><details><summary className="text-[#6b9165] text-xs cursor-pointer">Historique complet ({historique.length})</summary>{historique.map(x=><p key={x.id} className="text-[#4a6b4a] text-[10px] py-1">{new Date(x.created_at).toLocaleString('fr-FR')} · {x.action}{x.detail?` · ${x.detail}`:''}</p>)}</details><label className="inline-block cursor-pointer bg-[#1e3222] text-[#edf5ea] px-3 py-2 rounded-xl text-xs">+ Ajouter photos ou PDF<input multiple type="file" accept="image/*,application/pdf" className="hidden" onChange={async e=>{for(const f of Array.from(e.target.files??[]))await joindre(f)}}/></label></div>
+    <div className="grid md:grid-cols-2 gap-2">{c.facture_id?<div className="bg-[#b4e033]/10 text-[#b4e033] rounded-xl p-3 text-center text-sm">Facture créée</div>:<button onClick={facturer} disabled={!c.tiers_nom||!c.montant} className="bg-[#1e3222] text-[#edf5ea] rounded-xl p-3 text-sm disabled:opacity-40">Créer la facture</button>}<button onClick={whatsapp} disabled={!c.tiers_telephone} className="bg-[#25D366]/10 text-[#4ade80] rounded-xl p-3 text-sm disabled:opacity-40">Préparer la relance WhatsApp</button></div><div className="grid grid-cols-2 md:grid-cols-4 gap-2">{(['Bon de commande','Bon de livraison','Fiche d’intervention'] as const).map(x=><button key={x} onClick={()=>imprimerDocument(x)} className="bg-[#1e3222] text-[#6b9165] rounded-xl p-2 text-xs">{x}</button>)}<button onClick={async()=>{await modifierCommande(entrepriseId,c.id,{valideeClientLe:new Date().toISOString()});await recharger();setInfo('Validation client enregistrée')}} className="bg-[#b4e033]/10 text-[#b4e033] rounded-xl p-2 text-xs">{c.validee_client_le?'Client validé':'Valider avec le client'}</button></div>{info&&<p className="text-[#fbbf24] text-xs">{info}</p>}
+    <div className="flex flex-wrap gap-2">{idx>=0&&idx<ETAPES.length-1&&<button onClick={()=>statut(ETAPES[idx+1]![0])} className="flex-1 bg-[#b4e033] text-[#0e1c0f] rounded-xl py-3 text-sm">Passer à « {ETAPES[idx+1]![1]} »</button>}<button onClick={()=>statut('bloquee')} className="px-4 bg-[#f87171]/10 text-[#f87171] rounded-xl">Bloquer</button><button onClick={async()=>{await dupliquerCommande(entrepriseId,c.id);await recharger();setInfo('Copie créée')}} className="px-4 bg-[#1e3222] text-[#edf5ea] rounded-xl text-xs">Dupliquer</button><button onClick={async()=>{await archiverCommande(entrepriseId,c.id);await recharger();fermer()}} className="px-4 bg-[#1e3222] text-[#6b9165] rounded-xl text-xs">Archiver</button></div>
+  </main></div>
+}
+
+function Creation({entreprise,equipe,fermer,fini}:{entreprise:EntrepriseResume;equipe:MembreOperation[];fermer:()=>void;fini:()=>void}) {
+  const [tiers,setTiers]=useState<Tiers[]>([]),[charge,setCharge]=useState(false),[modele,setModele]=useState('');
+  const [f,setF]=useState({libelle:'',description:'',tiersId:'',responsableId:'',montant:'',coutBudget:'',acompte:'',remboursement:'',dateDebut:'',datePrevue:'',dateRendezVous:'',datePaiement:'',lieu:'',priorite:'normale',type:entreprise.secteur==='service'?'mission':'commande'});
+  useEffect(()=>{listerTiers(entreprise.id).then(setTiers).catch(()=>{})},[entreprise.id]);const maj=(k:string,v:string)=>setF(p=>({...p,[k]:v}));
+  async function creer(){setCharge(true);try{const m=equipe.find(x=>x.id===f.responsableId);const clientUuid=nouvelUuid();const donnees={...f,montant:Number(f.montant)||undefined,coutBudget:Number(f.coutBudget)||0,acompte:Number(f.acompte)||0,remboursement:Number(f.remboursement)||0,tiersId:f.tiersId||undefined,responsableId:m?.id,responsableNom:m?.nom,dateDebut:f.dateDebut||undefined,datePrevue:f.datePrevue||undefined,dateRendezVous:f.dateRendezVous||undefined,datePaiement:f.datePaiement||undefined,clientUuid};if(!navigator.onLine){await enfilerMutation({clientUuid,entrepriseId:entreprise.id,type:'commande',payload:donnees});fini();return}const r=await creerCommande(entreprise.id,donnees);let precedente:string|undefined;for(const titre of MODELES.find(x=>x.id===modele)?.taches??[]){const t=await creerTacheOperation(entreprise.id,r.commandeId,{titre,responsableId:m?.id,responsableNom:m?.nom,dateEcheance:f.datePrevue||undefined,dependDeId:precedente});precedente=t.tacheId}void synchroniser();fini()}finally{setCharge(false)}}
+  return <div className="fixed inset-0 z-50 bg-[#0e1c0f] flex flex-col"><header className="p-4 border-b border-[#1e3222] flex"><h2 className="text-[#edf5ea] font-semibold flex-1">Nouvelle opération</h2><button onClick={fermer}><IcoX cls="w-5 h-5 text-[#6b9165]"/></button></header><main className="flex-1 overflow-y-auto p-4 max-w-2xl w-full mx-auto grid md:grid-cols-2 gap-3"><div className="md:col-span-2"><Champ l="Modèle métier"><select className={inputCls} value={modele} onChange={e=>setModele(e.target.value)}><option value="">Sans modèle — planifier manuellement</option>{MODELES.map(x=><option key={x.id} value={x.id}>{x.nom} · {x.taches.length} étapes</option>)}</select></Champ></div>{[['Objet *','libelle','Ex. Confection de 20 uniformes'],['Lieu / quartier','lieu','Akwa, près de…']].map(([l,k,p])=><Champ key={k} l={l}><input className={inputCls} value={(f as any)[k]} onChange={e=>maj(k,e.target.value)} placeholder={p}/></Champ>)}<Champ l="Client"><select className={inputCls} value={f.tiersId} onChange={e=>maj('tiersId',e.target.value)}><option value="">Opération interne</option>{tiers.map(t=><option key={t.id} value={t.id}>{t.nom}</option>)}</select></Champ><Champ l="Responsable"><select className={inputCls} value={f.responsableId} onChange={e=>maj('responsableId',e.target.value)}><option value="">Non assigné</option>{equipe.map(m=><option key={m.id} value={m.id}>{m.nom}</option>)}</select></Champ>{[['Début','dateDebut'],['Livraison promise','datePrevue'],['Rendez-vous client','dateRendezVous'],['Échéance paiement','datePaiement']].map(([l,k])=><Champ key={k} l={l}><input type={k==='dateRendezVous'?'datetime-local':'date'} className={inputCls} value={(f as any)[k]} onChange={e=>maj(k,e.target.value)}/></Champ>)}{[['Montant','montant'],['Coût prévu','coutBudget'],['Acompte reçu','acompte'],['Remboursement','remboursement']].map(([l,k])=><Champ key={k} l={l}><input className={inputCls} inputMode="numeric" value={(f as any)[k]} onChange={e=>maj(k,e.target.value.replace(/\D/g,''))}/></Champ>)}<Champ l="Priorité"><select className={inputCls} value={f.priorite} onChange={e=>maj('priorite',e.target.value)}>{['basse','normale','haute','urgente'].map(x=><option key={x}>{x}</option>)}</select></Champ><div className="md:col-span-2"><Champ l="Description / résultat attendu"><textarea rows={3} className={inputCls} value={f.description} onChange={e=>maj('description',e.target.value)}/></Champ></div></main><footer className="p-4 border-t border-[#1e3222]"><button disabled={charge||!f.libelle.trim()} onClick={creer} className="w-full max-w-2xl mx-auto block bg-[#b4e033] text-[#0e1c0f] rounded-xl py-3 font-semibold disabled:opacity-40">{charge?'Création et planification…':'Créer et planifier'}</button></footer></div>
+}
+
+function Edition({c,equipe,enregistrer}:{c:Commande;equipe:MembreOperation[];enregistrer:(d:Record<string,unknown>)=>Promise<void>}){const [f,setF]=useState({libelle:c.libelle,description:c.description??'',lieu:c.lieu??'',datePrevue:c.date_prevue??'',datePaiement:c.date_paiement??'',priorite:c.priorite,responsableId:c.responsable_id??'',montant:String(c.montant??''),coutBudget:String(c.cout_budget??'')});return <div className="bg-[#162419] rounded-2xl p-4 grid md:grid-cols-2 gap-2"><input className={inputCls} value={f.libelle} onChange={e=>setF({...f,libelle:e.target.value})}/><input className={inputCls} placeholder="Lieu" value={f.lieu} onChange={e=>setF({...f,lieu:e.target.value})}/><input type="date" className={inputCls} value={f.datePrevue} onChange={e=>setF({...f,datePrevue:e.target.value})}/><input type="date" className={inputCls} value={f.datePaiement} onChange={e=>setF({...f,datePaiement:e.target.value})}/><select className={inputCls} value={f.responsableId} onChange={e=>setF({...f,responsableId:e.target.value})}><option value="">Non assigné</option>{equipe.map(x=><option key={x.id} value={x.id}>{x.nom}</option>)}</select><select className={inputCls} value={f.priorite} onChange={e=>setF({...f,priorite:e.target.value})}>{['basse','normale','haute','urgente'].map(x=><option key={x}>{x}</option>)}</select><input className={inputCls} placeholder="Montant" value={f.montant} onChange={e=>setF({...f,montant:e.target.value.replace(/\D/g,'')})}/><input className={inputCls} placeholder="Coût prévu" value={f.coutBudget} onChange={e=>setF({...f,coutBudget:e.target.value.replace(/\D/g,'')})}/><textarea className={`${inputCls} md:col-span-2`} value={f.description} onChange={e=>setF({...f,description:e.target.value})}/><button className="md:col-span-2 bg-[#b4e033] text-[#0e1c0f] rounded-xl py-2" onClick={()=>{const m=equipe.find(x=>x.id===f.responsableId);void enregistrer({...f,montant:Number(f.montant)||0,coutBudget:Number(f.coutBudget)||0,responsableNom:m?.nom??null})}}>Enregistrer les modifications</button></div>}
+
+function Carte({c,voir}:{c:Commande;voir:(c:Commande)=>void}){const retard=c.date_prevue&&c.date_prevue<auj()&&!['livree','annulee'].includes(c.statut);return <button onClick={()=>voir(c)} className="w-full text-left bg-[#162419] rounded-2xl p-4 border border-[#1e3222]"><div className="flex justify-between gap-2"><div className="min-w-0"><p className="text-[#edf5ea] text-sm font-medium truncate">{c.libelle}</p><p className="text-[#4a6b4a] text-xs truncate">{c.tiers_nom??'Interne'} · {c.responsable_nom??'Non assigné'}</p></div><span className={`text-xs ${BADGE[c.statut]?.[1]}`}>{BADGE[c.statut]?.[0]}</span></div><div className="flex justify-between mt-3 text-xs"><span className={retard?'text-[#f87171]':'text-[#6b9165]'}>{retard?'En retard · ':''}{dateFr(c.date_prevue)}</span><span className="text-[#b4e033]">{c.progression}%</span></div><div className="h-1 bg-[#1e3222] mt-2"><div className="h-full bg-[#b4e033]" style={{width:`${c.progression}%`}}/></div></button>}
+function Section({titre,vide,children}:{titre:string;vide:string;children:ReactNode}){return <section><h2 className="text-[#6b9165] text-xs uppercase font-semibold mb-2">{titre}</h2><div className="space-y-2">{Array.isArray(children)&&children.length===0?<Vide t={vide}/>:children}</div></section>}
+function Vide({t}:{t:string}){return <p className="text-[#4a6b4a] text-sm text-center py-8">{t}</p>};function Action({children,on,vert,rouge}:{children:ReactNode;on:()=>void;vert?:boolean;rouge?:boolean}){return <button onClick={on} className={`px-3 py-1.5 rounded-lg text-xs ${vert?'bg-[#b4e033] text-[#0e1c0f]':rouge?'bg-[#f87171]/10 text-[#f87171]':'bg-[#1e3222] text-[#edf5ea]'}`}>{children}</button>};function Info({l,v}:{l:string;v:string}){return <div className="bg-[#162419] p-3 rounded-xl"><p className="text-[#4a6b4a] text-[10px] uppercase">{l}</p><p className="text-[#edf5ea] text-sm mt-1 capitalize">{v}</p></div>};function Somme({l,n}:{l:string;n:number}){return <div><p className="text-[#4a6b4a] text-[10px]">{l}</p><p className="text-[#edf5ea] font-mono text-sm">{fmt(n)}</p></div>};function Champ({l,children}:{l:string;children:ReactNode}){return <label><span className="text-[#6b9165] text-xs block mb-1.5">{l}</span>{children}</label>}

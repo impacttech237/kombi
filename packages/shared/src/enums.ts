@@ -26,7 +26,7 @@ export type RoleMembre = (typeof ROLE_MEMBRE)[number];
 export const TYPE_COMMANDE = ['commande', 'mission'] as const;
 export type TypeCommande = (typeof TYPE_COMMANDE)[number];
 
-export const STATUT_COMMANDE = ['en_attente', 'en_cours', 'livree', 'annulee'] as const;
+export const STATUT_COMMANDE = ['en_attente', 'en_cours', 'controle', 'prete', 'livree', 'bloquee', 'annulee'] as const;
 export type StatutCommande = (typeof STATUT_COMMANDE)[number];
 
 export const TYPE_MOUVEMENT_STOCK = ['entree', 'sortie', 'ajustement'] as const;
