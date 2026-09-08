@@ -19,7 +19,7 @@ type ModePaiement = 'especes' | 'orange_money' | 'mtn_momo' | 'virement';
 const MODES: { code: ModePaiement; label: string; couleur: string }[] = [
   { code: 'especes', label: 'Espèces', couleur: '#234b3d' },
   { code: 'orange_money', label: 'Orange Money', couleur: '#e08a1e' },
-  { code: 'mtn_momo', label: 'MTN MoMo', couleur: '#9ac91f' },
+  { code: 'mtn_momo', label: 'MTN MoMo', couleur: '#2e8a5e' },
   { code: 'virement', label: 'Virement', couleur: '#5fa8e0' },
 ];
 
@@ -64,35 +64,35 @@ function ReceiptScreen({ entreprise, recu, onNew }: { entreprise: EntrepriseResu
   return (
     <div className="flex-1 overflow-y-auto pb-28 md:pb-8">
       <div className="text-center mb-6">
-        <div className="w-16 h-16 rounded-full bg-[#b4e033] flex items-center justify-center text-[#0e1c0f] mx-auto mb-3 shadow-lg shadow-[#b4e033]/30">
+        <div className="w-16 h-16 rounded-full bg-[#3a9e6e] flex items-center justify-center text-white mx-auto mb-3 shadow-lg shadow-[var(--k-lime)]/30">
           <IcoOk cls="w-8 h-8" />
         </div>
-        <p className="text-[#edf5ea] text-xl font-semibold">
+        <p className="text-[var(--k-ink)] text-xl font-semibold">
           {recu.aCredit ? 'Vente à crédit enregistrée' : 'Vente encaissée !'}
         </p>
-        <p className="text-[#4a6b4a] text-xs mt-1">{recu.datetime}</p>
+        <p className="text-[var(--k-faint)] text-xs mt-1">{recu.datetime}</p>
       </div>
 
-      <div id="recu-impression" className="bg-[#162419] rounded-2xl overflow-hidden mb-3">
-        <div className="px-4 py-3 border-b border-[#1e3222]">
-          <h3 className="text-[#edf5ea] font-semibold text-sm">Détail de la vente</h3>
-          {recu.client && <p className="text-[#4a6b4a] text-xs mt-0.5">Client : {recu.client}</p>}
+      <div id="recu-impression" className="bg-[var(--k-surface)] rounded-2xl overflow-hidden mb-3">
+        <div className="px-4 py-3 border-b border-[var(--k-line)]">
+          <h3 className="text-[var(--k-ink)] font-semibold text-sm">Détail de la vente</h3>
+          {recu.client && <p className="text-[var(--k-faint)] text-xs mt-0.5">Client : {recu.client}</p>}
         </div>
-        <div className="divide-y divide-[#1e3222]">
+        <div className="divide-y divide-[var(--k-line)]">
           {recu.lignes.map((l, i) => (
             <div key={i} className="px-4 py-3 flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <p className="text-[#edf5ea] text-sm font-medium truncate">{l.designation}</p>
-                <p className="text-[#4a6b4a] text-xs mt-0.5">
+                <p className="text-[var(--k-ink)] text-sm font-medium truncate">{l.designation}</p>
+                <p className="text-[var(--k-faint)] text-xs mt-0.5">
                   {fmt(l.prixUnitaire)} × {l.quantite}
                   {(l.remisePct ?? 0) > 0 && <span className="text-[#f87171]"> · remise {l.remisePct}%</span>}
                 </p>
               </div>
-              <p className="font-mono text-[#b4e033] text-sm font-semibold shrink-0">{fmt(l.quantite * l.prixUnitaire)}</p>
+              <p className="font-mono text-[var(--k-lime)] text-sm font-semibold shrink-0">{fmt(l.quantite * l.prixUnitaire)}</p>
             </div>
           ))}
         </div>
-        <div className="px-4 py-3 bg-[#1e3222] space-y-1.5">
+        <div className="px-4 py-3 bg-[var(--k-surface-soft)] space-y-1.5">
           {hasDisc && recu.remise > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-[#f87171]">Remise</span>
@@ -102,37 +102,37 @@ function ReceiptScreen({ entreprise, recu, onNew }: { entreprise: EntrepriseResu
           {recu.tvaApplicable && (
             <>
               <div className="flex justify-between text-sm">
-                <span className="text-[#6b9165]">Total HT</span>
-                <span className="font-mono text-[#edf5ea]">{fmt(recu.totalHt)}</span>
+                <span className="text-[var(--k-muted)]">Total HT</span>
+                <span className="font-mono text-[var(--k-ink)]">{fmt(recu.totalHt)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-[#6b9165]">TVA 19,25%</span>
-                <span className="font-mono text-[#edf5ea]">{fmt(recu.totalTva)}</span>
+                <span className="text-[var(--k-muted)]">TVA 19,25%</span>
+                <span className="font-mono text-[var(--k-ink)]">{fmt(recu.totalTva)}</span>
               </div>
             </>
           )}
-          <div className="flex justify-between items-baseline pt-1 border-t border-[#2a4230]">
-            <span className="text-[#edf5ea] font-semibold">Total</span>
-            <span className="font-mono font-bold text-xl text-[#b4e033]">{fmt(recu.total)}</span>
+          <div className="flex justify-between items-baseline pt-1 border-t border-[var(--k-line)]">
+            <span className="text-[var(--k-ink)] font-semibold">Total</span>
+            <span className="font-mono font-bold text-xl text-[var(--k-lime)]">{fmt(recu.total)}</span>
           </div>
         </div>
       </div>
 
-      <div className="bg-[#162419] rounded-2xl p-4 mb-5 space-y-2">
+      <div className="bg-[var(--k-surface)] rounded-2xl p-4 mb-5 space-y-2">
         <div className="flex justify-between text-sm">
-          <span className="text-[#6b9165]">Mode de règlement</span>
-          <span className="text-[#edf5ea] font-medium">
+          <span className="text-[var(--k-muted)]">Mode de règlement</span>
+          <span className="text-[var(--k-ink)] font-medium">
             {recu.aCredit ? `À crédit · ${recu.client}` : MODES.find((m) => m.code === recu.mode)?.label}
           </span>
         </div>
         {!recu.aCredit && (
           <div className="flex justify-between text-sm">
-            <span className="text-[#6b9165]">Montant reçu</span>
-            <span className="font-mono text-[#edf5ea]">{fmt(recu.recu)}</span>
+            <span className="text-[var(--k-muted)]">Montant reçu</span>
+            <span className="font-mono text-[var(--k-ink)]">{fmt(recu.recu)}</span>
           </div>
         )}
         {!recu.aCredit && recu.rendu > 0 && (
-          <div className="flex justify-between items-baseline pt-1.5 border-t border-[#1e3222]">
+          <div className="flex justify-between items-baseline pt-1.5 border-t border-[var(--k-line)]">
             <span className="text-[#4ade80] font-semibold text-sm">Rendu-monnaie</span>
             <span className="font-mono font-bold text-[#4ade80] text-lg">{fmt(recu.rendu)}</span>
           </div>
@@ -141,8 +141,8 @@ function ReceiptScreen({ entreprise, recu, onNew }: { entreprise: EntrepriseResu
 
       <div className="space-y-2 px-4 md:px-0">
         <button onClick={imprimerRecu}
-          className="w-full bg-[#1e3222] border border-[#2a4230] text-[#edf5ea] rounded-2xl py-3.5 flex items-center justify-center gap-2.5 text-sm font-medium active:scale-95 transition-all">
-          <IcoFile cls="w-4 h-4 text-[#6b9165]" />
+          className="w-full bg-[var(--k-surface-soft)] border border-[var(--k-line)] text-[var(--k-ink)] rounded-2xl py-3.5 flex items-center justify-center gap-2.5 text-sm font-medium active:scale-95 transition-all">
+          <IcoFile cls="w-4 h-4 text-[var(--k-muted)]" />
           Imprimer le reçu
         </button>
         {erreurImpression && <p role="alert" className="text-[#f87171] text-xs text-center">{erreurImpression}</p>}
@@ -152,7 +152,7 @@ function ReceiptScreen({ entreprise, recu, onNew }: { entreprise: EntrepriseResu
           <IcoTrend cls="w-4 h-4" />
           Partager (WhatsApp)
         </button>
-        <button onClick={onNew} className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all">
+        <button onClick={onNew} className="w-full bg-[#3a9e6e] text-white rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all">
           Nouvelle vente
         </button>
       </div>
@@ -322,29 +322,29 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
     const stock = item.produitId ? produits.find((p) => p.id === item.produitId)?.stock_actuel : undefined;
     const auMaxStock = stock !== undefined && item.quantite >= stock;
     return (
-      <div className="flex items-start gap-2 px-4 py-3 border-b border-[#1e3222]">
+      <div className="flex items-start gap-2 px-4 py-3 border-b border-[var(--k-line)]">
         <div className="flex-1 min-w-0">
-          <p className="text-[#edf5ea] text-sm font-medium truncate">{item.designation}</p>
+          <p className="text-[var(--k-ink)] text-sm font-medium truncate">{item.designation}</p>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            <span className="text-[#4a6b4a] text-xs">{fmt(item.prixUnitaire)} × {item.quantite}</span>
-            <span className="text-[#2a4230] text-[10px]">·</span>
-            <span className="text-[#4a6b4a] text-[10px]">Remise</span>
+            <span className="text-[var(--k-faint)] text-xs">{fmt(item.prixUnitaire)} × {item.quantite}</span>
+            <span className="text-[var(--k-surface-inset)] text-[10px]">·</span>
+            <span className="text-[var(--k-faint)] text-[10px]">Remise</span>
             <input type="text" inputMode="numeric" value={item.remisePct ?? ''} placeholder="0"
               onChange={(e) => changerRemiseLigne(i, e.target.value)}
-              className="w-9 bg-[#0e1c0f] text-[#edf5ea] text-xs text-center rounded-md py-0.5 px-1 border border-[#2a4230] focus:outline-none focus:border-[#b4e033]/60" />
-            <span className="text-[#4a6b4a] text-[10px]">%</span>
+              className="w-9 bg-[#0e1c0f] text-[var(--k-ink)] text-xs text-center rounded-md py-0.5 px-1 border border-[var(--k-line)] focus:outline-none focus:ring-2 focus:ring-[var(--k-lime)]/60" />
+            <span className="text-[var(--k-faint)] text-[10px]">%</span>
           </div>
           {auMaxStock && <p className="text-[#fbbf24] text-[10px] mt-1">Stock disponible atteint ({stock})</p>}
         </div>
         <div className="flex flex-col items-end gap-1.5 shrink-0">
           <div className="flex items-center gap-1">
-            <button onClick={() => changerQuantite(i, -1)} className="w-7 h-7 rounded-full bg-[#1e3222] text-[#edf5ea] flex items-center justify-center hover:bg-[#2a4230]"><IcoMinus cls="w-3 h-3" /></button>
-            <span className="w-5 text-center text-[#edf5ea] text-sm font-medium">{item.quantite}</span>
+            <button onClick={() => changerQuantite(i, -1)} className="w-7 h-7 rounded-full bg-[var(--k-surface-soft)] text-[var(--k-ink)] flex items-center justify-center hover:bg-[var(--k-surface-inset)]"><IcoMinus cls="w-3 h-3" /></button>
+            <span className="w-5 text-center text-[var(--k-ink)] text-sm font-medium">{item.quantite}</span>
             <button onClick={() => changerQuantite(i, 1)} disabled={auMaxStock}
-              className="w-7 h-7 rounded-full bg-[#1e3222] text-[#edf5ea] flex items-center justify-center hover:bg-[#2a4230] disabled:opacity-30 disabled:hover:bg-[#1e3222]"><IcoPlus cls="w-3 h-3" /></button>
+              className="w-7 h-7 rounded-full bg-[var(--k-surface-soft)] text-[var(--k-ink)] flex items-center justify-center hover:bg-[var(--k-surface-inset)] disabled:opacity-30 disabled:hover:bg-[var(--k-surface-soft)]"><IcoPlus cls="w-3 h-3" /></button>
           </div>
-          {(item.remisePct ?? 0) > 0 && <span className="font-mono text-[10px] text-[#4a6b4a] line-through">{fmt(raw)}</span>}
-          <span className="font-mono text-[#b4e033] text-sm font-semibold">{fmt(net)}</span>
+          {(item.remisePct ?? 0) > 0 && <span className="font-mono text-[10px] text-[var(--k-faint)] line-through">{fmt(raw)}</span>}
+          <span className="font-mono text-[var(--k-lime)] text-sm font-semibold">{fmt(net)}</span>
           <button onClick={() => retirerLigne(i)} className="text-[#f87171] text-[10px]">Retirer</button>
         </div>
       </div>
@@ -354,9 +354,9 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
   const CartFooter = ({ onCheckout }: { onCheckout: () => void }) => {
     const hasDiscs = gd > 0 || panier.some((l) => (l.remisePct ?? 0) > 0);
     return (
-      <div className="p-4 border-t border-[#1e3222] space-y-3">
+      <div className="p-4 border-t border-[var(--k-line)] space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[#6b9165] text-sm">Remise globale</span>
+          <span className="text-[var(--k-muted)] text-sm">Remise globale</span>
           <div className="flex items-center gap-1.5">
             <input type="text" inputMode="numeric" value={remiseGlobale} placeholder="0"
               onChange={(e) => {
@@ -364,31 +364,31 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
                 const bornee = chiffres === '' ? '' : String(Math.min(100, Number(chiffres)));
                 setRemiseGlobale(bornee);
               }}
-              className="w-12 bg-[#1e3222] text-[#edf5ea] text-sm text-center rounded-lg py-1.5 border border-[#2a4230] focus:outline-none focus:border-[#b4e033] transition-colors" />
-            <span className="text-[#4a6b4a] text-sm">%</span>
+              className="w-12 bg-[var(--k-surface-soft)] text-[var(--k-ink)] text-sm text-center rounded-lg py-1.5 border border-[var(--k-line)] focus:outline-none focus:ring-2 focus:ring-[var(--k-lime)] transition-colors" />
+            <span className="text-[var(--k-faint)] text-sm">%</span>
           </div>
         </div>
         {hasDiscs && (
           <div className="flex justify-between text-sm">
-            <span className="text-[#4a6b4a]">Sous-total</span>
-            <span className="font-mono text-[#6b9165]">{fmt(sousTotal)}</span>
+            <span className="text-[var(--k-faint)]">Sous-total</span>
+            <span className="font-mono text-[var(--k-muted)]">{fmt(sousTotal)}</span>
           </div>
         )}
         {tvaApplicable && (
           <div className="flex justify-between text-sm">
-            <span className="text-[#4a6b4a]">HT {fmt(totalHt)} + TVA</span>
-            <span className="font-mono text-[#6b9165]">{fmt(totalTva)}</span>
+            <span className="text-[var(--k-faint)]">HT {fmt(totalHt)} + TVA</span>
+            <span className="font-mono text-[var(--k-muted)]">{fmt(totalTva)}</span>
           </div>
         )}
         <div className="flex justify-between items-baseline">
-          <span className="text-[#6b9165] font-medium">Total</span>
-          <span className="text-[#edf5ea] font-mono font-bold text-xl">{fmt(cartTotal)}</span>
+          <span className="text-[var(--k-muted)] font-medium">Total</span>
+          <span className="text-[var(--k-ink)] font-mono font-bold text-xl">{fmt(cartTotal)}</span>
         </div>
         {totalNul && (
           <p className="text-[#f87171] text-xs">Le total ne peut pas être nul — réduisez la remise appliquée.</p>
         )}
         <button onClick={onCheckout} disabled={totalNul}
-          className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100">
+          className="w-full bg-[#3a9e6e] text-white rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100">
           Encaisser {fmt(cartTotal)}
         </button>
       </div>
@@ -398,15 +398,15 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
   const EmptyCart = () => (
     <div className="flex flex-col items-center gap-4 py-10">
       <svg width="88" height="88" viewBox="0 0 88 88" fill="none" aria-hidden="true">
-        <circle cx="44" cy="44" r="42" fill="#1e3222" opacity="0.7" />
-        <path d="M24 32h40l-5 24H29z" stroke="#b4e033" strokeWidth="2" strokeLinejoin="round" fill="#b4e033" fillOpacity="0.08" />
-        <path d="M32 32c0-6.6 5.4-12 12-12s12 5.4 12 12" stroke="#b4e033" strokeWidth="2" strokeLinecap="round" fill="none" />
-        <circle cx="33" cy="60" r="3" fill="#b4e033" opacity="0.6" />
-        <circle cx="55" cy="60" r="3" fill="#b4e033" opacity="0.6" />
+        <circle cx="44" cy="44" r="42" fill="var(--k-surface-soft)" opacity="0.7" />
+        <path d="M24 32h40l-5 24H29z" stroke="#3a9e6e" strokeWidth="2" strokeLinejoin="round" fill="#3a9e6e" fillOpacity="0.08" />
+        <path d="M32 32c0-6.6 5.4-12 12-12s12 5.4 12 12" stroke="#3a9e6e" strokeWidth="2" strokeLinecap="round" fill="none" />
+        <circle cx="33" cy="60" r="3" fill="#3a9e6e" opacity="0.6" />
+        <circle cx="55" cy="60" r="3" fill="#3a9e6e" opacity="0.6" />
       </svg>
       <div className="text-center">
-        <p className="text-[#edf5ea] font-semibold text-sm">Panier vide</p>
-        <p className="text-[#4a6b4a] text-xs mt-1">Sélectionnez un produit pour commencer</p>
+        <p className="text-[var(--k-ink)] font-semibold text-sm">Panier vide</p>
+        <p className="text-[var(--k-faint)] text-xs mt-1">Sélectionnez un produit pour commencer</p>
       </div>
     </div>
   );
@@ -416,34 +416,34 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
       {/* Panneau produits */}
       <div className="flex-1 flex flex-col overflow-hidden px-4 md:px-8 pt-4 md:pt-6">
         <div className="flex items-center justify-between gap-2 mb-3">
-          <h1 className="text-[#edf5ea] text-xl font-bold">Caisse</h1>
+          <h1 className="text-[var(--k-ink)] text-xl font-bold">Caisse</h1>
           {onHistorique && (
-            <button onClick={onHistorique} className="text-[#6b9165] text-sm font-medium">Historique</button>
+            <button onClick={onHistorique} className="text-[var(--k-muted)] text-sm font-medium">Historique</button>
           )}
         </div>
 
         <div className="relative mb-3">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4a6b4a]"><IcoSearch cls="w-4 h-4" /></span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--k-faint)]"><IcoSearch cls="w-4 h-4" /></span>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un produit..."
-            className="w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl pl-9 pr-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none transition-colors" />
+            className="w-full bg-[var(--k-surface-soft)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-xl pl-9 pr-4 py-3 text-sm border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none transition-colors" />
         </div>
 
         {/* Article libre : services / articles hors catalogue */}
         <div className="flex gap-2 mb-4">
           <input placeholder="Article libre (optionnel)" value={libreDesign} onChange={(e) => setLibreDesign(e.target.value)}
-            className="flex-1 bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-3 py-2.5 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none" />
+            className="flex-1 bg-[var(--k-surface-soft)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-xl px-3 py-2.5 text-sm border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none" />
           <input placeholder="Montant" inputMode="numeric" value={librePrix}
             onChange={(e) => setLibrePrix(e.target.value.replace(/\D/g, ''))}
             onKeyDown={(e) => e.key === 'Enter' && ajouterArticleLibre()}
-            className="w-28 bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-3 py-2.5 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none" />
-          <button onClick={ajouterArticleLibre} className="w-11 h-11 rounded-xl bg-[#1e3222] border border-[#2a4230] text-[#b4e033] flex items-center justify-center shrink-0">
+            className="w-28 bg-[var(--k-surface-soft)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-xl px-3 py-2.5 text-sm border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none" />
+          <button onClick={ajouterArticleLibre} className="w-11 h-11 rounded-xl bg-[var(--k-surface-soft)] border border-[var(--k-line)] text-[var(--k-lime)] flex items-center justify-center shrink-0">
             <IcoPlus cls="w-4 h-4" />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto pb-4">
           {produits.length === 0 ? (
-            <p className="text-[#4a6b4a] text-sm text-center py-8">
+            <p className="text-[var(--k-faint)] text-sm text-center py-8">
               {entreprise.secteur === 'service' ? 'Aucun catalogue produit — utilisez « Article libre » ci-dessus.' : 'Aucun produit.'}
             </p>
           ) : (
@@ -454,13 +454,13 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
                 const epuise = (inCart?.quantite ?? 0) >= p.stock_actuel;
                 return (
                   <button key={p.id} onClick={() => ajouterProduit(p)} disabled={epuise}
-                    className="bg-[#162419] rounded-2xl p-3.5 text-left active:scale-95 transition-all hover:bg-[#1e3222] border border-transparent hover:border-[#b4e033]/20 relative disabled:opacity-40 disabled:active:scale-100 disabled:hover:bg-[#162419] disabled:hover:border-transparent">
-                    {inCart && <span className="absolute top-2.5 right-2.5 w-6 h-6 rounded-full bg-[#b4e033] text-[#0e1c0f] text-xs font-bold flex items-center justify-center">{inCart.quantite}</span>}
+                    className="bg-[var(--k-surface)] rounded-2xl p-3.5 text-left active:scale-95 transition-all hover:bg-[var(--k-surface-soft)] border border-transparent hover:border-[var(--k-lime)]/20 relative disabled:opacity-40 disabled:active:scale-100 disabled:hover:bg-[var(--k-surface)] disabled:hover:border-transparent">
+                    {inCart && <span className="absolute top-2.5 right-2.5 w-6 h-6 rounded-full bg-[#3a9e6e] text-white text-xs font-bold flex items-center justify-center">{inCart.quantite}</span>}
                     {isLow && !epuise && <span className="absolute top-2.5 left-2.5 w-2 h-2 rounded-full bg-[#fbbf24]" />}
-                    <p className="text-[#edf5ea] font-medium text-sm leading-tight mt-1 pr-8">{p.nom}</p>
-                    <p className="text-[#4a6b4a] text-xs mt-1">{p.unite}</p>
-                    <p className="text-[#b4e033] font-mono font-semibold text-sm mt-2">{fmt(p.prix_vente)}</p>
-                    <p className={`text-xs mt-0.5 ${epuise ? 'text-[#f87171]' : 'text-[#4a6b4a]'}`}>
+                    <p className="text-[var(--k-ink)] font-medium text-sm leading-tight mt-1 pr-8">{p.nom}</p>
+                    <p className="text-[var(--k-faint)] text-xs mt-1">{p.unite}</p>
+                    <p className="text-[var(--k-lime)] font-mono font-semibold text-sm mt-2">{fmt(p.prix_vente)}</p>
+                    <p className={`text-xs mt-0.5 ${epuise ? 'text-[#f87171]' : 'text-[var(--k-faint)]'}`}>
                       {epuise ? 'Stock épuisé' : `Stock : ${p.stock_actuel}`}
                     </p>
                   </button>
@@ -473,7 +473,7 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
         {cartCount > 0 && (
           <div className="md:hidden pb-24">
             <button onClick={() => setShowCart(true)}
-              className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-4 font-semibold flex items-center justify-between px-5 active:scale-95 transition-all">
+              className="w-full bg-[#3a9e6e] text-white rounded-2xl py-4 font-semibold flex items-center justify-between px-5 active:scale-95 transition-all">
               <span className="bg-[#0e1c0f]/20 rounded-full w-7 h-7 flex items-center justify-center text-sm font-bold">{cartCount}</span>
               <span>Voir le panier</span>
               <span className="font-mono font-semibold">{fmt(cartTotal)}</span>
@@ -483,9 +483,9 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
       </div>
 
       {/* Panneau panier desktop */}
-      <div className="hidden md:flex w-80 flex-col border-l border-[#1e3222] bg-[#0e1c0f] shrink-0">
-        <div className="px-4 py-3.5 border-b border-[#1e3222] flex items-center justify-between">
-          <h3 className="text-[#edf5ea] font-semibold">Panier</h3>
+      <div className="hidden md:flex w-80 flex-col border-l border-[var(--k-line)] bg-[#0e1c0f] shrink-0">
+        <div className="px-4 py-3.5 border-b border-[var(--k-line)] flex items-center justify-between">
+          <h3 className="text-[var(--k-ink)] font-semibold">Panier</h3>
           {panier.length > 0 && <button onClick={() => setPanier([])} className="text-[#f87171] text-xs">Vider</button>}
         </div>
         {panier.length === 0 ? (
@@ -504,10 +504,10 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
       {showCart && (
         <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCart(false)} />
-          <div className="relative bg-[#162419] rounded-t-3xl max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-[#1e3222] shrink-0">
-              <h3 className="text-[#edf5ea] font-semibold">Panier ({cartCount})</h3>
-              <button onClick={() => setShowCart(false)} className="text-[#6b9165]"><IcoX /></button>
+          <div className="relative bg-[var(--k-surface)] rounded-t-3xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-[var(--k-line)] shrink-0">
+              <h3 className="text-[var(--k-ink)] font-semibold">Panier ({cartCount})</h3>
+              <button onClick={() => setShowCart(false)} className="text-[var(--k-muted)]"><IcoX /></button>
             </div>
             <div className="flex-1 overflow-y-auto">
               {panier.map((item, i) => <CartLine key={i} item={item} i={i} />)}
@@ -521,24 +521,24 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
       {showPay && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowPay(false)} />
-          <div className="relative bg-[#162419] rounded-t-3xl md:rounded-3xl w-full md:max-w-sm max-h-[92vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-[#1e3222] shrink-0">
-              <h3 className="text-[#edf5ea] font-semibold text-lg">Encaissement</h3>
-              <button onClick={() => setShowPay(false)} className="text-[#6b9165]"><IcoX /></button>
+          <div className="relative bg-[var(--k-surface)] rounded-t-3xl md:rounded-3xl w-full md:max-w-sm max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-[var(--k-line)] shrink-0">
+              <h3 className="text-[var(--k-ink)] font-semibold text-lg">Encaissement</h3>
+              <button onClick={() => setShowPay(false)} className="text-[var(--k-muted)]"><IcoX /></button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
-              <div className="bg-[#1e3222] rounded-2xl p-4 text-center">
-                <p className="text-[#6b9165] text-sm mb-1">Montant à encaisser</p>
-                <p className="text-[#b4e033] font-mono text-3xl font-bold">{fmt(cartTotal)}</p>
+              <div className="bg-[var(--k-surface-soft)] rounded-2xl p-4 text-center">
+                <p className="text-[var(--k-muted)] text-sm mb-1">Montant à encaisser</p>
+                <p className="text-[var(--k-lime)] font-mono text-3xl font-bold">{fmt(cartTotal)}</p>
               </div>
 
-              <div className="flex bg-[#1e3222] rounded-2xl p-1 border border-[#2a4230] gap-1">
+              <div className="flex bg-[var(--k-surface-soft)] rounded-2xl p-1 border border-[var(--k-line)] gap-1">
                 {(['comptant', 'credit'] as const).map((m) => (
                   <button key={m} onClick={() => setSaleMode(m)}
                     className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${saleMode === m
-                      ? m === 'comptant' ? 'bg-[#b4e033] text-[#0e1c0f]' : 'bg-[#fbbf24] text-[#0e1c0f]'
-                      : 'text-[#6b9165] hover:text-[#edf5ea]'}`}>
+                      ? m === 'comptant' ? 'bg-[#3a9e6e] text-white' : 'bg-[#fbbf24] text-white'
+                      : 'text-[var(--k-muted)] hover:text-[var(--k-ink)]'}`}>
                     {m === 'comptant' ? 'Comptant' : 'À crédit'}
                   </button>
                 ))}
@@ -547,13 +547,13 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
               {saleMode === 'comptant' ? (
                 <>
                   <div>
-                    <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-wide mb-3">Mode de paiement</p>
+                    <p className="text-[var(--k-faint)] text-xs font-medium uppercase tracking-wide mb-3">Mode de paiement</p>
                     <div className="grid grid-cols-2 gap-2">
                       {MODES.map(({ code, label, couleur }) => (
                         <button key={code} onClick={() => setMode(code)}
-                          className={`flex items-center gap-2.5 p-3.5 rounded-xl border text-left transition-all ${mode === code ? 'border-[#b4e033] bg-[#b4e033]/10' : 'border-[#2a4230] bg-[#1e3222]'}`}>
+                          className={`flex items-center gap-2.5 p-3.5 rounded-xl border text-left transition-all ${mode === code ? 'border-[var(--k-lime)] bg-[#3a9e6e]/10' : 'border-[var(--k-line)] bg-[var(--k-surface-soft)]'}`}>
                           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: couleur }} />
-                          <span className={`text-sm font-medium ${mode === code ? 'text-[#b4e033]' : 'text-[#6b9165]'}`}>{label}</span>
+                          <span className={`text-sm font-medium ${mode === code ? 'text-[var(--k-lime)]' : 'text-[var(--k-muted)]'}`}>{label}</span>
                         </button>
                       ))}
                     </div>
@@ -561,14 +561,14 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
 
                   <div className="space-y-3">
                     <div>
-                      <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-wide mb-2">Montant reçu</p>
+                      <p className="text-[var(--k-faint)] text-xs font-medium uppercase tracking-wide mb-2">Montant reçu</p>
                       <input type="text" inputMode="numeric" value={montantRecu}
                         onChange={(e) => setMontantRecu(e.target.value.replace(/\D/g, ''))} placeholder={String(cartTotal)}
-                        className="w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-2xl px-4 py-3.5 font-mono text-xl border border-[#2a4230] focus:border-[#b4e033] focus:outline-none transition-colors" />
+                        className="w-full bg-[var(--k-surface-soft)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-2xl px-4 py-3.5 font-mono text-xl border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none transition-colors" />
                     </div>
                     {montantRecu !== '' && (
                       <div className={`rounded-2xl p-4 text-center ${recuAmount >= cartTotal ? 'bg-[#4ade80]/5 border border-[#4ade80]/20' : 'bg-[#f87171]/5 border border-[#f87171]/20'}`}>
-                        <p className="text-[#4a6b4a] text-xs mb-1">Rendu-monnaie</p>
+                        <p className="text-[var(--k-faint)] text-xs mb-1">Rendu-monnaie</p>
                         <p className={`font-mono font-bold text-3xl ${recuAmount >= cartTotal ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
                           {recuAmount >= cartTotal ? fmt(rendu) : `−${fmt(cartTotal - recuAmount)}`}
                         </p>
@@ -579,58 +579,58 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
                 </>
               ) : (
                 <div>
-                  <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-wide mb-3">Client (obligatoire)</p>
+                  <p className="text-[var(--k-faint)] text-xs font-medium uppercase tracking-wide mb-3">Client (obligatoire)</p>
                   {tiersId && (
                     <div className="mb-3">
-                      <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-wide mb-2">Échéance de paiement (optionnel)</p>
+                      <p className="text-[var(--k-faint)] text-xs font-medium uppercase tracking-wide mb-2">Échéance de paiement (optionnel)</p>
                       <input type="date" value={dateEcheance} onChange={(e) => setDateEcheance(e.target.value)}
-                        className="w-full bg-[#1e3222] text-[#edf5ea] rounded-xl px-4 py-3 text-sm border border-[#2a4230] focus:border-[#fbbf24] focus:outline-none transition-colors" />
+                        className="w-full bg-[var(--k-surface-soft)] text-[var(--k-ink)] rounded-xl px-4 py-3 text-sm border border-[var(--k-line)] focus:border-[#fbbf24] focus:outline-none transition-colors" />
                     </div>
                   )}
                   {tiersId ? (
-                    <div className="flex items-center gap-3 bg-[#1e3222] rounded-2xl p-3.5 border border-[#fbbf24]/30">
+                    <div className="flex items-center gap-3 bg-[var(--k-surface-soft)] rounded-2xl p-3.5 border border-[#fbbf24]/30">
                       <Avatar name={tiers.find((t) => t.id === tiersId)?.nom ?? '?'} size="sm" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-[#edf5ea] text-sm font-medium">{tiers.find((t) => t.id === tiersId)?.nom}</p>
+                        <p className="text-[var(--k-ink)] text-sm font-medium">{tiers.find((t) => t.id === tiersId)?.nom}</p>
                       </div>
-                      <button onClick={() => setTiersId('')} className="text-[#6b9165] p-1"><IcoX cls="w-4 h-4" /></button>
+                      <button onClick={() => setTiersId('')} className="text-[var(--k-muted)] p-1"><IcoX cls="w-4 h-4" /></button>
                     </div>
                   ) : (
                     <>
                       <div className="relative mb-2">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4a6b4a]"><IcoSearch cls="w-4 h-4" /></span>
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--k-faint)]"><IcoSearch cls="w-4 h-4" /></span>
                         <input value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} placeholder="Rechercher un client..."
-                          className="w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl pl-9 pr-4 py-3 text-sm border border-[#2a4230] focus:border-[#fbbf24] focus:outline-none transition-colors" />
+                          className="w-full bg-[var(--k-surface-soft)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-xl pl-9 pr-4 py-3 text-sm border border-[var(--k-line)] focus:border-[#fbbf24] focus:outline-none transition-colors" />
                       </div>
                       {filteredClients.length > 0 && (
                         <div className="space-y-1 max-h-36 overflow-y-auto mb-3">
                           {filteredClients.map((t) => (
                             <button key={t.id} onClick={() => { setTiersId(t.id); setClientSearch(''); }}
-                              className="w-full flex items-center gap-3 p-3 rounded-xl bg-[#1e3222] hover:bg-[#2a4230] transition-colors text-left">
+                              className="w-full flex items-center gap-3 p-3 rounded-xl bg-[var(--k-surface-soft)] hover:bg-[var(--k-surface-inset)] transition-colors text-left">
                               <Avatar name={t.nom} size="sm" />
-                              <div className="flex-1 min-w-0"><p className="text-[#edf5ea] text-sm font-medium truncate">{t.nom}</p></div>
+                              <div className="flex-1 min-w-0"><p className="text-[var(--k-ink)] text-sm font-medium truncate">{t.nom}</p></div>
                             </button>
                           ))}
                         </div>
                       )}
                       {!showNewClient ? (
-                        <button onClick={() => setShowNewClient(true)} className="flex items-center gap-2 py-1.5 text-[#b4e033] text-sm font-medium">
+                        <button onClick={() => setShowNewClient(true)} className="flex items-center gap-2 py-1.5 text-[var(--k-lime)] text-sm font-medium">
                           <IcoPlus cls="w-4 h-4" />
                           Créer un nouveau client
                         </button>
                       ) : (
-                        <div className="mt-2 bg-[#1e3222] rounded-2xl p-4 border border-[#b4e033]/20 space-y-2">
-                          <p className="text-[#b4e033] text-xs font-semibold uppercase tracking-wide">Nouveau client</p>
+                        <div className="mt-2 bg-[var(--k-surface-soft)] rounded-2xl p-4 border border-[var(--k-lime)]/20 space-y-2">
+                          <p className="text-[var(--k-lime)] text-xs font-semibold uppercase tracking-wide">Nouveau client</p>
                           <input autoFocus value={newClientNom} onChange={(e) => setNewClientNom(e.target.value)} placeholder="Nom complet *"
                             onKeyDown={(e) => e.key === 'Enter' && creerClientRapide()}
-                            className="w-full bg-[#162419] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-3 py-2.5 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none" />
+                            className="w-full bg-[var(--k-surface)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-xl px-3 py-2.5 text-sm border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none" />
                           <div className="flex gap-2 pt-1">
                             <button onClick={() => { setShowNewClient(false); setNewClientNom(''); }}
-                              className="flex-1 bg-[#162419] text-[#6b9165] rounded-xl py-2 text-xs font-medium border border-[#2a4230]">
+                              className="flex-1 bg-[var(--k-surface)] text-[var(--k-muted)] rounded-xl py-2 text-xs font-medium border border-[var(--k-line)]">
                               Annuler
                             </button>
                             <button disabled={creationClient || !newClientNom.trim()} onClick={creerClientRapide}
-                              className="flex-1 bg-[#b4e033] text-[#0e1c0f] rounded-xl py-2 text-xs font-semibold disabled:opacity-40">
+                              className="flex-1 bg-[#3a9e6e] text-white rounded-xl py-2 text-xs font-semibold disabled:opacity-40">
                               {creationClient ? '…' : 'Ajouter'}
                             </button>
                           </div>
@@ -644,11 +644,11 @@ export function Caisse({ entreprise, onVendu, onHistorique }: {
               {erreur && <p className="text-[#f87171] text-xs">{erreur}</p>}
             </div>
 
-            <div className="px-5 pb-5 pt-3 border-t border-[#1e3222] shrink-0">
+            <div className="px-5 pb-5 pt-3 border-t border-[var(--k-line)] shrink-0">
               <button onClick={confirmerVente} disabled={!canConfirm || charge}
                 className={`w-full rounded-2xl py-4 font-semibold text-base transition-all ${canConfirm && !charge
-                  ? saleMode === 'credit' ? 'bg-[#fbbf24] text-[#0e1c0f] active:scale-95' : 'bg-[#b4e033] text-[#0e1c0f] active:scale-95'
-                  : 'bg-[#2a4230] text-[#4a6b4a] cursor-not-allowed'}`}>
+                  ? saleMode === 'credit' ? 'bg-[#fbbf24] text-white active:scale-95' : 'bg-[#3a9e6e] text-white active:scale-95'
+                  : 'bg-[var(--k-surface-inset)] text-[var(--k-faint)] cursor-not-allowed'}`}>
                 {charge ? '…' : saleMode === 'credit' ? 'Confirmer la vente à crédit' : "Confirmer l'encaissement"}
               </button>
             </div>

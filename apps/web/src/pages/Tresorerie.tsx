@@ -21,7 +21,7 @@ import { IcoDn, IcoUp, IcoPlus, IcoX, Avatar } from '../components/icons.js';
 
 type Compte = { code: keyof TresorerieJour; name: string; sub: string; from: string; to: string };
 const COMPTES: Compte[] = [
-  { code: 'especes', name: 'Caisse', sub: 'Espèces', from: '#b4e033', to: '#4ade80' },
+  { code: 'especes', name: 'Caisse', sub: 'Espèces', from: '#3a9e6e', to: '#4ade80' },
   { code: 'orangeMoney', name: 'Orange Money', sub: 'Mobile Money', from: '#16a34a', to: '#22c55e' },
   { code: 'mtnMomo', name: 'MTN MoMo', sub: 'Mobile Money', from: '#0a3d1c', to: '#15803d' },
   { code: 'banque', name: 'Banque', sub: 'Virement', from: '#1e3a8a', to: '#3b82f6' },
@@ -146,14 +146,14 @@ export function Tresorerie({ entreprise, onCaisse, onDepenses }: {
         <div className="flex items-center justify-center gap-1.5 mt-4">
           {COMPTES.map((_, idx) => (
             <button key={idx} onClick={() => setFrontCard(idx)} className="transition-all duration-300"
-              style={{ width: getPos(idx) === 2 ? 20 : 6, height: 6, borderRadius: 999, background: getPos(idx) === 2 ? '#b4e033' : 'rgba(255,255,255,0.2)' }} />
+              style={{ width: getPos(idx) === 2 ? 20 : 6, height: 6, borderRadius: 999, background: getPos(idx) === 2 ? '#3a9e6e' : 'rgba(255,255,255,0.2)' }} />
           ))}
         </div>
 
         <div className="h-px my-4" style={{ background: 'rgba(255,255,255,0.06)' }} />
 
         <div className="text-center mb-5">
-          <p className="text-[#4a6b4a] text-[10px] font-medium uppercase tracking-widest mb-1.5">{total < 0 ? 'Découvert de trésorerie' : 'Total disponible'}</p>
+          <p className="text-[var(--k-faint)] text-[10px] font-medium uppercase tracking-widest mb-1.5">{total < 0 ? 'Découvert de trésorerie' : 'Total disponible'}</p>
           <p className="text-white font-mono font-bold leading-none" style={{ fontSize: '2.4rem' }}>{fmt(total)}</p>
         </div>
 
@@ -173,7 +173,7 @@ export function Tresorerie({ entreprise, onCaisse, onDepenses }: {
         </div>
 
         <button onClick={() => setPointageOuvert(true)}
-          className="w-full mt-2 rounded-2xl py-2.5 text-xs font-medium text-[#6b9165] hover:text-[#b4e033] transition-colors">
+          className="w-full mt-2 rounded-2xl py-2.5 text-xs font-medium text-[var(--k-muted)] hover:text-[var(--k-lime)] transition-colors">
           Pointer le solde de {COMPTES[frontCard]!.name}
         </button>
       </div>
@@ -187,7 +187,7 @@ export function Tresorerie({ entreprise, onCaisse, onDepenses }: {
       <div className="px-4 md:px-8 pt-4 pb-2 flex items-center gap-2">
         {([{ key: 'all', label: 'Tous' }, { key: 'in', label: 'Entrées' }, { key: 'out', label: 'Sorties' }] as const).map((f) => (
           <button key={f.key} onClick={() => setTxFilter(f.key)}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${txFilter === f.key ? 'bg-[#b4e033] text-[#0e1c0f]' : 'bg-[#1e3222] text-[#6b9165] border border-[#2a4230]'}`}>
+            className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${txFilter === f.key ? 'bg-[#3a9e6e] text-white' : 'bg-[var(--k-surface-soft)] text-[var(--k-muted)] border border-[var(--k-line)]'}`}>
             {f.label}
           </button>
         ))}
@@ -195,14 +195,14 @@ export function Tresorerie({ entreprise, onCaisse, onDepenses }: {
 
       <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-24 md:pb-8 space-y-4">
         {Object.keys(grouped).length === 0 ? (
-          <p className="text-[#4a6b4a] text-sm text-center py-8">Aucun mouvement.</p>
+          <p className="text-[var(--k-faint)] text-sm text-center py-8">Aucun mouvement.</p>
         ) : (
           Object.entries(grouped).map(([date, txs]) => (
             <div key={date}>
-              <p className="text-[#4a6b4a] text-xs font-medium mb-2 uppercase tracking-wide">{date}</p>
-              <div className="bg-[#162419] rounded-2xl overflow-hidden">
+              <p className="text-[var(--k-faint)] text-xs font-medium mb-2 uppercase tracking-wide">{date}</p>
+              <div className="bg-[var(--k-surface)] rounded-2xl overflow-hidden">
                 {txs.map((t, i) => (
-                  <div key={t.id} className={`flex items-center gap-3 px-4 py-3.5 ${i < txs.length - 1 ? 'border-b border-[#1e3222]' : ''}`}>
+                  <div key={t.id} className={`flex items-center gap-3 px-4 py-3.5 ${i < txs.length - 1 ? 'border-b border-[var(--k-line)]' : ''}`}>
                     {t.client
                       ? <Avatar name={t.client} size="sm" />
                       : (
@@ -211,10 +211,10 @@ export function Tresorerie({ entreprise, onCaisse, onDepenses }: {
                         </div>
                       )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-[#edf5ea] text-sm font-medium truncate">{t.description}</p>
+                      <p className="text-[var(--k-ink)] text-sm font-medium truncate">{t.description}</p>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[#4a6b4a] text-xs">{t.time}</span>
-                        <span className={`text-xs font-medium ${MODE_PAIEMENT_COULEUR[t.method] ?? 'text-[#6b9165]'}`}>{MODE_PAIEMENT_LABEL[t.method] ?? t.method}</span>
+                        <span className="text-[var(--k-faint)] text-xs">{t.time}</span>
+                        <span className={`text-xs font-medium ${MODE_PAIEMENT_COULEUR[t.method] ?? 'text-[var(--k-muted)]'}`}>{MODE_PAIEMENT_LABEL[t.method] ?? t.method}</span>
                       </div>
                     </div>
                     <span className={`font-mono text-sm font-bold shrink-0 ${t.type === 'in' ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
@@ -229,7 +229,7 @@ export function Tresorerie({ entreprise, onCaisse, onDepenses }: {
       </div>
 
       <button onClick={onCaisse}
-        className="fixed bottom-24 md:bottom-6 right-4 w-14 h-14 bg-[#b4e033] rounded-full flex items-center justify-center text-[#0e1c0f] shadow-lg shadow-[#b4e033]/20 z-10 active:scale-95 transition-all">
+        className="fixed bottom-24 md:bottom-6 right-4 w-14 h-14 bg-[#3a9e6e] rounded-full flex items-center justify-center text-white shadow-lg shadow-[var(--k-lime)]/20 z-10 active:scale-95 transition-all">
         <IcoPlus cls="w-6 h-6" />
       </button>
     </div>
@@ -262,30 +262,30 @@ function PointageSheet({ entreprise, compte, soldeCalcule, onClose }: {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60" onClick={onClose}>
-      <div className="bg-[#162419] rounded-t-3xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="w-10 h-1 bg-[#2a4230] rounded-full mx-auto mt-3 mb-1 shrink-0" />
+      <div className="bg-[var(--k-surface)] rounded-t-3xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="w-10 h-1 bg-[var(--k-surface-inset)] rounded-full mx-auto mt-3 mb-1 shrink-0" />
         <div className="px-5 pt-3 pb-2 flex items-center justify-between shrink-0">
-          <p className="text-[#edf5ea] font-semibold text-base">Pointer {compte.name}</p>
-          <button onClick={onClose} className="w-7 h-7 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+          <p className="text-[var(--k-ink)] font-semibold text-base">Pointer {compte.name}</p>
+          <button onClick={onClose} className="w-7 h-7 rounded-full bg-[var(--k-surface-soft)] flex items-center justify-center text-[var(--k-muted)]">
             <IcoX cls="w-3.5 h-3.5" />
           </button>
         </div>
         <div className="px-5 pb-8 space-y-4">
-          <p className="text-[#4a6b4a] text-xs leading-relaxed">
+          <p className="text-[var(--k-faint)] text-xs leading-relaxed">
             Comptez ce que vous avez réellement (caisse) ou lisez votre solde (Mobile Money, relevé bancaire), et
             indiquez-le ici. Kombi le compare à ce qu'il a calculé.
           </p>
           {resultat === null ? (
             <>
               <div>
-                <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Solde constaté (FCFA)</label>
+                <label className="text-[var(--k-muted)] text-xs font-medium block mb-1.5">Solde constaté (FCFA)</label>
                 <input inputMode="numeric" value={soldeDeclare} onChange={(e) => setSoldeDeclare(e.target.value.replace(/\D/g, ''))}
                   placeholder={String(soldeCalcule)} autoFocus
-                  className="w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-4 py-3 font-mono text-lg border border-[#2a4230] focus:border-[#b4e033] focus:outline-none" />
+                  className="w-full bg-[var(--k-surface-soft)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-xl px-4 py-3 font-mono text-lg border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none" />
               </div>
               {erreur && <p className="text-[#f87171] text-xs">{erreur}</p>}
               <button onClick={valider} disabled={charge || !soldeDeclare}
-                className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-3.5 font-semibold text-sm active:scale-[0.98] transition-all disabled:opacity-50">
+                className="w-full bg-[#3a9e6e] text-white rounded-2xl py-3.5 font-semibold text-sm active:scale-[0.98] transition-all disabled:opacity-50">
                 {charge ? '…' : 'Comparer'}
               </button>
             </>
@@ -298,12 +298,12 @@ function PointageSheet({ entreprise, compte, soldeCalcule, onClose }: {
                   <p className={`font-mono font-bold text-2xl ${resultat.ecart > 0 ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
                     {resultat.ecart > 0 ? '+' : '−'}{fmt(Math.abs(resultat.ecart))}
                   </p>
-                  <p className="text-[#4a6b4a] text-xs mt-1">
+                  <p className="text-[var(--k-faint)] text-xs mt-1">
                     {resultat.ecart > 0 ? 'En trop par rapport au calcul de Kombi' : 'Manquant par rapport au calcul de Kombi'}
                   </p>
                 </>
               )}
-              <button onClick={onClose} className="w-full mt-4 bg-[#1e3222] text-[#edf5ea] rounded-xl py-2.5 text-sm font-medium">
+              <button onClick={onClose} className="w-full mt-4 bg-[var(--k-surface-soft)] text-[var(--k-ink)] rounded-xl py-2.5 text-sm font-medium">
                 Fermer
               </button>
             </div>

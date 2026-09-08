@@ -24,30 +24,30 @@ export function SalesAreaChart({ data, days }: { data: number[]; days: string[] 
     value,
   }));
   return (
-    <div className="h-[148px] [--chart-grid:#2a4230] [--chart-crosshair:#b4e033]">
+    <div className="h-[148px] [--chart-grid:var(--k-surface-inset)] [--chart-crosshair:#3a9e6e]">
       <BklitAreaChart data={chartData} aspectRatio="auto" style={{ height: 148 }} margin={{ top: 12, right: 12, bottom: 28, left: 12 }}>
-        <BklitGrid horizontal stroke="#2a4230" strokeDasharray="3,3" />
-        <BklitArea dataKey="value" fill="#b4e033" stroke="#b4e033" fillOpacity={0.28} showMarkers fadeEdges />
+        <BklitGrid horizontal stroke="var(--k-surface-inset)" strokeDasharray="3,3" />
+        <BklitArea dataKey="value" fill="var(--k-lime)" stroke="var(--k-lime)" fillOpacity={0.28} showMarkers fadeEdges />
         <BklitXAxis numTicks={Math.min(7, data.length)} />
-        <BklitTooltip indicatorColor="#b4e033" indicatorDasharray="4,4" rows={(p) => [{ label: String(p.day ?? 'Ventes'), value: formaterFCFA(Number(p.value ?? 0)), color: '#b4e033' }]} />
+        <BklitTooltip indicatorColor="var(--k-lime)" indicatorDasharray="4,4" rows={(p) => [{ label: String(p.day ?? 'Ventes'), value: formaterFCFA(Number(p.value ?? 0)), color: 'var(--k-lime)' }]} />
       </BklitAreaChart>
     </div>
   );
 }
 
 export function PerformanceGauge({ value, label }: { value: number; label: string }) {
-  return <div className="h-24"><Gauge orientation="linear" value={Math.max(0, Math.min(100, value))} centerValue={Math.round(value)} suffix="%" defaultLabel={label} totalNotches={36} spacing={10} notchCornerRadius={3} activeFill="#b4e033" inactiveFill="#2a4230" inactiveFillOpacity={0.5} /></div>;
+  return <div className="h-24"><Gauge orientation="linear" value={Math.max(0, Math.min(100, value))} centerValue={Math.round(value)} suffix="%" defaultLabel={label} totalNotches={36} spacing={10} notchCornerRadius={3} activeFill="var(--k-lime)" inactiveFill="var(--k-surface-inset)" inactiveFillOpacity={0.5} /></div>;
 }
 
 export function CashFlowRing({ totalIn, totalOut }: { totalIn: number; totalOut: number }) {
   const net = totalIn - totalOut;
   const data = [
-    { name: 'Entrées', value: totalIn, color: '#b4e033' },
+    { name: 'Entrées', value: totalIn, color: 'var(--k-lime)' },
     { name: 'Sorties', value: totalOut, color: '#f87171' },
   ];
   return (
     <div className="flex flex-col items-center gap-2">
-      <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-wide self-start">Flux de tréso.</p>
+      <p className="text-[var(--k-faint)] text-xs font-medium uppercase tracking-wide self-start">Flux de tréso.</p>
       <div className="relative">
         <PieChart width={120} height={120}>
           <Pie data={data} cx="50%" cy="50%" innerRadius={38} outerRadius={54}
@@ -56,10 +56,10 @@ export function CashFlowRing({ totalIn, totalOut }: { totalIn: number; totalOut:
           </Pie>
         </PieChart>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={`font-mono text-[11px] font-bold leading-tight ${net >= 0 ? 'text-[#b4e033]' : 'text-[#f87171]'}`}>
+          <span className={`font-mono text-[11px] font-bold leading-tight ${net >= 0 ? 'text-[var(--k-lime)]' : 'text-[#f87171]'}`}>
             {net >= 0 ? '+' : '−'}{Math.round(Math.abs(net) / 1000)}k
           </span>
-          <span className="text-[#4a6b4a] text-[9px]">net</span>
+          <span className="text-[var(--k-faint)] text-[9px]">net</span>
         </div>
       </div>
       <div className="flex flex-col gap-1 w-full">
@@ -67,9 +67,9 @@ export function CashFlowRing({ totalIn, totalOut }: { totalIn: number; totalOut:
           <div key={i} className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
-              <span className="text-[#4a6b4a] text-xs">{d.name}</span>
+              <span className="text-[var(--k-faint)] text-xs">{d.name}</span>
             </div>
-            <span className="text-[#edf5ea] text-xs font-mono font-medium">{Math.round(d.value / 1000)}k F</span>
+            <span className="text-[var(--k-ink)] text-xs font-mono font-medium">{Math.round(d.value / 1000)}k F</span>
           </div>
         ))}
       </div>
@@ -81,7 +81,7 @@ export function StockHealthChart({ ok, faible, critique, rupture }: {
   ok: number; faible: number; critique: number; rupture: number;
 }) {
   const data = [
-    { label: 'OK', value: ok, color: '#b4e033' },
+    { label: 'OK', value: ok, color: 'var(--k-lime)' },
     { label: 'Faible', value: faible, color: '#fbbf24' },
     { label: 'Critique', value: critique, color: '#f87171' },
     { label: 'Rupture', value: rupture, color: '#7f1d1d' },
@@ -98,8 +98,8 @@ export function StockHealthChart({ ok, faible, critique, rupture }: {
         {data.map((d) => (
           <div key={d.label} className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-            <span className="text-[#4a6b4a] text-xs">{d.label}</span>
-            <span className="text-[#edf5ea] text-xs font-semibold ml-1">{d.value}</span>
+            <span className="text-[var(--k-faint)] text-xs">{d.label}</span>
+            <span className="text-[var(--k-ink)] text-xs font-semibold ml-1">{d.value}</span>
           </div>
         ))}
       </div>
@@ -112,22 +112,22 @@ export function TreasuryMethodChart({ data }: { data: { method: string; value: n
   return (
     <ResponsiveContainer width="100%" height={100}>
       <BarChart data={sorted} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
-        <CartesianGrid horizontal={false} stroke="#2a4230" strokeDasharray="3 3" strokeWidth={0.8} />
+        <CartesianGrid horizontal={false} stroke="var(--k-surface-inset)" strokeDasharray="3 3" strokeWidth={0.8} />
         <XAxis type="number" tick={false} axisLine={false} tickLine={false} />
-        <YAxis dataKey="method" type="category" tick={{ fill: '#6b9165', fontSize: 10 }} axisLine={false} tickLine={false} width={72} />
+        <YAxis dataKey="method" type="category" tick={{ fill: 'var(--k-muted)', fontSize: 10 }} axisLine={false} tickLine={false} width={72} />
         <Tooltip
-          cursor={{ fill: '#b4e033', fillOpacity: 0.05 }}
+          cursor={{ fill: 'var(--k-lime)', fillOpacity: 0.05 }}
           content={({ active, payload }) => {
             if (!active || !payload?.length) return null;
             return (
-              <div className="bg-[#162419] border border-[#2a4230] rounded-lg px-2.5 py-1.5 text-xs font-mono text-[#b4e033] shadow">
+              <div className="bg-[var(--k-surface)] border border-[var(--k-line)] rounded-lg px-2.5 py-1.5 text-xs font-mono text-[var(--k-lime)] shadow">
                 {formaterFCFA(payload[0]!.value as number)}
               </div>
             );
           }}
         />
         <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={12}>
-          {sorted.map((_, i) => <Cell key={i} fill="#b4e033" opacity={0.7 - i * 0.12} />)}
+          {sorted.map((_, i) => <Cell key={i} fill="var(--k-lime)" opacity={0.7 - i * 0.12} />)}
         </Bar>
       </BarChart>
     </ResponsiveContainer>
@@ -137,22 +137,22 @@ export function TreasuryMethodChart({ data }: { data: { method: string; value: n
 export function DashboardIllustration() {
   return (
     <svg width="120" height="96" viewBox="0 0 120 96" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect x="6" y="62" width="9" height="22" rx="3" fill="#b4e033" opacity="0.25" />
-      <rect x="18" y="50" width="9" height="34" rx="3" fill="#b4e033" opacity="0.4" />
-      <rect x="30" y="40" width="9" height="44" rx="3" fill="#b4e033" opacity="0.55" />
-      <rect x="42" y="28" width="9" height="56" rx="3" fill="#b4e033" opacity="0.75" />
-      <path d="M10 68 L22 56 L34 46 L46 34" stroke="#b4e033" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" />
-      <rect x="62" y="44" width="48" height="36" rx="3" fill="#1e3222" />
-      <path d="M58 44 L86 26 L114 44" fill="#2a4230" />
-      <path d="M58 44 L86 26 L114 44" stroke="#b4e033" strokeWidth="1.5" strokeLinejoin="round" opacity="0.8" />
-      <rect x="74" y="56" width="10" height="10" rx="1.5" fill="#b4e033" opacity="0.3" />
-      <rect x="88" y="56" width="10" height="10" rx="1.5" fill="#b4e033" opacity="0.3" />
-      <rect x="79" y="66" width="14" height="14" rx="1.5" fill="#0e1c0f" />
-      <circle cx="55" cy="20" r="2" fill="#b4e033" opacity="0.5" />
-      <circle cx="68" cy="12" r="1.5" fill="#b4e033" opacity="0.35" />
-      <circle cx="100" cy="16" r="1.5" fill="#b4e033" opacity="0.4" />
-      <path d="M114 38 Q118 28 112 20 M114 38 Q120 30 118 22 M114 38 Q108 28 110 18" stroke="#b4e033" strokeWidth="1.2" strokeLinecap="round" opacity="0.45" />
-      <line x1="114" y1="44" x2="114" y2="38" stroke="#b4e033" strokeWidth="1.2" opacity="0.45" />
+      <rect x="6" y="62" width="9" height="22" rx="3" fill="var(--k-lime)" opacity="0.25" />
+      <rect x="18" y="50" width="9" height="34" rx="3" fill="var(--k-lime)" opacity="0.4" />
+      <rect x="30" y="40" width="9" height="44" rx="3" fill="var(--k-lime)" opacity="0.55" />
+      <rect x="42" y="28" width="9" height="56" rx="3" fill="var(--k-lime)" opacity="0.75" />
+      <path d="M10 68 L22 56 L34 46 L46 34" stroke="var(--k-lime)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" />
+      <rect x="62" y="44" width="48" height="36" rx="3" fill="var(--k-surface-soft)" />
+      <path d="M58 44 L86 26 L114 44" fill="var(--k-surface-inset)" />
+      <path d="M58 44 L86 26 L114 44" stroke="var(--k-lime)" strokeWidth="1.5" strokeLinejoin="round" opacity="0.8" />
+      <rect x="74" y="56" width="10" height="10" rx="1.5" fill="var(--k-lime)" opacity="0.3" />
+      <rect x="88" y="56" width="10" height="10" rx="1.5" fill="var(--k-lime)" opacity="0.3" />
+      <rect x="79" y="66" width="14" height="14" rx="1.5" fill="var(--k-surface)" />
+      <circle cx="55" cy="20" r="2" fill="var(--k-lime)" opacity="0.5" />
+      <circle cx="68" cy="12" r="1.5" fill="var(--k-lime)" opacity="0.35" />
+      <circle cx="100" cy="16" r="1.5" fill="var(--k-lime)" opacity="0.4" />
+      <path d="M114 38 Q118 28 112 20 M114 38 Q120 30 118 22 M114 38 Q108 28 110 18" stroke="var(--k-lime)" strokeWidth="1.2" strokeLinecap="round" opacity="0.45" />
+      <line x1="114" y1="44" x2="114" y2="38" stroke="var(--k-lime)" strokeWidth="1.2" opacity="0.45" />
     </svg>
   );
 }
@@ -161,17 +161,17 @@ export function EmptyCartIllustration() {
   return (
     <div className="flex flex-col items-center gap-4 py-10">
       <svg width="88" height="88" viewBox="0 0 88 88" fill="none" aria-hidden="true">
-        <circle cx="44" cy="44" r="42" fill="#1e3222" opacity="0.7" />
-        <path d="M24 32h40l-5 24H29z" stroke="#b4e033" strokeWidth="2" strokeLinejoin="round" fill="#b4e033" fillOpacity="0.08" />
-        <path d="M32 32c0-6.6 5.4-12 12-12s12 5.4 12 12" stroke="#b4e033" strokeWidth="2" strokeLinecap="round" fill="none" />
-        <circle cx="33" cy="60" r="3" fill="#b4e033" opacity="0.6" />
-        <circle cx="55" cy="60" r="3" fill="#b4e033" opacity="0.6" />
-        <line x1="44" y1="39" x2="44" y2="49" stroke="#b4e033" strokeWidth="2" strokeLinecap="round" opacity="0.4" />
-        <line x1="39" y1="44" x2="49" y2="44" stroke="#b4e033" strokeWidth="2" strokeLinecap="round" opacity="0.4" />
+        <circle cx="44" cy="44" r="42" fill="var(--k-surface-soft)" opacity="0.7" />
+        <path d="M24 32h40l-5 24H29z" stroke="var(--k-lime)" strokeWidth="2" strokeLinejoin="round" fill="var(--k-lime)" fillOpacity="0.08" />
+        <path d="M32 32c0-6.6 5.4-12 12-12s12 5.4 12 12" stroke="var(--k-lime)" strokeWidth="2" strokeLinecap="round" fill="none" />
+        <circle cx="33" cy="60" r="3" fill="var(--k-lime)" opacity="0.6" />
+        <circle cx="55" cy="60" r="3" fill="var(--k-lime)" opacity="0.6" />
+        <line x1="44" y1="39" x2="44" y2="49" stroke="var(--k-lime)" strokeWidth="2" strokeLinecap="round" opacity="0.4" />
+        <line x1="39" y1="44" x2="49" y2="44" stroke="var(--k-lime)" strokeWidth="2" strokeLinecap="round" opacity="0.4" />
       </svg>
       <div className="text-center">
-        <p className="text-[#edf5ea] font-semibold text-sm">Panier vide</p>
-        <p className="text-[#4a6b4a] text-xs mt-1">Sélectionnez un produit pour commencer</p>
+        <p className="text-[var(--k-ink)] font-semibold text-sm">Panier vide</p>
+        <p className="text-[var(--k-faint)] text-xs mt-1">Sélectionnez un produit pour commencer</p>
       </div>
     </div>
   );
@@ -186,7 +186,7 @@ export function EmptyCartIllustration() {
 export function DepensesCategorieDonut({ data, onSelect }: {
   data: { categorie?: string; libelle: string; total: number }[]; onSelect?: (categorie: string) => void;
 }) {
-  const palette = ['#b4e033', '#60a5fa', '#fbbf24', '#f87171', '#a78bfa', '#4ade80', '#f97316', '#6b9165'];
+  const palette = ['#3a9e6e', '#60a5fa', '#fbbf24', '#f87171', '#a78bfa', '#4ade80', '#f97316', 'var(--k-muted)'];
   const top = [...data].sort((a, b) => b.total - a.total).slice(0, 8).map((d, i) => ({ ...d, color: palette[i % palette.length]! }));
   return (
     <div className="flex items-center gap-4">
@@ -202,14 +202,14 @@ export function DepensesCategorieDonut({ data, onSelect }: {
             <>
               <div className="flex items-center gap-1.5 min-w-0">
                 <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-                <span className="text-[#4a6b4a] text-xs truncate">{d.libelle}</span>
+                <span className="text-[var(--k-faint)] text-xs truncate">{d.libelle}</span>
               </div>
-              <span className="text-[#edf5ea] text-xs font-mono font-medium shrink-0">{formaterFCFA(d.total)}</span>
+              <span className="text-[var(--k-ink)] text-xs font-mono font-medium shrink-0">{formaterFCFA(d.total)}</span>
             </>
           );
           return onSelect && d.categorie ? (
             <button key={d.libelle} onClick={() => onSelect(d.categorie!)}
-              className="flex items-center justify-between gap-2 hover:bg-[#1e3222] rounded-lg -mx-1 px-1 py-0.5 transition-colors">
+              className="flex items-center justify-between gap-2 hover:bg-[var(--k-surface-soft)] rounded-lg -mx-1 px-1 py-0.5 transition-colors">
               {contenu}
             </button>
           ) : (
@@ -224,12 +224,12 @@ export function DepensesCategorieDonut({ data, onSelect }: {
 /** Évolution mensuelle d'une valeur (dépenses, CA…) sur plusieurs mois — barres verticales. */
 export function EvolutionMensuelleChart({ data }: { data: { moisLabel: string; total: number }[] }) {
   return (
-    <div className="h-[140px] [--chart-grid:#2a4230] [--chart-crosshair:#b4e033]">
+    <div className="h-[140px] [--chart-grid:var(--k-surface-inset)] [--chart-crosshair:#3a9e6e]">
       <BklitBarChart data={data} xDataKey="moisLabel" aspectRatio="auto" className="h-[140px]" margin={{ top: 8, right: 8, bottom: 28, left: 8 }} barGap={0.28}>
-        <BklitGrid horizontal stroke="#2a4230" strokeDasharray="3,3" />
-        <BklitBar dataKey="total" fill="#b4e033" lineCap={5} />
+        <BklitGrid horizontal stroke="var(--k-surface-inset)" strokeDasharray="3,3" />
+        <BklitBar dataKey="total" fill="var(--k-lime)" lineCap={5} />
         <BarXAxis />
-        <BklitTooltip showDatePill={false} indicatorColor="#b4e033" rows={(p) => [{ label: String(p.moisLabel ?? ''), value: formaterFCFA(Number(p.total ?? 0)), color: '#b4e033' }]} />
+        <BklitTooltip showDatePill={false} indicatorColor="var(--k-lime)" rows={(p) => [{ label: String(p.moisLabel ?? ''), value: formaterFCFA(Number(p.total ?? 0)), color: 'var(--k-lime)' }]} />
       </BklitBarChart>
     </div>
   );
@@ -239,5 +239,5 @@ export const MODE_PAIEMENT_LABEL: Record<string, string> = {
   especes: 'Espèces', orange_money: 'Orange Money', mtn_momo: 'MTN MoMo', virement: 'Virement', cheque: 'Chèque', autre: 'Autre',
 };
 export const MODE_PAIEMENT_COULEUR: Record<string, string> = {
-  especes: 'text-[#b4e033]', orange_money: 'text-[#f97316]', mtn_momo: 'text-[#fde047]', virement: 'text-[#60a5fa]', cheque: 'text-[#a78bfa]', autre: 'text-[#6b9165]',
+  especes: 'text-[var(--k-lime)]', orange_money: 'text-[#f97316]', mtn_momo: 'text-[#fde047]', virement: 'text-[#60a5fa]', cheque: 'text-[#a78bfa]', autre: 'text-[var(--k-muted)]',
 };

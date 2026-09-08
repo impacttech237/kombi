@@ -17,16 +17,16 @@ const STATUT_LIBELLE: Record<string, string> = {
   en_retard: 'En retard', annulee: 'Annulée', a_credit: 'À crédit', regle: 'Réglé', annule: 'Annulé',
 };
 
-const inputCls = 'w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none';
+const inputCls = 'w-full bg-[var(--k-surface-soft)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-xl px-4 py-3 text-sm border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none';
 
 function SheetHeader({ title, onClose }: { title: string; onClose: () => void }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-[#1e3222] bg-[#0a1408] shrink-0">
-      <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+    <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--k-line)] bg-[#0a1408] shrink-0">
+      <button onClick={onClose} className="w-9 h-9 rounded-full bg-[var(--k-surface-soft)] flex items-center justify-center text-[var(--k-muted)]">
         <IcoChevR cls="w-4 h-4 rotate-180" />
       </button>
-      <h2 className="text-[#edf5ea] font-semibold text-sm flex-1">{title}</h2>
-      <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+      <h2 className="text-[var(--k-ink)] font-semibold text-sm flex-1">{title}</h2>
+      <button onClick={onClose} className="w-9 h-9 rounded-full bg-[var(--k-surface-soft)] flex items-center justify-center text-[var(--k-muted)]">
         <IcoX cls="w-3.5 h-3.5" />
       </button>
     </div>
@@ -56,7 +56,7 @@ export function Tiers({ entreprise, onRetour, onNav }: {
   return (
     <div className="-mx-4 -mt-4 md:-mx-8 md:-mt-6 flex-1 flex flex-col overflow-hidden">
       <div className="px-4 md:px-8 pt-4 pb-2 flex gap-2 items-center">
-        <button onClick={onRetour} className="w-9 h-9 shrink-0 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+        <button onClick={onRetour} className="w-9 h-9 shrink-0 rounded-full bg-[var(--k-surface-soft)] flex items-center justify-center text-[var(--k-muted)]">
           <IcoChevR cls="w-4 h-4 rotate-180" />
         </button>
         {([
@@ -64,54 +64,54 @@ export function Tiers({ entreprise, onRetour, onNav }: {
           { key: 'fournisseurs' as const, label: 'Fournisseurs', count: tousFournisseurs.length },
         ]).map(({ key, label, count }) => (
           <button key={key} onClick={() => setTab(key)}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-all ${tab === key ? 'bg-[#b4e033] text-[#0e1c0f]' : 'bg-[#1e3222] text-[#6b9165] border border-[#2a4230]'}`}>
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-all ${tab === key ? 'bg-[#3a9e6e] text-white' : 'bg-[var(--k-surface-soft)] text-[var(--k-muted)] border border-[var(--k-line)]'}`}>
             {label}
-            <span className={`rounded-full text-xs px-1.5 ${tab === key ? 'bg-[#0e1c0f]/20 text-[#0e1c0f]' : 'bg-[#2a4230] text-[#6b9165]'}`}>{count}</span>
+            <span className={`rounded-full text-xs px-1.5 ${tab === key ? 'bg-[#0e1c0f]/20 text-white' : 'bg-[var(--k-surface-inset)] text-[var(--k-muted)]'}`}>{count}</span>
           </button>
         ))}
       </div>
 
       <div className="px-4 md:px-8 pb-2 pt-2">
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4a6b4a]"><IcoSearch cls="w-4 h-4" /></span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--k-faint)]"><IcoSearch cls="w-4 h-4" /></span>
           <input value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder={`Rechercher un ${tab === 'clients' ? 'client' : 'fournisseur'}...`}
-            className="w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl pl-9 pr-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none" />
+            className="w-full bg-[var(--k-surface-soft)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-xl pl-9 pr-4 py-3 text-sm border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none" />
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-24 md:pb-8 space-y-2 pt-1">
         {liste === null ? (
-          <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
+          <p className="text-[var(--k-faint)] text-sm text-center py-8">Chargement…</p>
         ) : filtered.length === 0 ? (
-          <p className="text-[#4a6b4a] text-sm text-center py-8">
+          <p className="text-[var(--k-faint)] text-sm text-center py-8">
             {items.length === 0 ? `Aucun ${tab === 'clients' ? 'client' : 'fournisseur'} pour l'instant.` : `Aucun résultat pour « ${search} ».`}
           </p>
         ) : (
           filtered.map((t) => (
-            <div key={t.id} className="bg-[#162419] rounded-2xl p-4">
+            <div key={t.id} className="bg-[var(--k-surface)] rounded-2xl p-4">
               <div className="flex items-center gap-3">
                 <Avatar name={t.nom} size="md" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-[#edf5ea] font-medium text-sm truncate">{t.nom}</p>
-                  <p className="text-[#4a6b4a] text-xs mt-0.5">{t.telephone ?? 'Pas de téléphone'}</p>
+                  <p className="text-[var(--k-ink)] font-medium text-sm truncate">{t.nom}</p>
+                  <p className="text-[var(--k-faint)] text-xs mt-0.5">{t.telephone ?? 'Pas de téléphone'}</p>
                 </div>
-                <button onClick={() => setSelectionne(t.id)} className="text-[#b4e033] text-xs font-medium shrink-0">Voir fiche</button>
+                <button onClick={() => setSelectionne(t.id)} className="text-[var(--k-lime)] text-xs font-medium shrink-0">Voir fiche</button>
               </div>
-              <div className="flex gap-2 mt-3 pt-3 border-t border-[#1e3222]">
+              <div className="flex gap-2 mt-3 pt-3 border-t border-[var(--k-line)]">
                 <button onClick={() => onNav?.('factures')}
-                  className="flex-1 bg-[#1e3222] text-[#edf5ea] rounded-xl py-2 text-xs font-medium hover:bg-[#2a4230] transition-colors">
+                  className="flex-1 bg-[var(--k-surface-soft)] text-[var(--k-ink)] rounded-xl py-2 text-xs font-medium hover:bg-[var(--k-surface-inset)] transition-colors">
                   {tab === 'clients' ? 'Factures' : 'Bons de commande'}
                 </button>
                 {tab === 'clients' && (
                   <button onClick={() => onNav?.('caisse')}
-                    className="flex-1 bg-[#1e3222] text-[#edf5ea] rounded-xl py-2 text-xs font-medium hover:bg-[#2a4230] transition-colors">
+                    className="flex-1 bg-[var(--k-surface-soft)] text-[var(--k-ink)] rounded-xl py-2 text-xs font-medium hover:bg-[var(--k-surface-inset)] transition-colors">
                     Nouvelle vente
                   </button>
                 )}
                 {t.telephone && (
                   <a href={`tel:${t.telephone.replace(/\s/g, '')}`}
-                    className="bg-[#b4e033]/10 text-[#b4e033] rounded-xl py-2 px-3 text-xs font-medium border border-[#b4e033]/20 hover:bg-[#b4e033]/20 transition-colors">
+                    className="bg-[#3a9e6e]/10 text-[var(--k-lime)] rounded-xl py-2 px-3 text-xs font-medium border border-[var(--k-lime)]/20 hover:bg-[#3a9e6e]/20 transition-colors">
                     Appeler
                   </a>
                 )}
@@ -122,7 +122,7 @@ export function Tiers({ entreprise, onRetour, onNav }: {
       </div>
 
       <button onClick={() => setCreateOpen(true)}
-        className="fixed bottom-24 md:bottom-6 right-4 w-14 h-14 bg-[#b4e033] rounded-full flex items-center justify-center text-[#0e1c0f] shadow-lg shadow-[#b4e033]/20 z-10 active:scale-95 transition-all">
+        className="fixed bottom-24 md:bottom-6 right-4 w-14 h-14 bg-[#3a9e6e] rounded-full flex items-center justify-center text-white shadow-lg shadow-[var(--k-lime)]/20 z-10 active:scale-95 transition-all">
         <IcoPlus cls="w-6 h-6" />
       </button>
 
@@ -164,10 +164,10 @@ function NouveauTiersSheet({ entreprise, typeInitial, onClose, onCree }: {
     <div className="fixed inset-0 z-50 flex flex-col bg-[#0e1c0f]">
       <SheetHeader title="Nouveau tiers" onClose={onClose} />
       <div className="flex-1 overflow-y-auto px-4 pt-5 space-y-4">
-        <div className="flex gap-2 bg-[#162419] rounded-2xl p-1.5 border border-[#2a4230]">
+        <div className="flex gap-2 bg-[var(--k-surface)] rounded-2xl p-1.5 border border-[var(--k-line)]">
           {(['client', 'fournisseur'] as const).map((t) => (
             <button key={t} onClick={() => setType(t)}
-              className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${type === t ? 'bg-[#b4e033] text-[#0e1c0f]' : 'text-[#4a6b4a]'}`}>
+              className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${type === t ? 'bg-[#3a9e6e] text-white' : 'text-[var(--k-faint)]'}`}>
               {t === 'client' ? 'Client' : 'Fournisseur'}
             </button>
           ))}
@@ -179,9 +179,9 @@ function NouveauTiersSheet({ entreprise, typeInitial, onClose, onCree }: {
         <input value={adresse} onChange={(e) => setAdresse(e.target.value)} placeholder="Adresse (optionnel)" className={inputCls} />
         {erreur && <p className="text-[#f87171] text-xs">{erreur}</p>}
       </div>
-      <div className="border-t border-[#1e3222] px-4 py-3 bg-[#0a1408] shrink-0">
+      <div className="border-t border-[var(--k-line)] px-4 py-3 bg-[#0a1408] shrink-0">
         <button onClick={valider} disabled={charge || !nom.trim()}
-          className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40">
+          className="w-full bg-[#3a9e6e] text-white rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40">
           {charge ? '…' : 'Enregistrer'}
         </button>
       </div>
@@ -219,41 +219,41 @@ function FicheTiers({ entreprise, tiersId, onRetour }: {
         {erreur ? (
           <p className="text-[#f87171] text-sm px-4 pt-4">{erreur}</p>
         ) : !fiche ? (
-          <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
+          <p className="text-[var(--k-faint)] text-sm text-center py-8">Chargement…</p>
         ) : (
           <>
-            <div className="mx-4 mt-4 bg-[#162419] rounded-2xl p-4 border border-[#1e3222] space-y-1.5">
-              <p className="text-[#4a6b4a] text-xs uppercase tracking-wide font-medium">
+            <div className="mx-4 mt-4 bg-[var(--k-surface)] rounded-2xl p-4 border border-[var(--k-line)] space-y-1.5">
+              <p className="text-[var(--k-faint)] text-xs uppercase tracking-wide font-medium">
                 {fiche.type === 'fournisseur' ? 'Fournisseur' : fiche.type === 'les_deux' ? 'Client & fournisseur' : 'Client'}
               </p>
-              {fiche.telephone && <p className="text-[#edf5ea] text-sm">Tél. : {fiche.telephone}</p>}
-              {fiche.email && <p className="text-[#edf5ea] text-sm">Email : {fiche.email}</p>}
-              {fiche.niu && <p className="text-[#edf5ea] text-sm">NIU : {fiche.niu}</p>}
-              {fiche.adresse && <p className="text-[#edf5ea] text-sm">{fiche.adresse}</p>}
+              {fiche.telephone && <p className="text-[var(--k-ink)] text-sm">Tél. : {fiche.telephone}</p>}
+              {fiche.email && <p className="text-[var(--k-ink)] text-sm">Email : {fiche.email}</p>}
+              {fiche.niu && <p className="text-[var(--k-ink)] text-sm">NIU : {fiche.niu}</p>}
+              {fiche.adresse && <p className="text-[var(--k-ink)] text-sm">{fiche.adresse}</p>}
             </div>
 
             {(fiche.soldeDu > 0 || fiche.soldeAPayer > 0) && (
               <div className="mx-4 mt-3 grid gap-3" style={{ gridTemplateColumns: fiche.soldeDu > 0 && fiche.soldeAPayer > 0 ? '1fr 1fr' : '1fr' }}>
                 {fiche.soldeDu > 0 && (
-                  <div className="bg-[#162419] rounded-2xl p-4 text-center border border-[#fbbf24]/20">
-                    <p className="text-[#4a6b4a] text-xs">Nous doit</p>
+                  <div className="bg-[var(--k-surface)] rounded-2xl p-4 text-center border border-[#fbbf24]/20">
+                    <p className="text-[var(--k-faint)] text-xs">Nous doit</p>
                     <p className="text-[#fbbf24] font-mono font-bold text-lg mt-0.5">{fmt(fiche.soldeDu)}</p>
                   </div>
                 )}
                 {fiche.soldeAPayer > 0 && (
-                  <div className="bg-[#162419] rounded-2xl p-4 text-center border border-[#f87171]/20">
-                    <p className="text-[#4a6b4a] text-xs">On lui doit</p>
+                  <div className="bg-[var(--k-surface)] rounded-2xl p-4 text-center border border-[#f87171]/20">
+                    <p className="text-[var(--k-faint)] text-xs">On lui doit</p>
                     <p className="text-[#f87171] font-mono font-bold text-lg mt-0.5">{fmt(fiche.soldeAPayer)}</p>
                   </div>
                 )}
               </div>
             )}
 
-            <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-wide mx-4 mt-5 mb-2">Historique</p>
+            <p className="text-[var(--k-faint)] text-xs font-medium uppercase tracking-wide mx-4 mt-5 mb-2">Historique</p>
             {operations.length === 0 ? (
-              <p className="text-[#4a6b4a] text-sm px-4">Aucune opération enregistrée.</p>
+              <p className="text-[var(--k-faint)] text-sm px-4">Aucune opération enregistrée.</p>
             ) : (
-              <div className="mx-4 bg-[#162419] rounded-2xl overflow-hidden">
+              <div className="mx-4 bg-[var(--k-surface)] rounded-2xl overflow-hidden">
                 {operations.map((o, i) => (
                   <OperationLigne key={`${o.type}-${o.id}`} entreprise={entreprise} operation={o}
                     dernier={i === operations.length - 1} onFait={recharger} />
@@ -303,31 +303,31 @@ function OperationLigne({ entreprise, operation: o, dernier, onFait }: {
   }
 
   return (
-    <div className={`px-4 py-3 ${dernier ? '' : 'border-b border-[#1e3222]'}`}>
+    <div className={`px-4 py-3 ${dernier ? '' : 'border-b border-[var(--k-line)]'}`}>
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-0">
-          <p className="text-[#edf5ea] text-sm font-medium">{o.libelle}</p>
-          <p className="text-[#4a6b4a] text-xs mt-0.5">{o.date ? new Date(o.date).toLocaleDateString('fr-FR') : '—'}</p>
+          <p className="text-[var(--k-ink)] text-sm font-medium">{o.libelle}</p>
+          <p className="text-[var(--k-faint)] text-xs mt-0.5">{o.date ? new Date(o.date).toLocaleDateString('fr-FR') : '—'}</p>
         </div>
-        {o.pieceCle && <IcoFile cls="w-4 h-4 text-[#b4e033] shrink-0" />}
+        {o.pieceCle && <IcoFile cls="w-4 h-4 text-[var(--k-lime)] shrink-0" />}
         <div className="text-right shrink-0">
-          <p className="text-[#edf5ea] font-mono font-semibold text-sm">{fmt(o.montant)}</p>
-          <p className="text-[#4a6b4a] text-xs mt-0.5">{STATUT_LIBELLE[o.statut] ?? o.statut}</p>
+          <p className="text-[var(--k-ink)] font-mono font-semibold text-sm">{fmt(o.montant)}</p>
+          <p className="text-[var(--k-faint)] text-xs mt-0.5">{STATUT_LIBELLE[o.statut] ?? o.statut}</p>
         </div>
       </div>
       {o.type === 'achat' && (
         <div className="flex items-center gap-2 mt-2 flex-wrap">
           {o.pieceCle ? (
             <>
-              <button onClick={voirPiece} className="bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-1.5 text-xs font-medium border border-[#2a4230]">Voir la pièce</button>
+              <button onClick={voirPiece} className="bg-[var(--k-surface-soft)] text-[var(--k-ink)] rounded-xl px-3 py-1.5 text-xs font-medium border border-[var(--k-line)]">Voir la pièce</button>
               <button onClick={() => document.getElementById(pieceInputId)?.click()} disabled={charge}
-                className="bg-[#1e3222] text-[#edf5ea] rounded-xl px-3 py-1.5 text-xs font-medium border border-[#2a4230] disabled:opacity-40">Remplacer</button>
+                className="bg-[var(--k-surface-soft)] text-[var(--k-ink)] rounded-xl px-3 py-1.5 text-xs font-medium border border-[var(--k-line)] disabled:opacity-40">Remplacer</button>
               <button onClick={retirerPiece} disabled={charge}
                 className="text-[#f87171] text-xs font-medium px-3 py-1.5 hover:bg-[#f87171]/8 rounded-xl transition-colors disabled:opacity-40">Retirer</button>
             </>
           ) : (
             <button onClick={() => document.getElementById(pieceInputId)?.click()} disabled={charge}
-              className="bg-[#1e3222] text-[#b4e033] rounded-xl px-3 py-1.5 text-xs font-medium border border-[#b4e033]/20 disabled:opacity-40">
+              className="bg-[var(--k-surface-soft)] text-[var(--k-lime)] rounded-xl px-3 py-1.5 text-xs font-medium border border-[var(--k-lime)]/20 disabled:opacity-40">
               {charge ? 'Envoi…' : 'Joindre la facture fournisseur'}
             </button>
           )}

@@ -43,7 +43,7 @@ export const IcoFolder = ({ cls }: { cls?: string }) => <Ico cls={cls} ch={<path
 export const IcoPercent = ({ cls }: { cls?: string }) => <Ico cls={cls} ch={<><line x1="19" y1="5" x2="5" y2="19" /><circle cx="6.5" cy="6.5" r="2.5" /><circle cx="17.5" cy="17.5" r="2.5" /></>} />;
 
 const AVATAR_PALETTE: [string, string][] = [
-  ['#b4e033', '#0e1c0f'], // lime brand
+  ['#3a9e6e', '#ffffff'], // green brand
   ['#fb923c', '#431407'], // orange
   ['#fde047', '#422006'], // amber
   ['#60a5fa', '#0f2d54'], // blue

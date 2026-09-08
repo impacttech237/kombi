@@ -54,7 +54,7 @@ function StepDots({ step }: { step: 1 | 2 | 3 }) {
   return (
     <div className="flex items-center gap-2 justify-center">
       {([1, 2, 3] as const).map((s) => (
-        <div key={s} className={`rounded-full transition-all duration-300 ${s === step ? 'w-6 h-2 bg-[#b4e033]' : s < step ? 'w-2 h-2 bg-[#4a6b4a]' : 'w-2 h-2 bg-[#2a4230]'}`} />
+        <div key={s} className={`rounded-full transition-all duration-300 ${s === step ? 'w-6 h-2 bg-[#3a9e6e]' : s < step ? 'w-2 h-2 bg-[var(--k-faint)]' : 'w-2 h-2 bg-[var(--k-surface-inset)]'}`} />
       ))}
     </div>
   );
@@ -95,17 +95,17 @@ export function Onboarding({ onCree }: { onCree: () => void }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-[#0e1c0f] text-[#edf5ea] overflow-hidden">
+    <div className="h-full flex flex-col bg-[#0e1c0f] text-[var(--k-ink)] overflow-hidden">
       <div className="px-5 pt-6 pb-4 flex items-center gap-4 shrink-0">
         {step > 1 ? (
           <button onClick={() => setStep((s) => (s - 1) as 1 | 2 | 3)}
-            className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165] shrink-0">
+            className="w-9 h-9 rounded-full bg-[var(--k-surface-soft)] flex items-center justify-center text-[var(--k-muted)] shrink-0">
             <IcoChevR cls="w-4 h-4 rotate-180" />
           </button>
         ) : <div className="w-9 h-9 shrink-0" />}
         <div className="flex-1"><StepDots step={step} /></div>
         <div className="w-9 h-9 shrink-0 flex items-center justify-center">
-          <div className="w-7 h-7 bg-[#b4e033] rounded-lg flex items-center justify-center text-[#0e1c0f]">
+          <div className="w-7 h-7 bg-[#3a9e6e] rounded-lg flex items-center justify-center text-white">
             <IcoLayers cls="w-3.5 h-3.5" />
           </div>
         </div>
@@ -115,29 +115,29 @@ export function Onboarding({ onCree }: { onCree: () => void }) {
         {step === 1 && (
           <div className="flex flex-col gap-6 pt-2">
             <div>
-              <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-widest mb-1">Étape 1 sur 3</p>
-              <h1 className="text-[#edf5ea] text-2xl font-bold leading-snug">Quel est votre<br />secteur d'activité ?</h1>
+              <p className="text-[var(--k-faint)] text-xs font-medium uppercase tracking-widest mb-1">Étape 1 sur 3</p>
+              <h1 className="text-[var(--k-ink)] text-2xl font-bold leading-snug">Quel est votre<br />secteur d'activité ?</h1>
             </div>
             <div className="flex flex-col gap-3">
               {SECTEUR_OPTIONS.map((opt) => {
                 const active = draft.secteur === opt.key;
                 return (
                   <button key={opt.key} onClick={() => set('secteur', opt.key)}
-                    className={`w-full flex items-center gap-4 p-5 rounded-2xl text-left border-2 transition-all active:scale-[0.98] ${active ? 'bg-[#b4e033]/10 border-[#b4e033] text-[#b4e033]' : 'bg-[#162419] border-[#2a4230] text-[#edf5ea] hover:border-[#4a6b4a]'}`}>
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${active ? 'bg-[#b4e033]/15' : 'bg-[#1e3222]'}`}>{opt.icon}</div>
+                    className={`w-full flex items-center gap-4 p-5 rounded-2xl text-left border-2 transition-all active:scale-[0.98] ${active ? 'bg-[#3a9e6e]/10 border-[var(--k-lime)] text-[var(--k-lime)]' : 'bg-[var(--k-surface)] border-[var(--k-line)] text-[var(--k-ink)] hover:border-[var(--k-faint)]'}`}>
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${active ? 'bg-[#3a9e6e]/15' : 'bg-[var(--k-surface-soft)]'}`}>{opt.icon}</div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-base">{opt.label}</p>
-                      <p className={`text-sm mt-0.5 ${active ? 'text-[#b4e033]/70' : 'text-[#6b9165]'}`}>{opt.desc}</p>
+                      <p className={`text-sm mt-0.5 ${active ? 'text-[var(--k-lime)]/70' : 'text-[var(--k-muted)]'}`}>{opt.desc}</p>
                     </div>
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${active ? 'border-[#b4e033] bg-[#b4e033]' : 'border-[#2a4230]'}`}>
-                      {active && <IcoOk cls="w-3 h-3 text-[#0e1c0f]" />}
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${active ? 'border-[var(--k-lime)] bg-[#3a9e6e]' : 'border-[var(--k-line)]'}`}>
+                      {active && <IcoOk cls="w-3 h-3 text-white" />}
                     </div>
                   </button>
                 );
               })}
             </div>
             <button disabled={!draft.secteur} onClick={() => setStep(2)}
-              className={`w-full rounded-2xl py-4 font-semibold text-sm transition-all ${draft.secteur ? 'bg-[#b4e033] text-[#0e1c0f] active:scale-[0.98]' : 'bg-[#1e3222] text-[#4a6b4a] cursor-not-allowed'}`}>
+              className={`w-full rounded-2xl py-4 font-semibold text-sm transition-all ${draft.secteur ? 'bg-[#3a9e6e] text-white active:scale-[0.98]' : 'bg-[var(--k-surface-soft)] text-[var(--k-faint)] cursor-not-allowed'}`}>
               Continuer
             </button>
           </div>
@@ -146,22 +146,22 @@ export function Onboarding({ onCree }: { onCree: () => void }) {
         {step === 2 && (
           <div className="flex flex-col gap-5 pt-2">
             <div>
-              <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-widest mb-1">Étape 2 sur 3</p>
-              <h1 className="text-[#edf5ea] text-2xl font-bold leading-snug">Votre entreprise</h1>
+              <p className="text-[var(--k-faint)] text-xs font-medium uppercase tracking-widest mb-1">Étape 2 sur 3</p>
+              <h1 className="text-[var(--k-ink)] text-2xl font-bold leading-snug">Votre entreprise</h1>
             </div>
 
             <div>
-              <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Raison sociale <span className="text-[#f87171]">*</span></label>
+              <label className="text-[var(--k-muted)] text-xs font-medium block mb-1.5">Raison sociale <span className="text-[#f87171]">*</span></label>
               <input value={draft.raisonSociale} onChange={(e) => set('raisonSociale', e.target.value)} placeholder="Ex : Boutique Awa"
-                className="w-full bg-[#162419] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-4 py-3.5 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none" />
+                className="w-full bg-[var(--k-surface)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-xl px-4 py-3.5 text-sm border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none" />
             </div>
 
             <div>
-              <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Nature d'activité <span className="text-[#f87171]">*</span></label>
+              <label className="text-[var(--k-muted)] text-xs font-medium block mb-1.5">Nature d'activité <span className="text-[#f87171]">*</span></label>
               <div className="grid grid-cols-2 gap-2">
                 {NATURE_OPTIONS.map((opt) => (
                   <button key={opt.key} onClick={() => set('nature', opt.key)}
-                    className={`py-3 px-4 rounded-xl text-sm font-medium text-left border transition-all ${draft.nature === opt.key ? 'bg-[#b4e033]/10 border-[#b4e033] text-[#b4e033]' : 'bg-[#162419] border-[#2a4230] text-[#edf5ea]'}`}>
+                    className={`py-3 px-4 rounded-xl text-sm font-medium text-left border transition-all ${draft.nature === opt.key ? 'bg-[#3a9e6e]/10 border-[var(--k-lime)] text-[var(--k-lime)]' : 'bg-[var(--k-surface)] border-[var(--k-line)] text-[var(--k-ink)]'}`}>
                     {opt.label}
                   </button>
                 ))}
@@ -169,29 +169,29 @@ export function Onboarding({ onCree }: { onCree: () => void }) {
             </div>
 
             <div>
-              <label className="text-[#6b9165] text-xs font-medium block mb-1.5">NIU <span className="text-[#4a6b4a]">(optionnel)</span></label>
+              <label className="text-[var(--k-muted)] text-xs font-medium block mb-1.5">NIU <span className="text-[var(--k-faint)]">(optionnel)</span></label>
               <input value={draft.niu} onChange={(e) => set('niu', e.target.value)} placeholder="M082400001234B"
-                className="w-full bg-[#162419] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-4 py-3.5 text-sm font-mono border border-[#2a4230] focus:border-[#b4e033] focus:outline-none" />
-              <p className="text-[#4a6b4a] text-xs mt-1.5">Vous pourrez l'ajouter plus tard dans les paramètres.</p>
+                className="w-full bg-[var(--k-surface)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-xl px-4 py-3.5 text-sm font-mono border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none" />
+              <p className="text-[var(--k-faint)] text-xs mt-1.5">Vous pourrez l'ajouter plus tard dans les paramètres.</p>
             </div>
 
             <div role="button" tabIndex={0} onClick={() => set('cga', !draft.cga)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set('cga', !draft.cga); } }}
-              className="w-full flex items-start gap-3 bg-[#162419] rounded-2xl p-4 border border-[#2a4230] text-left cursor-pointer">
-              <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${draft.cga ? 'bg-[#b4e033] border-[#b4e033]' : 'border-[#4a6b4a]'}`}>
-                {draft.cga && <IcoOk cls="w-3 h-3 text-[#0e1c0f]" />}
+              className="w-full flex items-start gap-3 bg-[var(--k-surface)] rounded-2xl p-4 border border-[var(--k-line)] text-left cursor-pointer">
+              <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${draft.cga ? 'bg-[#3a9e6e] border-[var(--k-lime)]' : 'border-[var(--k-faint)]'}`}>
+                {draft.cga && <IcoOk cls="w-3 h-3 text-white" />}
               </div>
               <div className="flex-1">
-                <p className="text-[#edf5ea] text-sm font-medium leading-snug">Je suis adhérent d'un Centre de Gestion Agréé (CGA)</p>
+                <p className="text-[var(--k-ink)] text-sm font-medium leading-snug">Je suis adhérent d'un Centre de Gestion Agréé (CGA)</p>
                 <button type="button" onClick={(e) => { e.stopPropagation(); setTooltip((v) => !v); }}
-                  className="text-[#b4e033] text-xs font-medium mt-1 underline underline-offset-2">
+                  className="text-[var(--k-lime)] text-xs font-medium mt-1 underline underline-offset-2">
                   Qu'est-ce que c'est ?
                 </button>
                 {tooltip && (
-                  <div className="mt-2 bg-[#1e3222] rounded-xl p-3 border border-[#2a4230]">
-                    <p className="text-[#6b9165] text-xs leading-relaxed">
+                  <div className="mt-2 bg-[var(--k-surface-soft)] rounded-xl p-3 border border-[var(--k-line)]">
+                    <p className="text-[var(--k-muted)] text-xs leading-relaxed">
                       Un CGA est un organisme agréé par l'État qui accompagne les PME dans leur gestion comptable et
-                      fiscale. L'adhésion permet de réduire votre cotisation IGS de <strong className="text-[#b4e033]">50 %</strong>.
+                      fiscale. L'adhésion permet de réduire votre cotisation IGS de <strong className="text-[var(--k-lime)]">50 %</strong>.
                     </p>
                   </div>
                 )}
@@ -199,7 +199,7 @@ export function Onboarding({ onCree }: { onCree: () => void }) {
             </div>
 
             <button disabled={!step2Valid} onClick={() => setStep(3)}
-              className={`w-full rounded-2xl py-4 font-semibold text-sm transition-all ${step2Valid ? 'bg-[#b4e033] text-[#0e1c0f] active:scale-[0.98]' : 'bg-[#1e3222] text-[#4a6b4a] cursor-not-allowed'}`}>
+              className={`w-full rounded-2xl py-4 font-semibold text-sm transition-all ${step2Valid ? 'bg-[#3a9e6e] text-white active:scale-[0.98]' : 'bg-[var(--k-surface-soft)] text-[var(--k-faint)] cursor-not-allowed'}`}>
               Continuer
             </button>
           </div>
@@ -208,15 +208,15 @@ export function Onboarding({ onCree }: { onCree: () => void }) {
         {step === 3 && (
           <div className="flex flex-col gap-5 pt-2">
             <div>
-              <p className="text-[#4a6b4a] text-xs font-medium uppercase tracking-widest mb-1">Étape 3 sur 3</p>
-              <h1 className="text-[#edf5ea] text-2xl font-bold leading-snug">Récapitulatif</h1>
+              <p className="text-[var(--k-faint)] text-xs font-medium uppercase tracking-widest mb-1">Étape 3 sur 3</p>
+              <h1 className="text-[var(--k-ink)] text-2xl font-bold leading-snug">Récapitulatif</h1>
             </div>
 
-            <div className="bg-[#162419] rounded-2xl border border-[#2a4230] overflow-hidden">
-              <div className="bg-[#1e3222] px-4 py-3 border-b border-[#2a4230]">
-                <p className="text-[#edf5ea] font-semibold">{draft.raisonSociale}</p>
+            <div className="bg-[var(--k-surface)] rounded-2xl border border-[var(--k-line)] overflow-hidden">
+              <div className="bg-[var(--k-surface-soft)] px-4 py-3 border-b border-[var(--k-line)]">
+                <p className="text-[var(--k-ink)] font-semibold">{draft.raisonSociale}</p>
               </div>
-              <div className="divide-y divide-[#1e3222]">
+              <div className="divide-y divide-[var(--k-line)]">
                 {[
                   { label: 'Secteur', value: secteurLabel },
                   { label: "Nature d'activité", value: natureLabel },
@@ -224,8 +224,8 @@ export function Onboarding({ onCree }: { onCree: () => void }) {
                   { label: 'Adhérent CGA', value: draft.cga ? 'Oui — IGS réduit de 50 %' : 'Non' },
                 ].map((row) => (
                   <div key={row.label} className="flex justify-between px-4 py-3 gap-4">
-                    <span className="text-[#6b9165] text-sm">{row.label}</span>
-                    <span className={`text-sm font-medium text-right ${row.value === 'Non renseigné' ? 'text-[#4a6b4a] italic' : 'text-[#edf5ea]'}`}>{row.value}</span>
+                    <span className="text-[var(--k-muted)] text-sm">{row.label}</span>
+                    <span className={`text-sm font-medium text-right ${row.value === 'Non renseigné' ? 'text-[var(--k-faint)] italic' : 'text-[var(--k-ink)]'}`}>{row.value}</span>
                   </div>
                 ))}
               </div>
@@ -235,7 +235,7 @@ export function Onboarding({ onCree }: { onCree: () => void }) {
               <IcoAlert cls="w-4 h-4 text-[#fbbf24] shrink-0 mt-0.5" />
               <div>
                 <p className="text-[#fbbf24] text-sm font-medium">Régime fiscal de démarrage : IGS</p>
-                <p className="text-[#6b9165] text-xs mt-1 leading-relaxed">
+                <p className="text-[var(--k-muted)] text-xs mt-1 leading-relaxed">
                   Votre entreprise démarre à l'Impôt Général Synthétique, le régime le plus simple pour les PME.
                   Kombi bascule automatiquement vers le régime réel dès que votre chiffre d'affaires dépasse le
                   seuil légal (CGI).
@@ -247,11 +247,11 @@ export function Onboarding({ onCree }: { onCree: () => void }) {
             {erreur && <p className="text-[#f87171] text-xs">{erreur}</p>}
 
             <button onClick={creer} disabled={charge}
-              className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-4 font-bold text-base active:scale-[0.98] transition-all shadow-lg shadow-[#b4e033]/20 disabled:opacity-50">
+              className="w-full bg-[#3a9e6e] text-white rounded-2xl py-4 font-bold text-base active:scale-[0.98] transition-all shadow-lg shadow-[var(--k-lime)]/20 disabled:opacity-50">
               {charge ? 'Création…' : 'Créer mon entreprise →'}
             </button>
 
-            <p className="text-[#4a6b4a] text-xs text-center">Vous pourrez modifier ces informations dans Paramètres à tout moment.</p>
+            <p className="text-[var(--k-faint)] text-xs text-center">Vous pourrez modifier ces informations dans Paramètres à tout moment.</p>
           </div>
         )}
       </div>

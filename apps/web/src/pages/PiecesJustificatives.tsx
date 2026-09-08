@@ -39,24 +39,24 @@ export function PiecesJustificatives({ entreprise, onRetour }: { entreprise: Ent
   return (
     <div className="-mx-4 -mt-4 md:-mx-8 md:-mt-6 flex-1 flex flex-col overflow-hidden">
       <div className="px-4 md:px-8 pt-4 pb-2 flex items-center gap-2">
-        <button onClick={onRetour} className="w-9 h-9 shrink-0 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+        <button onClick={onRetour} className="w-9 h-9 shrink-0 rounded-full bg-[var(--k-surface-soft)] flex items-center justify-center text-[var(--k-muted)]">
           <IcoChevR cls="w-4 h-4 rotate-180" />
         </button>
-        <h1 className="text-[#edf5ea] text-lg font-bold flex-1">Pièces justificatives</h1>
+        <h1 className="text-[var(--k-ink)] text-lg font-bold flex-1">Pièces justificatives</h1>
       </div>
 
       {erreur && <p className="text-[#f87171] text-sm px-4 md:px-8">{erreur}</p>}
 
       <div className="px-4 md:px-8 pb-2 space-y-2">
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4a6b4a]"><IcoSearch cls="w-4 h-4" /></span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--k-faint)]"><IcoSearch cls="w-4 h-4" /></span>
           <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Rechercher par libellé, client, fournisseur..."
-            className="w-full bg-[#162419] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl pl-9 pr-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none" />
+            className="w-full bg-[var(--k-surface)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-xl pl-9 pr-4 py-3 text-sm border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none" />
         </div>
         <div className="flex gap-1.5 overflow-x-auto">
           {(['all', 'depense', 'achat', 'vente'] as const).map((t) => (
             <button key={t} onClick={() => setFiltreType(t)}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filtreType === t ? 'bg-[#b4e033] text-[#0e1c0f]' : 'bg-[#1e3222] text-[#6b9165] border border-[#2a4230]'}`}>
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filtreType === t ? 'bg-[#3a9e6e] text-white' : 'bg-[var(--k-surface-soft)] text-[var(--k-muted)] border border-[var(--k-line)]'}`}>
               {t === 'all' ? 'Tous' : LABEL_TYPE[t]}
             </button>
           ))}
@@ -65,26 +65,26 @@ export function PiecesJustificatives({ entreprise, onRetour }: { entreprise: Ent
 
       <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-24 md:pb-8 space-y-2 pt-1">
         {pieces === null ? (
-          <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
+          <p className="text-[var(--k-faint)] text-sm text-center py-8">Chargement…</p>
         ) : filtrees.length === 0 ? (
-          <p className="text-[#4a6b4a] text-sm text-center py-8">
+          <p className="text-[var(--k-faint)] text-sm text-center py-8">
             {pieces.length === 0 ? 'Aucune pièce jointe pour l\'instant.' : 'Aucun résultat pour cette recherche.'}
           </p>
         ) : (
           filtrees.map((p) => (
             <button key={`${p.type}-${p.id}`} onClick={() => void ouvrir(p)}
-              className="w-full bg-[#162419] rounded-2xl p-4 flex items-center gap-3 text-left hover:bg-[#1e3222] transition-colors">
-              <div className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center shrink-0">
-                <IcoFile cls="w-4 h-4 text-[#b4e033]" />
+              className="w-full bg-[var(--k-surface)] rounded-2xl p-4 flex items-center gap-3 text-left hover:bg-[var(--k-surface-soft)] transition-colors">
+              <div className="w-9 h-9 rounded-full bg-[var(--k-surface-soft)] flex items-center justify-center shrink-0">
+                <IcoFile cls="w-4 h-4 text-[var(--k-lime)]" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[#edf5ea] font-medium text-sm truncate">{p.libelle}</p>
+                <p className="text-[var(--k-ink)] font-medium text-sm truncate">{p.libelle}</p>
                 <div className="flex items-center gap-1.5 mt-1">
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${CLS_TYPE[p.type]}`}>{LABEL_TYPE[p.type]}</span>
-                  <span className="text-[#4a6b4a] text-xs">{p.date}</span>
+                  <span className="text-[var(--k-faint)] text-xs">{p.date}</span>
                 </div>
               </div>
-              <span className="text-[#edf5ea] font-mono text-sm font-semibold shrink-0">{fmt(p.montant)}</span>
+              <span className="text-[var(--k-ink)] font-mono text-sm font-semibold shrink-0">{fmt(p.montant)}</span>
             </button>
           ))
         )}

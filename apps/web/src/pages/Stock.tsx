@@ -63,27 +63,27 @@ export function Stock({ entreprise }: { entreprise: EntrepriseResume }) {
 
       <div className="px-4 md:px-8 pt-4 pb-2">
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4a6b4a]"><IcoSearch cls="w-4 h-4" /></span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--k-faint)]"><IcoSearch cls="w-4 h-4" /></span>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un produit..."
-            className="w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl pl-9 pr-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none" />
+            className="w-full bg-[var(--k-surface-soft)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-xl pl-9 pr-4 py-3 text-sm focus:shadow-[0_0_0_3px_rgb(58_158_110/.22)] focus:outline-none" />
         </div>
       </div>
 
       {liste.length > 0 && (
         <div className="px-4 md:px-8 pb-2">
-          <div className="bg-[#162419] rounded-2xl p-3 flex items-center gap-3">
+          <div className="k-card p-3 flex items-center gap-3">
             <StockHealthChart ok={liste.length - enAlerte.length} faible={enFaible.length} critique={0} rupture={enRupture.length} />
-            <div className="flex-1 flex flex-col gap-1.5 pl-1 border-l border-[#1e3222]">
+            <div className="flex-1 flex flex-col gap-1.5 pl-1 border-l border-[var(--k-line)]">
               <div className="flex items-center justify-between">
-                <span className="text-[#4a6b4a] text-xs">Références</span>
-                <span className="text-[#edf5ea] font-semibold text-sm">{liste.length}</span>
+                <span className="text-[var(--k-faint)] text-xs">Références</span>
+                <span className="text-[var(--k-ink)] font-semibold text-sm">{liste.length}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#4a6b4a] text-xs">Valeur stock</span>
-                <span className="text-[#b4e033] font-mono font-semibold text-xs">{fmt(totalValue)}</span>
+                <span className="text-[var(--k-faint)] text-xs">Valeur stock</span>
+                <span className="text-[var(--k-lime)] font-mono font-semibold text-xs">{fmt(totalValue)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#4a6b4a] text-xs">Alertes actives</span>
+                <span className="text-[var(--k-faint)] text-xs">Alertes actives</span>
                 <span className={`font-semibold text-sm ${enRupture.length > 0 ? 'text-[#f87171]' : enAlerte.length > 0 ? 'text-[#fbbf24]' : 'text-[#4ade80]'}`}>{enAlerte.length}</span>
               </div>
             </div>
@@ -93,44 +93,44 @@ export function Stock({ entreprise }: { entreprise: EntrepriseResume }) {
 
       <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-24 md:pb-8 space-y-2 pt-1">
         {produits === null ? (
-          <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
+          <p className="text-[var(--k-faint)] text-sm text-center py-8">Chargement…</p>
         ) : liste.length === 0 ? (
-          <p className="text-[#4a6b4a] text-sm text-center py-8">Aucun produit — utilisez le bouton + pour en ajouter un.</p>
+          <p className="text-[var(--k-faint)] text-sm text-center py-8">Aucun produit — utilisez le bouton + pour en ajouter un.</p>
         ) : (
           filtered.map((p) => {
             const st = statutProduit(p);
             const stockPct = Math.min(100, (p.stock_actuel / Math.max(p.seuil_alerte * 4, p.stock_actuel, 1)) * 100);
             const borderCls = st === 'rupture' ? 'border-[#7f1d1d]/40' : st === 'faible' ? 'border-[#fbbf24]/25' : 'border-transparent';
-            const barCls = st === 'rupture' ? 'bg-[#7f1d1d]' : st === 'faible' ? 'bg-[#fbbf24]' : 'bg-[#b4e033]';
-            const cntCls = st === 'rupture' ? 'text-[#f87171]' : st === 'faible' ? 'text-[#fbbf24]' : 'text-[#b4e033]';
+            const barCls = st === 'rupture' ? 'bg-[#7f1d1d]' : st === 'faible' ? 'bg-[#fbbf24]' : 'bg-[#3a9e6e]';
+            const cntCls = st === 'rupture' ? 'text-[#f87171]' : st === 'faible' ? 'text-[#fbbf24]' : 'text-[var(--k-lime)]';
             return (
-              <div key={p.id} className={`bg-[#162419] rounded-2xl p-4 border ${borderCls}`}>
+              <div key={p.id} className={`bg-[var(--k-surface)] rounded-2xl p-4 border ${borderCls}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-[#edf5ea] font-medium text-sm">{p.nom}</p>
+                      <p className="text-[var(--k-ink)] font-medium text-sm">{p.nom}</p>
                       {st === 'faible' && <span className="bg-[#fbbf24]/15 text-[#fbbf24] text-xs px-2 py-0.5 rounded-full font-medium">Stock faible</span>}
                       {st === 'rupture' && <span className="bg-[#7f1d1d]/30 text-[#fca5a5] text-xs px-2 py-0.5 rounded-full font-semibold tracking-wide">Rupture</span>}
                     </div>
-                    <p className="text-[#4a6b4a] text-xs mt-0.5">{p.unite}{p.sku ? ` · ${p.sku}` : ''}</p>
+                    <p className="text-[var(--k-faint)] text-xs mt-0.5">{p.unite}{p.sku ? ` · ${p.sku}` : ''}</p>
                     <div className="mt-2.5 flex items-center gap-2.5">
-                      <div className="flex-1 h-1.5 bg-[#1e3222] rounded-full overflow-hidden">
+                      <div className="flex-1 h-1.5 bg-[var(--k-surface-soft)] rounded-full overflow-hidden">
                         <div className={`h-full rounded-full transition-all ${barCls}`} style={{ width: `${stockPct}%` }} />
                       </div>
                       <span className={`text-xs font-mono font-semibold ${cntCls}`}>{p.stock_actuel} unités</span>
                     </div>
-                    <p className="text-[#4a6b4a] text-xs mt-1">Seuil alerte : {p.seuil_alerte}</p>
+                    <p className="text-[var(--k-faint)] text-xs mt-1">Seuil alerte : {p.seuil_alerte}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-[#edf5ea] font-mono font-semibold text-sm">{fmt(p.prix_vente)}</p>
-                    <p className="text-[#4a6b4a] text-xs mt-0.5">/ {p.unite}</p>
+                    <p className="text-[var(--k-ink)] font-mono font-semibold text-sm">{fmt(p.prix_vente)}</p>
+                    <p className="text-[var(--k-faint)] text-xs mt-0.5">/ {p.unite}</p>
                     <div className="flex gap-1.5 mt-2">
                       <button onClick={() => setAjust(p)}
-                        className="bg-[#1e3222] text-[#6b9165] text-xs px-2.5 py-1.5 rounded-lg font-medium hover:bg-[#2a4230] transition-colors border border-[#2a4230]">
+                        className="bg-[var(--k-surface-soft)] text-[var(--k-muted)] text-xs px-2.5 py-1.5 rounded-lg font-medium hover:bg-[var(--k-surface-inset)] transition-colors border border-[var(--k-line)]">
                         Ajuster
                       </button>
                       <button onClick={() => setAppro(p)}
-                        className="bg-[#1e3222] text-[#b4e033] text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-[#2a4230] transition-colors border border-[#b4e033]/20">
+                        className="bg-[var(--k-surface-soft)] text-[var(--k-lime)] text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-[var(--k-surface-inset)] transition-colors border border-[var(--k-lime)]/20">
                         + Entrée
                       </button>
                     </div>
@@ -143,7 +143,7 @@ export function Stock({ entreprise }: { entreprise: EntrepriseResume }) {
       </div>
 
       <button onClick={() => setCreateOpen(true)}
-        className="fixed bottom-24 md:bottom-6 right-4 w-14 h-14 bg-[#b4e033] rounded-full flex items-center justify-center text-[#0e1c0f] shadow-lg shadow-[#b4e033]/20 z-10 active:scale-95 transition-all">
+        className="fixed bottom-24 md:bottom-6 right-4 w-14 h-14 bg-[#3a9e6e] rounded-full flex items-center justify-center text-white shadow-lg shadow-[var(--k-lime)]/20 z-10 active:scale-95 transition-all">
         <IcoPlus cls="w-6 h-6" />
       </button>
 
@@ -165,12 +165,12 @@ export function Stock({ entreprise }: { entreprise: EntrepriseResume }) {
 
 function SheetHeader({ title, onClose }: { title: string; onClose: () => void }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-[#1e3222] bg-[#0a1408] shrink-0">
-      <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+    <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--k-line)] bg-[#0a1408] shrink-0">
+      <button onClick={onClose} className="w-9 h-9 rounded-full bg-[var(--k-surface-soft)] flex items-center justify-center text-[var(--k-muted)]">
         <IcoChevR cls="w-4 h-4 rotate-180" />
       </button>
-      <h2 className="text-[#edf5ea] font-semibold text-sm flex-1">{title}</h2>
-      <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+      <h2 className="text-[var(--k-ink)] font-semibold text-sm flex-1">{title}</h2>
+      <button onClick={onClose} className="w-9 h-9 rounded-full bg-[var(--k-surface-soft)] flex items-center justify-center text-[var(--k-muted)]">
         <IcoX cls="w-3.5 h-3.5" />
       </button>
     </div>
@@ -180,12 +180,12 @@ function SheetHeader({ title, onClose }: { title: string; onClose: () => void })
 function Champ({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="text-[#6b9165] text-xs font-medium block mb-1.5">{label}</label>
+      <label className="text-[var(--k-muted)] text-xs font-medium block mb-1.5">{label}</label>
       {children}
     </div>
   );
 }
-const inputCls = 'w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none';
+const inputCls = 'w-full bg-[var(--k-surface-soft)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-xl px-4 py-3 text-sm border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none';
 
 function NouveauProduitSheet({ entreprise, onClose, onCree }: { entreprise: EntrepriseResume; onClose: () => void; onCree: () => void }) {
   const [nom, setNom] = useState('');
@@ -213,9 +213,9 @@ function NouveauProduitSheet({ entreprise, onClose, onCree }: { entreprise: Entr
           <input inputMode="numeric" value={seuil} onChange={(e) => setSeuil(e.target.value.replace(/\D/g, ''))} className={inputCls} />
         </Champ>
       </div>
-      <div className="border-t border-[#1e3222] px-4 py-3 bg-[#0a1408] shrink-0">
+      <div className="border-t border-[var(--k-line)] px-4 py-3 bg-[#0a1408] shrink-0">
         <button onClick={creer} disabled={charge || !nom || !prix}
-          className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40">
+          className="w-full bg-[#3a9e6e] text-white rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40">
           {charge ? '…' : 'Créer le produit'}
         </button>
       </div>
@@ -272,17 +272,17 @@ function ApprovisionnerSheet({ entreprise, produit, onClose, onFait }: {
     <div className="fixed inset-0 z-50 flex flex-col bg-[#0e1c0f]">
       <SheetHeader title={`Approvisionner · ${produit.nom}`} onClose={onClose} />
       <div className="flex-1 overflow-y-auto px-4 pt-5 space-y-4">
-        <p className="text-[#4a6b4a] text-xs">Stock actuel : {produit.stock_actuel}</p>
+        <p className="text-[var(--k-faint)] text-xs">Stock actuel : {produit.stock_actuel}</p>
         <Champ label="Quantité reçue"><input inputMode="numeric" value={qte} onChange={(e) => setQte(e.target.value.replace(/\D/g, ''))} placeholder="10" className={inputCls} /></Champ>
         <Champ label="Coût d'achat unitaire (FCFA)"><input inputMode="numeric" value={cout} onChange={(e) => setCout(e.target.value.replace(/\D/g, ''))} placeholder="3000" className={inputCls} /></Champ>
 
-        <label className="flex items-center gap-2.5 text-sm text-[#edf5ea]">
-          <input type="checkbox" checked={aCredit} onChange={(e) => setACredit(e.target.checked)} className="accent-[#b4e033] w-4 h-4" />
+        <label className="flex items-center gap-2.5 text-sm text-[var(--k-ink)]">
+          <input type="checkbox" checked={aCredit} onChange={(e) => setACredit(e.target.checked)} className="accent-[#3a9e6e] w-4 h-4" />
           Achat à crédit (fournisseur payé plus tard)
         </label>
         {tvaEligible && (
-          <label className="flex items-center gap-2.5 text-sm text-[#edf5ea]">
-            <input type="checkbox" checked={avecTva} onChange={(e) => setAvecTva(e.target.checked)} className="accent-[#b4e033] w-4 h-4" />
+          <label className="flex items-center gap-2.5 text-sm text-[var(--k-ink)]">
+            <input type="checkbox" checked={avecTva} onChange={(e) => setAvecTva(e.target.checked)} className="accent-[#3a9e6e] w-4 h-4" />
             TVA récupérable sur cet achat (19,25 %)
           </label>
         )}
@@ -328,15 +328,15 @@ function ApprovisionnerSheet({ entreprise, produit, onClose, onFait }: {
               </Champ>
             )}
             {(fournisseurId || nouveauFournisseur.trim()) && (
-              <p className="text-[#4a6b4a] text-xs -mt-2">Vous pourrez joindre le scan de la facture depuis la fiche de ce fournisseur (Clients & Fournisseurs).</p>
+              <p className="text-[var(--k-faint)] text-xs -mt-2">Vous pourrez joindre le scan de la facture depuis la fiche de ce fournisseur (Clients & Fournisseurs).</p>
             )}
           </>
         )}
         {erreur && <p className="text-[#f87171] text-xs">{erreur}</p>}
       </div>
-      <div className="border-t border-[#1e3222] px-4 py-3 bg-[#0a1408] shrink-0">
+      <div className="border-t border-[var(--k-line)] px-4 py-3 bg-[#0a1408] shrink-0">
         <button onClick={valider} disabled={charge || !qte || !cout}
-          className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40">
+          className="w-full bg-[#3a9e6e] text-white rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40">
           {charge ? '…' : "Enregistrer l'entrée"}
         </button>
       </div>
@@ -371,12 +371,12 @@ function AjusterSheet({ entreprise, produit, onClose, onFait }: {
     <div className="fixed inset-0 z-50 flex flex-col bg-[#0e1c0f]">
       <SheetHeader title={`Ajuster le stock · ${produit.nom}`} onClose={onClose} />
       <div className="flex-1 overflow-y-auto px-4 pt-5 space-y-4">
-        <p className="text-[#4a6b4a] text-xs">Stock actuel : {produit.stock_actuel}</p>
-        <div className="flex gap-2 bg-[#162419] rounded-2xl p-1.5 border border-[#2a4230]">
-          <button onClick={() => setSens('perte')} className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${sens === 'perte' ? 'bg-[#b4e033] text-[#0e1c0f]' : 'text-[#4a6b4a]'}`}>
+        <p className="text-[var(--k-faint)] text-xs">Stock actuel : {produit.stock_actuel}</p>
+        <div className="flex gap-2 bg-[var(--k-surface)] rounded-2xl p-1.5 border border-[var(--k-line)]">
+          <button onClick={() => setSens('perte')} className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${sens === 'perte' ? 'bg-[#3a9e6e] text-white' : 'text-[var(--k-faint)]'}`}>
             Perte (casse, vol…)
           </button>
-          <button onClick={() => setSens('surplus')} className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${sens === 'surplus' ? 'bg-[#b4e033] text-[#0e1c0f]' : 'text-[#4a6b4a]'}`}>
+          <button onClick={() => setSens('surplus')} className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${sens === 'surplus' ? 'bg-[#3a9e6e] text-white' : 'text-[var(--k-faint)]'}`}>
             Surplus trouvé
           </button>
         </div>
@@ -388,9 +388,9 @@ function AjusterSheet({ entreprise, produit, onClose, onFait }: {
         </Champ>
         {erreur && <p className="text-[#f87171] text-xs">{erreur}</p>}
       </div>
-      <div className="border-t border-[#1e3222] px-4 py-3 bg-[#0a1408] shrink-0">
+      <div className="border-t border-[var(--k-line)] px-4 py-3 bg-[#0a1408] shrink-0">
         <button onClick={valider} disabled={charge || !quantite}
-          className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40">
+          className="w-full bg-[#3a9e6e] text-white rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40">
           {charge ? '…' : "Valider l'ajustement"}
         </button>
       </div>

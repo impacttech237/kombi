@@ -107,16 +107,16 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
   return (
     <div className="-mx-4 -mt-4 md:-mx-8 md:-mt-6 flex-1 flex flex-col overflow-hidden">
       <div className="px-4 md:px-8 pt-4 pb-2 flex items-center gap-2">
-        <button onClick={onRetour} className="w-9 h-9 shrink-0 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+        <button onClick={onRetour} className="w-9 h-9 shrink-0 rounded-full bg-[var(--k-surface-soft)] flex items-center justify-center text-[var(--k-muted)]">
           <IcoChevR cls="w-4 h-4 rotate-180" />
         </button>
-        <h1 className="text-[#edf5ea] text-lg font-bold flex-1">Rapports &amp; Analyses</h1>
+        <h1 className="text-[var(--k-ink)] text-lg font-bold flex-1">Rapports &amp; Analyses</h1>
       </div>
 
       <div className="px-4 md:px-8 pb-2 flex gap-2 flex-wrap">
         {TYPES.map((t) => (
           <button key={t.value} onClick={() => setType(t.value)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${type === t.value ? 'bg-[#b4e033] text-[#0e1c0f]' : 'bg-[#1e3222] text-[#6b9165] border border-[#2a4230]'}`}>
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${type === t.value ? 'bg-[#3a9e6e] text-white' : 'bg-[var(--k-surface-soft)] text-[var(--k-muted)] border border-[var(--k-line)]'}`}>
             {t.label}
           </button>
         ))}
@@ -126,15 +126,15 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
         {type === 'personnalise' ? (
           <>
             <input type="date" value={plageDebut} onChange={(e) => e.target.value && setPlageDebut(e.target.value)}
-              className="bg-[#1e3222] text-[#edf5ea] text-sm font-medium rounded-xl px-3 py-1.5 border border-[#2a4230] focus:border-[#b4e033] focus:outline-none [color-scheme:dark]" />
-            <span className="text-[#4a6b4a] text-sm">→</span>
+              className="bg-[var(--k-surface-soft)] text-[var(--k-ink)] text-sm font-medium rounded-xl px-3 py-1.5 border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none [color-scheme:dark]" />
+            <span className="text-[var(--k-faint)] text-sm">→</span>
             <input type="date" value={plageFin} onChange={(e) => e.target.value && setPlageFin(e.target.value)}
-              className="bg-[#1e3222] text-[#edf5ea] text-sm font-medium rounded-xl px-3 py-1.5 border border-[#2a4230] focus:border-[#b4e033] focus:outline-none [color-scheme:dark]" />
+              className="bg-[var(--k-surface-soft)] text-[var(--k-ink)] text-sm font-medium rounded-xl px-3 py-1.5 border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none [color-scheme:dark]" />
           </>
         ) : (
           <>
             <button onClick={() => setRef((r) => decalerRef(effectif, r, -1))}
-              className="w-8 h-8 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165] shrink-0">
+              className="w-8 h-8 rounded-full bg-[var(--k-surface-soft)] flex items-center justify-center text-[var(--k-muted)] shrink-0">
               <IcoChevR cls="w-3.5 h-3.5 rotate-180" />
             </button>
             {effectif === 'mensuel' ? (
@@ -143,17 +143,17 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
                   const [a, m] = e.target.value.split('-').map(Number);
                   if (a && m) setRef({ annee: a, mois: m - 1 });
                 }}
-                className="bg-[#1e3222] text-[#edf5ea] text-sm font-medium rounded-xl px-3 py-1.5 border border-[#2a4230] focus:border-[#b4e033] focus:outline-none [color-scheme:dark]" />
+                className="bg-[var(--k-surface-soft)] text-[var(--k-ink)] text-sm font-medium rounded-xl px-3 py-1.5 border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none [color-scheme:dark]" />
             ) : (
-              <span className="text-[#edf5ea] text-sm font-medium min-w-[90px] text-center">{labelPeriode(effectif, ref)}</span>
+              <span className="text-[var(--k-ink)] text-sm font-medium min-w-[90px] text-center">{labelPeriode(effectif, ref)}</span>
             )}
             <button onClick={() => setRef((r) => decalerRef(effectif, r, 1))}
-              className="w-8 h-8 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165] shrink-0">
+              className="w-8 h-8 rounded-full bg-[var(--k-surface-soft)] flex items-center justify-center text-[var(--k-muted)] shrink-0">
               <IcoChevR cls="w-3.5 h-3.5" />
             </button>
             {(ref.annee !== auj.getFullYear() || ref.mois !== auj.getMonth()) && (
               <button onClick={() => setRef({ annee: auj.getFullYear(), mois: auj.getMonth() })}
-                className="text-[#6b9165] text-xs font-medium px-2 py-1 hover:text-[#b4e033]">
+                className="text-[var(--k-muted)] text-xs font-medium px-2 py-1 hover:text-[var(--k-lime)]">
                 Aujourd'hui
               </button>
             )}
@@ -162,14 +162,14 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
 
         {rapport && (
           <select value={agenceFiltre} onChange={(e) => setAgenceFiltre(e.target.value)}
-            className="ml-auto bg-[#1e3222] text-[#edf5ea] text-xs rounded-xl px-2.5 py-1.5 border border-[#2a4230] focus:border-[#b4e033] focus:outline-none">
+            className="ml-auto bg-[var(--k-surface-soft)] text-[var(--k-ink)] text-xs rounded-xl px-2.5 py-1.5 border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none">
             <option value="">Toutes agences</option>
             {agencesDisponibles.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         )}
       </div>
       {agenceFiltre && (
-        <p className="text-[#4a6b4a] text-[11px] px-4 md:px-8 pb-1">
+        <p className="text-[var(--k-faint)] text-[11px] px-4 md:px-8 pb-1">
           Filtre agence « {agenceFiltre} » — ne s'applique qu'aux dépenses (CA, marge et clients restent sur toute l'entreprise).
         </p>
       )}
@@ -179,28 +179,28 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
 
       <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-24 md:pb-8 space-y-4 pt-2">
         {rapport === null ? (
-          <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
+          <p className="text-[var(--k-faint)] text-sm text-center py-8">Chargement…</p>
         ) : (
           <>
-            <p className="text-[#4a6b4a] text-xs">{rapport.periode.debut} → {rapport.periode.fin}</p>
+            <p className="text-[var(--k-faint)] text-xs">{rapport.periode.debut} → {rapport.periode.fin}</p>
 
             <div className="grid grid-cols-2 gap-2">
               {[
-                { label: 'Chiffre d\'affaires', valeur: rapport.stats.ca, couleur: 'text-[#edf5ea]' },
+                { label: 'Chiffre d\'affaires', valeur: rapport.stats.ca, couleur: 'text-[var(--k-ink)]' },
                 { label: 'Marge', valeur: rapport.stats.marge, couleur: 'text-[#4ade80]' },
                 { label: 'Dépenses', valeur: rapport.stats.depenses, couleur: 'text-[#f87171]' },
-                { label: 'Résultat', valeur: rapport.stats.resultat, couleur: rapport.stats.resultat >= 0 ? 'text-[#b4e033]' : 'text-[#f87171]' },
+                { label: 'Résultat', valeur: rapport.stats.resultat, couleur: rapport.stats.resultat >= 0 ? 'text-[var(--k-lime)]' : 'text-[#f87171]' },
               ].map((c) => (
-                <div key={c.label} className="bg-[#162419] rounded-2xl p-3.5">
-                  <p className="text-[#4a6b4a] text-xs">{c.label}</p>
+                <div key={c.label} className="bg-[var(--k-surface)] rounded-2xl p-3.5">
+                  <p className="text-[var(--k-faint)] text-xs">{c.label}</p>
                   <p className={`font-mono font-bold text-lg mt-0.5 ${c.couleur}`}>{fmt(c.valeur)}</p>
                 </div>
               ))}
             </div>
 
             {rapport.comparaison && (
-              <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
-                <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-2">
+              <div className="bg-[var(--k-surface)] rounded-2xl p-4 border border-[var(--k-line)]">
+                <p className="text-[var(--k-muted)] text-xs font-medium uppercase tracking-wide mb-2">
                   Vs période précédente ({rapport.comparaison.periode.debut} → {rapport.comparaison.periode.fin})
                 </p>
                 <div className="grid grid-cols-3 gap-2 text-center">
@@ -210,8 +210,8 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
                     { label: 'Dépenses', pct: rapport.comparaison.variationDepensesPct },
                   ].map((v) => (
                     <div key={v.label}>
-                      <p className="text-[#4a6b4a] text-xs">{v.label}</p>
-                      <p className={`font-mono text-sm font-semibold mt-0.5 ${v.pct === null ? 'text-[#4a6b4a]' : v.pct >= 0 ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
+                      <p className="text-[var(--k-faint)] text-xs">{v.label}</p>
+                      <p className={`font-mono text-sm font-semibold mt-0.5 ${v.pct === null ? 'text-[var(--k-faint)]' : v.pct >= 0 ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
                         {v.pct === null ? '—' : `${v.pct > 0 ? '+' : ''}${v.pct}%`}
                       </p>
                     </div>
@@ -220,29 +220,29 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
               </div>
             )}
 
-            <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
-              <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-3">Dépenses par catégorie</p>
+            <div className="bg-[var(--k-surface)] rounded-2xl p-4 border border-[var(--k-line)]">
+              <p className="text-[var(--k-muted)] text-xs font-medium uppercase tracking-wide mb-3">Dépenses par catégorie</p>
               {rapport.depenses.parCategorie.length === 0 ? (
-                <p className="text-[#4a6b4a] text-xs">Rien sur cette période.</p>
+                <p className="text-[var(--k-faint)] text-xs">Rien sur cette période.</p>
               ) : (
                 <DepensesCategorieDonut data={rapport.depenses.parCategorie} />
               )}
             </div>
 
-            <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
-              <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-1">
+            <div className="bg-[var(--k-surface)] rounded-2xl p-4 border border-[var(--k-line)]">
+              <p className="text-[var(--k-muted)] text-xs font-medium uppercase tracking-wide mb-1">
                 Évolution des dépenses ({rapport.depenses.evolutionMensuelle.length} mois)
               </p>
               <EvolutionMensuelleChart data={rapport.depenses.evolutionMensuelle} />
             </div>
 
             {rapport.produits.length > 0 && (
-              <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
-                <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-2">Top produits (marge)</p>
+              <div className="bg-[var(--k-surface)] rounded-2xl p-4 border border-[var(--k-line)]">
+                <p className="text-[var(--k-muted)] text-xs font-medium uppercase tracking-wide mb-2">Top produits (marge)</p>
                 <div className="space-y-2">
                   {rapport.produits.slice(0, 5).map((p) => (
                     <div key={p.designation} className="flex items-center justify-between text-sm">
-                      <span className="text-[#edf5ea] truncate">{p.designation}</span>
+                      <span className="text-[var(--k-ink)] truncate">{p.designation}</span>
                       <span className={`font-mono text-xs ${p.marge >= 0 ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>{fmt(p.marge)}</span>
                     </div>
                   ))}
@@ -251,12 +251,12 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
             )}
 
             {rapport.clients.length > 0 && (
-              <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
-                <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-2">Top clients (marge)</p>
+              <div className="bg-[var(--k-surface)] rounded-2xl p-4 border border-[var(--k-line)]">
+                <p className="text-[var(--k-muted)] text-xs font-medium uppercase tracking-wide mb-2">Top clients (marge)</p>
                 <div className="space-y-2">
                   {rapport.clients.slice(0, 5).map((cl) => (
                     <div key={cl.tiers_id ?? cl.nom} className="flex items-center justify-between text-sm">
-                      <span className="text-[#edf5ea] truncate">{cl.nom}</span>
+                      <span className="text-[var(--k-ink)] truncate">{cl.nom}</span>
                       <span className={`font-mono text-xs ${cl.marge >= 0 ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>{fmt(cl.marge)}</span>
                     </div>
                   ))}
@@ -264,20 +264,20 @@ export function Rapports({ entreprise, onRetour }: { entreprise: EntrepriseResum
               </div>
             )}
 
-            <div className="bg-[#162419] rounded-2xl p-4 border border-[#2a4230]">
-              <p className="text-[#6b9165] text-xs font-medium uppercase tracking-wide mb-2">Délai moyen de paiement</p>
-              <p className="text-[#edf5ea] font-mono text-sm">
+            <div className="bg-[var(--k-surface)] rounded-2xl p-4 border border-[var(--k-line)]">
+              <p className="text-[var(--k-muted)] text-xs font-medium uppercase tracking-wide mb-2">Délai moyen de paiement</p>
+              <p className="text-[var(--k-ink)] font-mono text-sm">
                 {rapport.delaiMoyenPaiement.jours !== null ? `${rapport.delaiMoyenPaiement.jours} jours` : 'Pas assez de données'}
               </p>
             </div>
 
             <div className="flex gap-2 pb-2">
               <button onClick={exporterPdf} disabled={exportEnCours !== null}
-                className="flex-1 flex items-center justify-center gap-1.5 bg-[#1e3222] text-[#edf5ea] rounded-xl px-4 py-2.5 text-sm font-medium border border-[#2a4230] disabled:opacity-40">
+                className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--k-surface-soft)] text-[var(--k-ink)] rounded-xl px-4 py-2.5 text-sm font-medium border border-[var(--k-line)] disabled:opacity-40">
                 <IcoFile cls="w-3.5 h-3.5" /> {exportEnCours === 'pdf' ? '…' : 'Export PDF'}
               </button>
               <button onClick={exporterCsv} disabled={exportEnCours !== null}
-                className="flex-1 flex items-center justify-center gap-1.5 bg-[#1e3222] text-[#edf5ea] rounded-xl px-4 py-2.5 text-sm font-medium border border-[#2a4230] disabled:opacity-40">
+                className="flex-1 flex items-center justify-center gap-1.5 bg-[var(--k-surface-soft)] text-[var(--k-ink)] rounded-xl px-4 py-2.5 text-sm font-medium border border-[var(--k-line)] disabled:opacity-40">
                 <IcoFile cls="w-3.5 h-3.5" /> {exportEnCours === 'csv' ? '…' : 'Export Excel (CSV)'}
               </button>
             </div>

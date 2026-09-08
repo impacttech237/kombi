@@ -136,7 +136,7 @@ export function Sidebar({ active, onNav, nomEntreprise, nomUtilisateur, masquer,
         <button onClick={() => onNav('parametres')}>Découvrir</button>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--k-line)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, paddingTop: 12 }}>
         <Avatar name={nomUtilisateur} size="sm" />
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nomUtilisateur}</p>
@@ -161,7 +161,7 @@ function NotifSheet({ notifs, onClose }: { notifs: NotificationActive[]; onClose
         {notifs.length === 0 ? (
           <p className="k-empty">Aucune notification.</p>
         ) : notifs.map((n, i) => (
-          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--k-surface-soft)', border: '1px solid var(--k-line)', borderRadius: 14, padding: '12px 14px', marginBottom: 8 }}>
+          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--k-surface-soft)', borderRadius: 14, padding: '12px 14px', marginBottom: 8 }}>
             <span style={{ marginTop: 5, width: 8, height: 8, borderRadius: 999, flex: '0 0 auto', background: n.gravite === 'critique' ? 'var(--k-danger)' : 'var(--k-warn)' }} />
             <span style={{ fontSize: 13.5, lineHeight: 1.4 }}>{n.libelle}</span>
           </div>

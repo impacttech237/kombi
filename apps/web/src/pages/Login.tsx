@@ -30,12 +30,12 @@ export function Login() {
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-6">
           <Logo size={56} />
-          <h1 className="text-[#edf5ea] text-3xl font-extrabold mt-3 mb-0.5">Kombi</h1>
-          <p className="text-[#4a6b4a] text-sm">L'ami de votre gestion</p>
+          <h1 className="text-[var(--k-ink)] text-3xl font-extrabold mt-3 mb-0.5">Kombi</h1>
+          <p className="text-[var(--k-faint)] text-sm">L'ami de votre gestion</p>
         </div>
 
-        <div className="bg-[#162419] rounded-2xl p-5 border border-[#1e3222]">
-          <h2 className="text-[#edf5ea] text-lg font-semibold mt-0 mb-4">
+        <div className="bg-[var(--k-surface)] rounded-2xl p-5 border border-[var(--k-line)]">
+          <h2 className="text-[var(--k-ink)] text-lg font-semibold mt-0 mb-4">
             {inscription ? 'Créer un compte' : 'Se connecter'}
           </h2>
           {inscription && (
@@ -49,9 +49,9 @@ export function Login() {
           </Bouton>
         </div>
 
-        <p className="text-center text-[#4a6b4a] text-sm mt-4">
+        <p className="text-center text-[var(--k-faint)] text-sm mt-4">
           {inscription ? 'Déjà un compte ? ' : 'Pas encore de compte ? '}
-          <button className="text-[#b4e033] font-medium px-1.5 py-0.5 hover:underline"
+          <button className="text-[var(--k-lime)] font-medium px-1.5 py-0.5 hover:underline"
             onClick={() => { setInscription(!inscription); setErreur(''); }}>
             {inscription ? 'Se connecter' : 'Créer un compte'}
           </button>

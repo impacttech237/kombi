@@ -1,6 +1,6 @@
 /**
  * Composants UI partagés — reskinnés dans le langage visuel du prototype Figma Make (dark,
- * accent citron vert #b4e033) pour les écrans sans référence prototype qui en dépendent encore
+ * accent citron vert #3a9e6e) pour les écrans sans référence prototype qui en dépendent encore
  * (Login, Dépenses, Créances, Dettes, Ventes historique, Journal).
  */
 import type { ReactNode } from 'react';
@@ -34,7 +34,7 @@ export function Icon({ name, size = 22 }: { name: string; size?: number }) {
 
 export function Logo({ size = 40 }: { size?: number }) {
   return (
-    <div className="shrink-0 bg-[#b4e033] text-[#0e1c0f] font-extrabold rounded-2xl flex items-center justify-center"
+    <div className="shrink-0 bg-[#3a9e6e] text-white font-extrabold rounded-2xl flex items-center justify-center"
       style={{ width: size, height: size, fontSize: size * 0.5 }}>
       K
     </div>
@@ -42,9 +42,9 @@ export function Logo({ size = 40 }: { size?: number }) {
 }
 
 const VARIANTE_CLS: Record<string, string> = {
-  primaire: 'bg-[#b4e033] text-[#0e1c0f] active:scale-95',
-  clair: 'bg-[#1e3222] text-[#edf5ea] border border-[#2a4230] hover:bg-[#2a4230]',
-  ghost: 'bg-transparent text-[#b4e033] hover:bg-[#b4e033]/10',
+  primaire: 'bg-[#3a9e6e] text-white active:scale-95',
+  clair: 'bg-[var(--k-surface-soft)] text-[var(--k-ink)] border border-[var(--k-line)] hover:bg-[var(--k-surface-inset)]',
+  ghost: 'bg-transparent text-[var(--k-lime)] hover:bg-[#3a9e6e]/10',
 };
 
 export function Bouton({
@@ -67,10 +67,10 @@ export function Champ({
   label: string; type?: string; value: string; onChange: (v: string) => void;
   placeholder?: string; options?: { value: string; label: string }[];
 }) {
-  const inputCls = 'w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none';
+  const inputCls = 'w-full bg-[var(--k-surface-soft)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-xl px-4 py-3 text-sm border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none';
   return (
     <div className="mb-4">
-      <label className="text-[#6b9165] text-xs font-medium block mb-1.5">{label}</label>
+      <label className="text-[var(--k-muted)] text-xs font-medium block mb-1.5">{label}</label>
       {options ? (
         <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
           {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}

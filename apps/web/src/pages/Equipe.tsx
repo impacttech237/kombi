@@ -15,7 +15,7 @@ const LABEL_ROLE: Record<string, string> = {
   magasinier: 'Magasinier',
 };
 
-const inputCls = 'w-full bg-[#1e3222] text-[#edf5ea] placeholder:text-[#4a6b4a] rounded-xl px-4 py-3 text-sm border border-[#2a4230] focus:border-[#b4e033] focus:outline-none';
+const inputCls = 'w-full bg-[var(--k-surface-soft)] text-[var(--k-ink)] placeholder:text-[var(--k-faint)] rounded-xl px-4 py-3 text-sm border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none';
 
 export function Equipe({ entreprise, onRetour }: { entreprise: EntrepriseResume; onRetour: () => void }) {
   const [liste, setListe] = useState<Membre[] | null>(null);
@@ -40,29 +40,29 @@ export function Equipe({ entreprise, onRetour }: { entreprise: EntrepriseResume;
   return (
     <div className="-mx-4 -mt-4 md:-mx-8 md:-mt-6 flex-1 flex flex-col overflow-hidden">
       <div className="px-4 md:px-8 pt-4 pb-2 flex items-center gap-2">
-        <button onClick={onRetour} className="w-9 h-9 shrink-0 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+        <button onClick={onRetour} className="w-9 h-9 shrink-0 rounded-full bg-[var(--k-surface-soft)] flex items-center justify-center text-[var(--k-muted)]">
           <IcoChevR cls="w-4 h-4 rotate-180" />
         </button>
-        <h1 className="text-[#edf5ea] text-lg font-bold flex-1">Équipe</h1>
+        <h1 className="text-[var(--k-ink)] text-lg font-bold flex-1">Équipe</h1>
       </div>
 
       {erreur && <p className="text-[#f87171] text-sm px-4 md:px-8">{erreur}</p>}
 
       <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-24 md:pb-8 space-y-2 pt-2">
         {liste === null ? (
-          <p className="text-[#4a6b4a] text-sm text-center py-8">Chargement…</p>
+          <p className="text-[var(--k-faint)] text-sm text-center py-8">Chargement…</p>
         ) : liste.length === 0 ? (
-          <p className="text-[#4a6b4a] text-sm text-center py-8">Personne d'autre pour l'instant.</p>
+          <p className="text-[var(--k-faint)] text-sm text-center py-8">Personne d'autre pour l'instant.</p>
         ) : (
           liste.map((m) => (
-            <div key={m.id} className="bg-[#162419] rounded-2xl p-4 flex items-center gap-3">
+            <div key={m.id} className="bg-[var(--k-surface)] rounded-2xl p-4 flex items-center gap-3">
               <Avatar name={m.nom} size="md" />
               <div className="flex-1 min-w-0">
-                <p className="text-[#edf5ea] font-medium text-sm truncate">{m.nom}</p>
-                <p className="text-[#4a6b4a] text-xs mt-0.5 truncate">{m.email}</p>
+                <p className="text-[var(--k-ink)] font-medium text-sm truncate">{m.nom}</p>
+                <p className="text-[var(--k-faint)] text-xs mt-0.5 truncate">{m.email}</p>
               </div>
               <select value={m.role} onChange={(e) => changer(m, e.target.value)}
-                className="bg-[#1e3222] text-[#edf5ea] text-xs rounded-lg px-2.5 py-2 border border-[#2a4230] focus:border-[#b4e033] focus:outline-none shrink-0">
+                className="bg-[var(--k-surface-soft)] text-[var(--k-ink)] text-xs rounded-lg px-2.5 py-2 border border-[var(--k-line)] focus:ring-2 focus:ring-[var(--k-lime)] focus:outline-none shrink-0">
                 {ROLE_MEMBRE.map((r) => <option key={r} value={r}>{LABEL_ROLE[r] ?? r}</option>)}
               </select>
               <button onClick={() => retirer(m)} className="text-[#f87171] p-1.5 shrink-0" aria-label="retirer">
@@ -74,7 +74,7 @@ export function Equipe({ entreprise, onRetour }: { entreprise: EntrepriseResume;
       </div>
 
       <button onClick={() => setAddOpen(true)}
-        className="fixed bottom-24 md:bottom-6 right-4 w-14 h-14 bg-[#b4e033] rounded-full flex items-center justify-center text-[#0e1c0f] shadow-lg shadow-[#b4e033]/20 z-10 active:scale-95 transition-all">
+        className="fixed bottom-24 md:bottom-6 right-4 w-14 h-14 bg-[#3a9e6e] rounded-full flex items-center justify-center text-white shadow-lg shadow-[var(--k-lime)]/20 z-10 active:scale-95 transition-all">
         <IcoPlus cls="w-6 h-6" />
       </button>
 
@@ -106,32 +106,32 @@ function AjouterMembreSheet({ entreprise, onClose, onAjoute }: {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[#0e1c0f]">
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#1e3222] bg-[#0a1408] shrink-0">
-        <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--k-line)] bg-[#0a1408] shrink-0">
+        <button onClick={onClose} className="w-9 h-9 rounded-full bg-[var(--k-surface-soft)] flex items-center justify-center text-[var(--k-muted)]">
           <IcoChevR cls="w-4 h-4 rotate-180" />
         </button>
-        <h2 className="text-[#edf5ea] font-semibold text-sm flex-1">Ajouter un membre</h2>
-        <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#1e3222] flex items-center justify-center text-[#6b9165]">
+        <h2 className="text-[var(--k-ink)] font-semibold text-sm flex-1">Ajouter un membre</h2>
+        <button onClick={onClose} className="w-9 h-9 rounded-full bg-[var(--k-surface-soft)] flex items-center justify-center text-[var(--k-muted)]">
           <IcoX cls="w-3.5 h-3.5" />
         </button>
       </div>
       <div className="flex-1 overflow-y-auto px-4 pt-5 space-y-4">
-        <p className="text-[#4a6b4a] text-xs leading-relaxed">La personne doit déjà avoir un compte Kombi avec cet email.</p>
+        <p className="text-[var(--k-faint)] text-xs leading-relaxed">La personne doit déjà avoir un compte Kombi avec cet email.</p>
         <div>
-          <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Email</label>
+          <label className="text-[var(--k-muted)] text-xs font-medium block mb-1.5">Email</label>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nom@exemple.com" className={inputCls} />
         </div>
         <div>
-          <label className="text-[#6b9165] text-xs font-medium block mb-1.5">Rôle</label>
+          <label className="text-[var(--k-muted)] text-xs font-medium block mb-1.5">Rôle</label>
           <select value={role} onChange={(e) => setRole(e.target.value)} className={inputCls}>
             {ROLE_MEMBRE.filter((r) => r !== 'admin').map((r) => <option key={r} value={r}>{LABEL_ROLE[r] ?? r}</option>)}
           </select>
         </div>
         {erreur && <p className="text-[#f87171] text-xs">{erreur}</p>}
       </div>
-      <div className="border-t border-[#1e3222] px-4 py-3 bg-[#0a1408] shrink-0">
+      <div className="border-t border-[var(--k-line)] px-4 py-3 bg-[#0a1408] shrink-0">
         <button onClick={ajouter} disabled={charge || !email.trim()}
-          className="w-full bg-[#b4e033] text-[#0e1c0f] rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40">
+          className="w-full bg-[#3a9e6e] text-white rounded-2xl py-4 font-semibold text-base active:scale-95 transition-all disabled:opacity-40">
           {charge ? '…' : 'Ajouter'}
         </button>
       </div>

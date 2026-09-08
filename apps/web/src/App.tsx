@@ -35,33 +35,33 @@ import { IcoOk, IcoCart, IcoChevR, IcoBox, IcoFile, IcoUser, IcoWlt } from './co
 function WelcomeBanner({ onNav }: { onNav: (m: string) => void }) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="bg-[#162419] rounded-2xl p-5 border border-[#b4e033]/20">
+      <div className="bg-[var(--k-surface)] rounded-2xl p-5 border border-[var(--k-lime)]/20">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 bg-[#b4e033] rounded-xl flex items-center justify-center text-[#0e1c0f]">
+          <div className="w-10 h-10 bg-[#3a9e6e] rounded-xl flex items-center justify-center text-white">
             <IcoOk cls="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[#edf5ea] font-semibold">Bienvenue dans Kombi !</p>
-            <p className="text-[#4a6b4a] text-xs">Votre espace est prêt.</p>
+            <p className="text-[var(--k-ink)] font-semibold">Bienvenue dans Kombi !</p>
+            <p className="text-[var(--k-faint)] text-xs">Votre espace est prêt.</p>
           </div>
         </div>
-        <p className="text-[#6b9165] text-sm leading-relaxed">
+        <p className="text-[var(--k-muted)] text-sm leading-relaxed">
           Votre entreprise a bien été créée. Commencez par enregistrer vos premières ventes pour alimenter vos
           tableaux de bord.
         </p>
       </div>
 
       <button onClick={() => onNav('caisse')}
-        className="w-full bg-[#162419] rounded-2xl p-5 text-left border border-[#2a4230] hover:border-[#b4e033]/30 active:scale-[0.99] transition-all">
+        className="w-full bg-[var(--k-surface)] rounded-2xl p-5 text-left border border-[var(--k-line)] hover:border-[var(--k-lime)]/30 active:scale-[0.99] transition-all">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-[#b4e033]/15 rounded-xl flex items-center justify-center text-[#b4e033] shrink-0">
+          <div className="w-12 h-12 bg-[#3a9e6e]/15 rounded-xl flex items-center justify-center text-[var(--k-lime)] shrink-0">
             <IcoCart cls="w-5 h-5" />
           </div>
           <div className="flex-1">
-            <p className="text-[#edf5ea] font-semibold text-sm">Enregistrez votre première vente</p>
-            <p className="text-[#6b9165] text-xs mt-0.5">Comptant ou à crédit, en espèces ou mobile money</p>
+            <p className="text-[var(--k-ink)] font-semibold text-sm">Enregistrez votre première vente</p>
+            <p className="text-[var(--k-muted)] text-xs mt-0.5">Comptant ou à crédit, en espèces ou mobile money</p>
           </div>
-          <IcoChevR cls="w-4 h-4 text-[#4a6b4a] shrink-0" />
+          <IcoChevR cls="w-4 h-4 text-[var(--k-faint)] shrink-0" />
         </div>
       </button>
 
@@ -73,12 +73,12 @@ function WelcomeBanner({ onNav }: { onNav: (m: string) => void }) {
           { m: 'tresorerie', Icon: IcoWlt, title: 'Suivre la trésorerie', sub: 'Vos soldes en temps réel' },
         ].map(({ m, Icon, title, sub }) => (
           <button key={m} onClick={() => onNav(m)}
-            className="bg-[#162419] rounded-2xl p-4 text-left border border-[#2a4230] hover:border-[#b4e033]/20 active:scale-[0.98] transition-all">
-            <div className="w-9 h-9 bg-[#1e3222] rounded-xl flex items-center justify-center text-[#b4e033] mb-3">
+            className="bg-[var(--k-surface)] rounded-2xl p-4 text-left border border-[var(--k-line)] hover:border-[var(--k-lime)]/20 active:scale-[0.98] transition-all">
+            <div className="w-9 h-9 bg-[var(--k-surface-soft)] rounded-xl flex items-center justify-center text-[var(--k-lime)] mb-3">
               <Icon cls="w-4 h-4" />
             </div>
-            <p className="text-[#edf5ea] text-xs font-semibold leading-snug">{title}</p>
-            <p className="text-[#4a6b4a] text-[10px] mt-0.5 leading-snug">{sub}</p>
+            <p className="text-[var(--k-ink)] text-xs font-semibold leading-snug">{title}</p>
+            <p className="text-[var(--k-faint)] text-[10px] mt-0.5 leading-snug">{sub}</p>
           </button>
         ))}
       </div>
@@ -91,7 +91,7 @@ function Splash() {
     <div className="min-h-screen bg-[#0e1c0f] flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
         <Logo size={56} />
-        <span className="text-[#4a6b4a] text-sm">Chargement…</span>
+        <span className="text-[var(--k-faint)] text-sm">Chargement…</span>
       </div>
     </div>
   );
