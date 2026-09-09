@@ -22,9 +22,21 @@ bucket_name = "kombi-documents"
 name = "ENTREPRISE"
 class_name = "EntrepriseDO"
 
+[[durable_objects.bindings]]
+name = "KOMBI_AGENT"
+class_name = "KombiAgent"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["EntrepriseDO"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["KombiAgent"]
+
+# Workers AI — cerveau des agents IA.
+[ai]
+binding = "AI"
 
 # La PWA (front) est servie par le même Worker → même origine que l'API.
 [assets]

@@ -1,9 +1,12 @@
 import type { EntrepriseDO } from './do/entreprise-do.js';
+import type { KombiAgent } from './agents/kombi-agent.js';
 
 /** Bindings Cloudflare injectés dans le Worker (voir wrangler.toml). */
 export interface Bindings {
   DB: D1Database; // control plane : identité, registre entreprises, auth
   ENTREPRISE: DurableObjectNamespace<EntrepriseDO>; // 1 base par entreprise (D13)
+  KOMBI_AGENT: DurableObjectNamespace<KombiAgent>; // agent IA par entreprise
+  AI: Ai; // Workers AI (LLM, Vision, Embeddings…)
   DOCS: R2Bucket;
   ASSETS: Fetcher; // sert la PWA (front) depuis le même Worker (même origine)
   BETTER_AUTH_SECRET: string;

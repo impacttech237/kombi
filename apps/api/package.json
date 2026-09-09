@@ -13,14 +13,18 @@
     "db:migrate:remote": "wrangler d1 migrations apply kombi-db --remote"
   },
   "dependencies": {
+    "@cloudflare/think": "^0.17.0",
     "@kombi/comptable": "workspace:*",
     "@kombi/fiscal": "workspace:*",
     "@kombi/shared": "workspace:*",
+    "agents": "^0.22.0",
+    "ai": "^7.0.94",
     "better-auth": "^1.7.2",
     "hono": "^4.6.0",
     "kysely": "^0.29.5",
     "kysely-d1": "^0.4.0",
     "pdf-lib": "^1.17.1",
+    "workers-ai-provider": "^4.0.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {

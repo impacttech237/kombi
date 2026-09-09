@@ -12,6 +12,7 @@ import {
   IcoUser, IcoUsers, IcoClipboard, IcoBarChart, IcoSettings, IcoTrendDown, IcoHandCoins, IcoLogOut,
   IcoFolder, IcoPercent, IcoTrend, IcoAlert, IcoSearch, Avatar,
 } from './icons.js';
+import { ChatKombi } from './ChatKombi.js';
 
 export interface NavItem {
   code: string;
@@ -266,6 +267,7 @@ export function AppShell({ active, onNav, nomEntreprise, nomUtilisateur, entrepr
         <main className="k-main">{children}</main>
       </div>
       <BottomNav active={active} onNav={onNav} masquer={masquer} nomEntreprise={nomEntreprise} onLogout={onLogout} />
+      {entrepriseId && <ChatKombi entrepriseId={entrepriseId} />}
     </div>
   );
 }

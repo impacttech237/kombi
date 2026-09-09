@@ -398,3 +398,86 @@ input, button, select, textarea { font-family: inherit; }
   --color-chart-scale-03: var(--chart-scale-03); --color-chart-scale-04: var(--chart-scale-04);
   --color-chart-scale-05: var(--chart-scale-05); --color-chart-scale-pattern-color: var(--chart-scale-pattern-color);
 }
+
+/* ============================================================================
+   Assistant IA — Chat flottant
+   ============================================================================ */
+.k-chat-fab {
+  position: fixed; bottom: 20px; right: 20px; z-index: 900;
+  width: 56px; height: 56px; border-radius: 50%; border: none;
+  background: var(--k-lime); color: #fff; cursor: pointer;
+  box-shadow: 0 6px 24px rgba(58, 158, 110, .35);
+  display: grid; place-items: center;
+  transition: transform .15s ease, box-shadow .2s ease;
+}
+.k-chat-fab:hover { transform: scale(1.06); box-shadow: 0 8px 30px rgba(58, 158, 110, .45); }
+.k-chat-fab:active { transform: scale(.95); }
+.k-chat-fab svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+.k-chat-panel {
+  position: fixed; bottom: 88px; right: 20px; z-index: 899;
+  width: 380px; max-height: calc(100vh - 120px);
+  background: var(--k-surface); border-radius: 20px;
+  box-shadow: 0 12px 48px rgba(28, 48, 34, .15), 0 0 0 1px var(--k-line);
+  display: flex; flex-direction: column; overflow: hidden;
+  animation: k-chat-in .2s ease;
+}
+@keyframes k-chat-in { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: none; } }
+
+.k-chat-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; border-bottom: 1px solid var(--k-line-soft);
+}
+.k-chat-avatar {
+  width: 36px; height: 36px; border-radius: 12px;
+  background: linear-gradient(135deg, var(--k-lime), var(--k-mint));
+  display: grid; place-items: center; color: #fff; flex: 0 0 auto;
+}
+.k-chat-avatar svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+
+.k-chat-messages {
+  flex: 1; overflow-y: auto; padding: 12px 14px; min-height: 200px; max-height: 420px;
+}
+
+.k-chat-suggestion {
+  font-size: 12px; padding: 6px 12px; border-radius: 20px; border: 1px solid var(--k-line);
+  background: var(--k-surface); color: var(--k-muted); cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.k-chat-suggestion:hover { border-color: var(--k-lime); color: var(--k-lime); }
+
+.k-chat-input-bar {
+  display: flex; align-items: flex-end; gap: 8px;
+  padding: 10px 14px; border-top: 1px solid var(--k-line-soft);
+}
+.k-chat-input {
+  flex: 1; resize: none; border: 1px solid var(--k-line); border-radius: 14px;
+  padding: 10px 14px; font-size: 14px; line-height: 1.4;
+  background: var(--k-surface-soft); color: var(--k-ink); outline: none;
+  max-height: 100px; min-height: 40px;
+}
+.k-chat-input:focus { border-color: var(--k-lime); }
+.k-chat-input::placeholder { color: var(--k-faint); }
+.k-chat-send {
+  width: 40px; height: 40px; border-radius: 12px; border: none;
+  background: var(--k-lime); color: #fff; cursor: pointer;
+  display: grid; place-items: center; flex: 0 0 auto;
+  transition: opacity .15s;
+}
+.k-chat-send:disabled { opacity: .35; cursor: not-allowed; }
+.k-chat-send svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+.k-chat-dots { display: flex; gap: 4px; padding: 12px 16px; }
+.k-chat-dots span {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--k-faint);
+  animation: k-dot-bounce .6s infinite alternate;
+}
+.k-chat-dots span:nth-child(2) { animation-delay: .15s; }
+.k-chat-dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes k-dot-bounce { to { opacity: .3; transform: translateY(-4px); } }
+
+/* Mobile adjustments */
+@media (max-width: 767px) {
+  .k-chat-fab { bottom: 80px; right: 16px; width: 50px; height: 50px; }
+  .k-chat-panel { bottom: 140px; right: 8px; left: 8px; width: auto; max-height: calc(100vh - 180px); }
+}

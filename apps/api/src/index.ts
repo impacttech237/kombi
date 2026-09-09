@@ -25,6 +25,7 @@ import { pilotage } from './routes/pilotage.js';
 import { budgets } from './routes/budgets.js';
 import { rapports } from './routes/rapports.js';
 import { decisions } from './routes/decisions.js';
+import { ai } from './routes/ai.js';
 import { sauvegarderToutesLesEntreprises } from './services/sauvegarde.js';
 
 const app = new Hono<AppEnv>();
@@ -122,6 +123,10 @@ app.use('/api/notifications/*', authentifier, tenant);
 app.use('/api/notifications', authentifier, tenant);
 app.route('/api/notifications', notifications);
 
+app.use('/api/ai/*', authentifier, tenant);
+app.use('/api/ai', authentifier, tenant);
+app.route('/api/ai', ai);
+
 // Tout le reste (hors /api) = la PWA servie depuis le même Worker (même origine → cookies OK).
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
@@ -138,3 +143,5 @@ export default {
 
 // Durable Object : 1 base par entreprise (D13).
 export { EntrepriseDO } from './do/entreprise-do.js';
+// Agent IA : 1 par entreprise.
+export { KombiAgent } from './agents/kombi-agent.js';
