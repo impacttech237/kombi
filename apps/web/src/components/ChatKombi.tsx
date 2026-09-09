@@ -178,6 +178,21 @@ const TOOL_LABELS: Record<string, string> = {
   payer_vente: 'Paiement vente',
   payer_facture: 'Paiement facture',
   approvisionner_stock: 'Approvisionnement stock',
+  liste_commandes: 'Commandes/missions',
+  creer_commande: 'Création commande',
+  changer_statut_commande: 'Changement statut',
+  annuler_vente: 'Annulation vente',
+  payer_dette_fournisseur: 'Paiement fournisseur',
+  convertir_devis_en_facture: 'Conversion devis',
+  creer_avoir: 'Création avoir',
+  detail_tiers: 'Détail client/fournisseur',
+  rapport_periode: 'Génération rapport',
+  marge_par_produit: 'Marges produits',
+  marge_par_client: 'Marges clients',
+  budget_du_mois: 'Budget mensuel',
+  journal_audit: 'Journal d\'audit',
+  lien_pdf_facture: 'Lien PDF facture',
+  suggestions_business: 'Suggestions',
 };
 
 function toolLabel(name: string): string {
@@ -334,6 +349,8 @@ function inlineFormat(text: string): (string | JSX.Element)[] {
   while (remaining.length > 0) {
     const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
     const codeMatch = remaining.match(/`([^`]+)`/);
+    const linkMatch = remaining.match(/\[([^\]]+)\]\(([^)]+)\)/);
+    const urlMatch = remaining.match(/(\/api\/[^\s)]+)/);
 
     let earliest: { idx: number; len: number; el: JSX.Element } | null = null;
 
@@ -343,6 +360,14 @@ function inlineFormat(text: string): (string | JSX.Element)[] {
     }
     if (codeMatch?.index !== undefined) {
       const candidate = { idx: codeMatch.index, len: codeMatch[0].length, el: <code key={`c${k++}`} className="k-chat-inline-code">{codeMatch[1]}</code> };
+      if (!earliest || candidate.idx < earliest.idx) earliest = candidate;
+    }
+    if (linkMatch?.index !== undefined) {
+      const candidate = { idx: linkMatch.index, len: linkMatch[0].length, el: <a key={`l${k++}`} href={linkMatch[2]} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--emerald)', textDecoration: 'underline' }}>{linkMatch[1]}</a> };
+      if (!earliest || candidate.idx < earliest.idx) earliest = candidate;
+    }
+    if (urlMatch?.index !== undefined && (!linkMatch || urlMatch.index !== linkMatch.index)) {
+      const candidate = { idx: urlMatch.index!, len: urlMatch[0].length, el: <a key={`u${k++}`} href={urlMatch[1]} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--emerald)', textDecoration: 'underline' }}>📄 Voir PDF</a> };
       if (!earliest || candidate.idx < earliest.idx) earliest = candidate;
     }
 

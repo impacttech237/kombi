@@ -330,6 +330,7 @@ L'utilisateur connecté a le rôle "${role}" (id: ${userId}).
 Tu as des OUTILS pour lire les données réelles de cette entreprise et pour agir dessus.
 - LECTURE : stats_jour, tendance_7_jours, ventes_recentes, ventes_a_credit, soldes_tresorerie, tresorerie_du_jour, depenses_recentes, analyse_depenses, liste_produits, factures_impayees, liste_factures, dettes_fournisseurs, etats_financiers, ca_cumule, marge_cumulee, meilleures_ventes, cockpit, alertes, prevision_tresorerie, comparaison_mensuelle, seuil_rentabilite, problemes_prioritaires, liste_tiers, detail_tiers, liste_ecritures, mouvements_tresorerie, liste_commandes, marge_par_produit, marge_par_client, budget_du_mois, journal_audit, rapport_periode
 - ACTION : enregistrer_vente, creer_depense, creer_tiers, creer_produit, creer_facture, emettre_facture, payer_vente, payer_facture, approvisionner_stock, creer_commande, changer_statut_commande, annuler_vente, payer_dette_fournisseur, convertir_devis_en_facture, creer_avoir
+- UTILITAIRES : lien_pdf_facture (lien PDF cliquable), suggestions_business (conseils d'action)
 
 # Comment répondre
 1. Quand l'utilisateur pose une question sur ses données → appelle l'outil correspondant, puis explique le résultat de façon claire et concise.
@@ -832,6 +833,46 @@ Utilise le markdown : **gras** pour les chiffres importants, listes à puces pou
             stub.verifierChaineAudit(),
           ]);
           return { entrees, integrite };
+        },
+      }),
+      lien_pdf_facture: t({
+        description: "Génère le lien pour télécharger/voir le PDF d'une facture",
+        parameters: z.object({
+          factureId: z.string().describe("ID de la facture"),
+        }),
+        execute: async ({ factureId }: { factureId: string }) => {
+          return { url: `/api/factures/${factureId}/pdf`, message: 'Cliquez sur le lien pour voir le PDF' };
+        },
+      }),
+
+      suggestions_business: t({
+        description: "Analyse les données et propose des actions concrètes pour améliorer la gestion",
+        parameters: z.object({}),
+        execute: async () => {
+          const [impayees, credit, alertes, stats] = await Promise.allSettled([
+            stub.listerFacturesImpayees(),
+            stub.listerVentesACredit(),
+            stub.alertesPilotage(),
+            stub.statsJour(),
+          ]);
+          const suggestions: string[] = [];
+
+          if (impayees.status === 'fulfilled' && Array.isArray(impayees.value) && (impayees.value as any[]).length > 0) {
+            const arr = impayees.value as any[];
+            const total = arr.reduce((s: number, f: any) => s + (f.montant_ttc ?? 0), 0);
+            suggestions.push(`${arr.length} facture(s) impayée(s) pour ${Math.round(total).toLocaleString('fr')} FCFA — relancer les clients`);
+          }
+          if (credit.status === 'fulfilled' && Array.isArray(credit.value) && (credit.value as any[]).length > 0) {
+            suggestions.push(`${(credit.value as any[]).length} vente(s) à crédit non soldée(s) — envisager des rappels`);
+          }
+          if (alertes.status === 'fulfilled' && Array.isArray(alertes.value)) {
+            const stockBas = (alertes.value as any[]).filter(a => a.type === 'stock_bas');
+            if (stockBas.length > 0) {
+              suggestions.push(`${stockBas.length} produit(s) en stock bas — réapprovisionner`);
+            }
+          }
+          if (suggestions.length === 0) suggestions.push('Tout semble en ordre ! Continuez sur cette lancée.');
+          return { suggestions };
         },
       }),
     };

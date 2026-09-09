@@ -46,6 +46,19 @@
 | ✅ | Parcours prod vérifié : inscription → entreprise → vente → CA |
 | ⬜ | CI GitHub Actions (test + deploy) ; domaine personnalisé ; NIU/icônes PWA
 
+## Agent IA (Kombi Assistant)
+| État | Phase | Description |
+|---|---|---|
+| ✅ | 1 | KombiAgent (Think DO) + chat frontend flottant |
+| ✅ | 2 | Outils d'action (write) + contexte utilisateur |
+| ✅ | 3 | Outils de lecture avancés (alertes, prévisions, seuil de rentabilité) |
+| ✅ | 4 | Outils d'écriture avancés (factures, émission, paiements, stock) |
+| ✅ | 5 | Rappels programmés (alarm DO) + panneau rappels UI |
+| ✅ | 6 | 14 outils avancés (commandes, dettes, rapports, marges, audit) |
+| ✅ | 7 | Lien PDF facture + suggestions business + liens cliquables dans le chat |
+| ⬜ | 8 | WhatsApp Business API (envoi factures, rappels) |
+| ⬜ | 9 | MCP (Model Context Protocol) pour intégrations tierces |
+
 ## Hors périmètre (rappel)
-Paie/CNPS (pas de schéma RH complexe), IA conversationnelle, OCR, scoring, connecteur DGI,
+Paie/CNPS (pas de schéma RH complexe), OCR, scoring, connecteur DGI,
 mobile money comme moyen d'encaissement de l'abonnement.
