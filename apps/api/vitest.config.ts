@@ -5,6 +5,7 @@ export default defineWorkersConfig(async () => {
   const migrations = await readD1Migrations('./migrations');
   return {
     test: {
+      fileParallelism: false,
       setupFiles: ['./test/apply-migrations.ts'],
       poolOptions: {
         workers: {
