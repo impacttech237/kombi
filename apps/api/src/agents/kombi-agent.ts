@@ -1,5 +1,6 @@
 import { Think } from '@cloudflare/think';
-import { tool } from 'ai';
+import { generateText, streamText, tool } from 'ai';
+import { createWorkersAI } from 'workers-ai-provider';
 import { z } from 'zod';
 import type { Bindings } from '../types.js';
 
@@ -84,58 +85,88 @@ export class KombiAgent extends Think<Bindings> {
     (this as any)._userId = request.headers.get('x-kombi-user-id') ?? 'inconnu';
     (this as any)._userRole = request.headers.get('x-kombi-role') ?? 'membre';
 
-    // Save user message before forwarding to Think
-    let userContent: string | null = null;
     if (request.method === 'POST' && (path.endsWith('/chat') || path === '/')) {
-      try {
-        const body = await request.clone().json() as { messages?: { role: string; content: string }[] };
-        if (body.messages?.length) {
-          const last = body.messages[body.messages.length - 1]!;
-          if (last.role === 'user') {
-            userContent = last.content;
-            this.saveMessage({ id: crypto.randomUUID(), role: 'user', content: last.content });
-          }
-        }
-      } catch { /* best-effort */ }
+      return this.handleChat(request);
     }
 
-    const response = await super.fetch(request);
+    return new Response('Not Found', { status: 404 });
+  }
 
-    // Intercept stream to capture assistant response
-    if (userContent && response.body) {
-      const original = response.body;
-      const self = this;
-      let assistantText = '';
+  private async handleChat(request: Request): Promise<Response> {
+    let userContent: string | undefined;
+    let messages: { role: string; content: string }[] = [];
+    try {
+      const body = await request.json() as { messages?: { role: string; content: string }[] };
+      messages = body.messages ?? [];
+      const last = messages[messages.length - 1];
+      if (last?.role === 'user') {
+        userContent = last.content;
+        this.saveMessage({ id: crypto.randomUUID(), role: 'user', content: last.content });
+      }
+    } catch {
+      return Response.json({ error: 'Invalid request body' }, { status: 400 });
+    }
 
-      const transform = new TransformStream<Uint8Array, Uint8Array>({
-        transform(chunk, controller) {
-          controller.enqueue(chunk);
-          try {
-            const text = new TextDecoder().decode(chunk);
-            for (const line of text.split('\n')) {
-              if (line.startsWith('0:')) {
-                try { assistantText += JSON.parse(line.slice(2)) as string; } catch {}
+    const workersAI = createWorkersAI({ binding: this.env.AI });
+    const modelId = this.getModel();
+    const model = workersAI(modelId);
+    const system = this.getSystemPrompt();
+    const tools = this.getTools();
+    const self = this;
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          let chatMessages = [...messages] as any[];
+
+          // Step 1: generateText to handle tool calls (up to 3 rounds)
+          for (let step = 0; step < 3; step++) {
+            const gen = await generateText({
+              model,
+              system,
+              tools,
+              messages: chatMessages,
+            });
+
+            // If the model made tool calls, emit them and add to conversation
+            if (gen.toolCalls?.length) {
+              for (const tc of gen.toolCalls) {
+                controller.enqueue(encoder.encode(
+                  `9:${JSON.stringify({ toolCallId: tc.toolCallId, toolName: tc.toolName })}\n`
+                ));
               }
+              if (gen.toolResults?.length) {
+                for (const tr of gen.toolResults as any[]) {
+                  controller.enqueue(encoder.encode(
+                    `a:${JSON.stringify({ toolCallId: tr.toolCallId })}\n`
+                  ));
+                }
+              }
+              // Add response messages (properly formatted) for the next round
+              chatMessages.push(...(gen as any).response.messages);
+              continue; // another round to get the text response
             }
-          } catch {}
-        },
-        flush() {
-          if (assistantText.trim()) {
-            try {
-              self.saveMessage({ id: crypto.randomUUID(), role: 'assistant', content: assistantText });
-            } catch {}
+
+            // No tool calls — model produced text, emit it and break
+            if (gen.text) {
+              for (const chunk of gen.text.match(/.{1,20}/g) ?? [gen.text]) {
+                controller.enqueue(encoder.encode(`0:${JSON.stringify(chunk)}\n`));
+              }
+              self.saveMessage({ id: crypto.randomUUID(), role: 'assistant', content: gen.text });
+            }
+            break;
           }
-        },
-      });
+        } catch (err) {
+          controller.enqueue(encoder.encode(`3:${JSON.stringify(String(err))}\n`));
+        }
+        controller.close();
+      },
+    });
 
-      const piped = original.pipeThrough(transform);
-      return new Response(piped, {
-        status: response.status,
-        headers: response.headers,
-      });
-    }
-
-    return response;
+    return new Response(stream, {
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
   }
 
   private async handleAlerts(): Promise<Response> {

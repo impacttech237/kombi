@@ -1,6 +1,6 @@
 name = "kombi-api"
 main = "src/index.ts"
-compatibility_date = "2024-09-23"
+compatibility_date = "2025-04-01"
 compatibility_flags = ["nodejs_compat"]
 
 # Base de données D1 (SQLite). Créer avec :
@@ -40,7 +40,7 @@ binding = "AI"
 
 [vars]
 # Modèle LLM pour l'agent IA. Changer ici pour upgrader (ex: @cf/meta/llama-3.3-70b-instruct-fp8-fast).
-AI_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct"
+AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 
 # La PWA (front) est servie par le même Worker → même origine que l'API.
 [assets]
