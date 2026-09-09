@@ -11,9 +11,19 @@ function getAgent(c: { get(k: 'entrepriseId'): string; env: AppEnv['Bindings'] }
 
 ai.post('/chat', async (c) => {
   const agent = getAgent(c);
+  const utilisateurId = c.get('utilisateurId');
+  const entrepriseId = c.get('entrepriseId');
+
+  const [user, entreprise] = await Promise.all([
+    c.env.DB.prepare('SELECT nom FROM utilisateur WHERE id = ?').bind(utilisateurId).first<{ nom: string }>(),
+    c.env.DB.prepare('SELECT raison_sociale FROM entreprise WHERE id = ?').bind(entrepriseId).first<{ raison_sociale: string }>(),
+  ]);
+
   const headers = new Headers(c.req.raw.headers);
-  headers.set('x-kombi-user-id', c.get('utilisateurId'));
+  headers.set('x-kombi-user-id', utilisateurId);
   headers.set('x-kombi-role', c.get('role'));
+  headers.set('x-kombi-user-name', user?.nom ?? '');
+  headers.set('x-kombi-entreprise-name', entreprise?.raison_sociale ?? '');
 
   const req = new Request(c.req.url, {
     method: 'POST',

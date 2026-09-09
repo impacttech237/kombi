@@ -84,6 +84,8 @@ export class KombiAgent extends Think<Bindings> {
     // Capture user context from headers for system prompt
     (this as any)._userId = request.headers.get('x-kombi-user-id') ?? 'inconnu';
     (this as any)._userRole = request.headers.get('x-kombi-role') ?? 'membre';
+    (this as any)._userName = request.headers.get('x-kombi-user-name') ?? '';
+    (this as any)._entrepriseName = request.headers.get('x-kombi-entreprise-name') ?? '';
 
     if (request.method === 'POST' && (path.endsWith('/chat') || path === '/')) {
       return this.handleChat(request);
@@ -120,8 +122,8 @@ export class KombiAgent extends Think<Bindings> {
         try {
           let chatMessages = [...messages] as any[];
 
-          // Step 1: generateText to handle tool calls (up to 3 rounds)
-          for (let step = 0; step < 3; step++) {
+          // Multi-step tool calling: up to 5 rounds so the agent can investigate
+          for (let step = 0; step < 5; step++) {
             const gen = await generateText({
               model,
               system,
@@ -353,29 +355,25 @@ export class KombiAgent extends Think<Bindings> {
   getSystemPrompt(): string {
     const userId = (this as any)._userId ?? 'inconnu';
     const role = (this as any)._userRole ?? 'membre';
+    const userName = (this as any)._userName ?? '';
+    const entrepriseName = (this as any)._entrepriseName ?? '';
+    const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-    return `Tu es Kombi, l'assistant IA de gestion d'entreprise. Tu parles UNIQUEMENT en français.
-L'utilisateur connecté a le rôle "${role}" (id: ${userId}).
+    const prenom = userName ? userName.split(' ')[0] : 'patron';
+    return `Tu es Kombi, assistant de gestion de ${entrepriseName || 'cette entreprise'}. Date : ${today}.
+Tu tutoies ${prenom}. Tu es chaleureux et direct.
 
-# Ce que tu sais faire
-Tu as des OUTILS pour lire les données réelles de cette entreprise et pour agir dessus.
-- LECTURE : stats_jour, tendance_7_jours, ventes_recentes, ventes_a_credit, soldes_tresorerie, tresorerie_du_jour, depenses_recentes, analyse_depenses, liste_produits, factures_impayees, liste_factures, dettes_fournisseurs, etats_financiers, ca_cumule, marge_cumulee, meilleures_ventes, cockpit, alertes, prevision_tresorerie, comparaison_mensuelle, seuil_rentabilite, problemes_prioritaires, liste_tiers, detail_tiers, liste_ecritures, mouvements_tresorerie, liste_commandes, marge_par_produit, marge_par_client, budget_du_mois, journal_audit, rapport_periode
-- ACTION : enregistrer_vente, creer_depense, creer_tiers, creer_produit, creer_facture, emettre_facture, payer_vente, payer_facture, approvisionner_stock, creer_commande, changer_statut_commande, annuler_vente, payer_dette_fournisseur, convertir_devis_en_facture, creer_avoir
-- UTILITAIRES : lien_pdf_facture (lien PDF cliquable), suggestions_business (conseils d'action)
+COMMENT RÉPONDRE :
+1. Appelle un outil pour chaque question sur les données.
+2. L'outil te retourne une ANALYSE PRÊTE. Reprends-la telle quelle dans ta réponse en la rendant naturelle et chaleureuse.
+3. N'AJOUTE RIEN de toi-même. Ne complète pas avec des conseils génériques. Le texte de l'outil contient déjà l'analyse et le conseil.
+4. Tu peux reformuler légèrement pour le ton, mais garde TOUS les chiffres et noms exacts de l'outil.
+5. Montants en **gras** : **1 500 000 FCFA**.
+6. Réponse courte : pas plus de 8 lignes.
 
-# Comment répondre
-1. Quand l'utilisateur pose une question sur ses données → appelle l'outil correspondant, puis explique le résultat de façon claire et concise.
-2. Les montants sont TOUJOURS en FCFA. Formate-les avec des espaces (ex: 1 500 000 FCFA).
-3. Sois direct et pratique. Pas de blabla. L'entrepreneur est pressé.
-4. Si tu ne sais pas ou si l'outil retourne une erreur → dis-le clairement. Ne fabrique JAMAIS de chiffres.
+ACTIONS (vente, dépense, facture) : résume + demande "Je fais ça ?" AVANT d'exécuter.
 
-# Règles pour les actions (TRÈS IMPORTANT)
-- AVANT d'appeler un outil d'action, tu DOIS résumer ce que tu vas faire et demander confirmation : "Voulez-vous que je procède ?"
-- N'exécute une action que si l'utilisateur dit explicitement "oui", "ok", "vas-y", "confirme", "fais-le".
-- APRÈS une action réussie, confirme avec les détails (montant, numéro de facture, etc.).
-
-# Format
-Utilise le markdown : **gras** pour les chiffres importants, listes à puces pour les détails, titres ## pour les sections.`;
+INTERDIT : inventer des chiffres, ajouter des conseils que l'outil n'a pas donnés, dire "il faudrait vérifier/analyser", vouvoyer.`;
   }
 
   getTools() {
@@ -487,11 +485,22 @@ Utilise le markdown : **gras** pour les chiffres importants, listes à puces pou
       }),
 
       meilleures_ventes: t({
-        description: "Top produits les plus vendus (par chiffre d'affaires)",
+        description: "Top PRODUITS les plus vendus. Utilise pour : meilleures ventes, top produits, qu'est-ce qui se vend le mieux.",
         parameters: z.object({
           limite: z.number().max(20).default(5),
         }),
-        execute: async ({ limite }: { limite: number }) => stub.meilleuresVentes(limite),
+        execute: async ({ limite }: { limite: number }) => {
+          const data = await stub.meilleuresVentes(limite) as any[];
+          if (!Array.isArray(data) || data.length === 0) return 'Aucune vente enregistrée.';
+          const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
+          const totalCA = data.reduce((s: number, p: any) => s + (p.montant_ht ?? 0), 0);
+          const lines = data.map((p: any, i: number) => {
+            const ca = p.montant_ht ?? 0;
+            const pct = totalCA > 0 ? Math.round(ca / totalCA * 100) : 0;
+            return `${i + 1}. **${p.designation ?? 'Produit'}** — **${fmt(ca)} FCFA** (${pct}% du CA, ${p.quantite ?? '?'} vendus)`;
+          });
+          return `Top ${data.length} produits :\n${lines.join('\n')}`;
+        },
       }),
 
       cockpit: t({
@@ -839,9 +848,31 @@ Utilise le markdown : **gras** pour les chiffres importants, listes à puces pou
       }),
 
       marge_par_client: t({
-        description: "Marge bénéficiaire détaillée par client",
+        description: "Classement des CLIENTS par chiffre d'affaires et marge. Utilise pour : meilleur client, top clients, qui achète le plus.",
         parameters: z.object({}),
-        execute: async () => stub.margeParClient(),
+        execute: async () => {
+          const data = await stub.margeParClient() as any[];
+          if (!Array.isArray(data) || data.length === 0) return 'Aucun client enregistré.';
+          const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
+          const named = data.filter((c: any) => c.nom && c.nom !== 'Vente au comptant / client de passage');
+          const best = named.length > 0 ? named : data;
+          const top = best[0];
+          const totalCA = data.reduce((s: number, c: any) => s + (c.ca_ht ?? 0), 0);
+          const topCA = top.ca_ht ?? 0;
+          const pct = totalCA > 0 ? Math.round(topCA / totalCA * 100) : 0;
+
+          let result = `Ton meilleur client c'est **${top.nom}** avec **${fmt(topCA)} FCFA** de CA`;
+          if (top.marge != null) result += ` et **${fmt(top.marge)} FCFA** de marge (${top.margePct ?? '?'}%)`;
+          result += `. Il représente **${pct}%** de ton chiffre d'affaires. ${top.nb_ventes} vente(s).`;
+
+          if (best.length > 1) {
+            result += `\nTop 3 :`;
+            best.slice(0, 3).forEach((c: any, i: number) => {
+              result += `\n${i + 1}. **${c.nom}** — **${fmt(c.ca_ht ?? 0)} FCFA**, marge ${c.margePct ?? '?'}%`;
+            });
+          }
+          return result;
+        },
       }),
 
       budget_du_mois: t({
@@ -873,6 +904,90 @@ Utilise le markdown : **gras** pour les chiffres importants, listes à puces pou
         }),
         execute: async ({ factureId }: { factureId: string }) => {
           return { url: `/api/factures/${factureId}/pdf`, message: 'Cliquez sur le lien pour voir le PDF' };
+        },
+      }),
+
+      diagnostic_tresorerie: t({
+        description: "Diagnostic complet de la trésorerie. Utilise cet outil quand on parle de trésorerie, caisse, argent, ou pourquoi c'est négatif. Retourne une analyse prête à relayer.",
+        parameters: z.object({}),
+        execute: async () => {
+          const [soldes, credits, depenses, dettes] = await Promise.allSettled([
+            stub.soldesTresorerie(),
+            stub.listerVentesACredit(),
+            stub.listerDepenses(),
+            stub.listerDettesFournisseurs(),
+          ]);
+
+          const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
+          const s = soldes.status === 'fulfilled' ? soldes.value as any : null;
+          const totalTreso = s ? (s.especes ?? 0) + (s.mtnMomo ?? 0) + (s.orangeMoney ?? 0) + (s.banque ?? 0) : 0;
+
+          const parts: string[] = [];
+
+          // Headline
+          if (totalTreso < 0) {
+            parts.push(`Ta trésorerie est à **${fmt(totalTreso)} FCFA**, c'est critique 🔴`);
+          } else if (totalTreso < 100000) {
+            parts.push(`Ta trésorerie est tendue à **${fmt(totalTreso)} FCFA** 🟡`);
+          } else {
+            parts.push(`Ta trésorerie va bien : **${fmt(totalTreso)} FCFA** 🟢`);
+          }
+
+          // Detail caisses
+          if (s) {
+            const parts2: string[] = [];
+            if (s.especes) parts2.push(`espèces **${fmt(s.especes)}**`);
+            if (s.mtnMomo) parts2.push(`MoMo **${fmt(s.mtnMomo)}**`);
+            if (s.orangeMoney) parts2.push(`OM **${fmt(s.orangeMoney)}**`);
+            if (s.banque) parts2.push(`banque **${fmt(s.banque)}**`);
+            if (parts2.length > 1) parts.push(`Détail : ${parts2.join(', ')}.`);
+          }
+
+          // Causes (only if negative/tight)
+          if (totalTreso < 100000) {
+            const causes: string[] = [];
+
+            const creditsList = credits.status === 'fulfilled' && Array.isArray(credits.value) ? credits.value as any[] : [];
+            const creditsWithDebt = creditsList.filter((v: any) => (v.reste_du ?? v.montant ?? 0) > 0);
+            if (creditsWithDebt.length > 0) {
+              const totalCredits = creditsWithDebt.reduce((sum: number, v: any) => sum + (v.reste_du ?? v.montant ?? 0), 0);
+              const top = creditsWithDebt.slice(0, 2).map((v: any) =>
+                `${v.tiers_nom ?? 'un client'} te doit **${fmt(v.reste_du ?? v.montant ?? 0)} FCFA**`
+              ).join(' et ');
+              causes.push(`**${fmt(totalCredits)} FCFA** de ventes à crédit non récupérées (${creditsWithDebt.length} clients). ${top}`);
+            }
+
+            const depensesList = depenses.status === 'fulfilled' && Array.isArray(depenses.value) ? depenses.value as any[] : [];
+            if (depensesList.length > 0) {
+              const totalDep = depensesList.reduce((sum: number, d: any) => sum + (d.montant ?? 0), 0);
+              const parCat: Record<string, number> = {};
+              for (const d of depensesList) parCat[d.categorie ?? 'autre'] = (parCat[d.categorie ?? 'autre'] ?? 0) + (d.montant ?? 0);
+              const topCat = Object.entries(parCat).sort((a, b) => b[1] - a[1])[0];
+              if (topCat) {
+                causes.push(`**${fmt(totalDep)} FCFA** de dépenses ce mois, le plus gros poste c'est ${topCat[0]} (**${fmt(topCat[1])} FCFA**)`);
+              }
+            }
+
+            const dettesList = dettes.status === 'fulfilled' && Array.isArray(dettes.value) ? dettes.value as any[] : [];
+            const dettesWithDebt = dettesList.filter((d: any) => (d.reste_du ?? d.montant ?? 0) > 0);
+            if (dettesWithDebt.length > 0) {
+              const totalDettes = dettesWithDebt.reduce((sum: number, d: any) => sum + (d.reste_du ?? d.montant ?? 0), 0);
+              causes.push(`**${fmt(totalDettes)} FCFA** de dettes fournisseurs à payer`);
+            }
+
+            if (causes.length > 0) {
+              parts.push(`Ce qui plombe ta caisse :`);
+              causes.forEach(c => parts.push(`- ${c}`));
+            }
+
+            // Conseil
+            if (creditsWithDebt.length > 0) {
+              const top = creditsWithDebt[0];
+              parts.push(`Mon conseil : relance en priorité **${top.tiers_nom ?? 'ton plus gros débiteur'}**, ça peut te récupérer **${fmt(top.reste_du ?? top.montant ?? 0)} FCFA** rapidement.`);
+            }
+          }
+
+          return parts.join('\n');
         },
       }),
 
