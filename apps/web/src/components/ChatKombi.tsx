@@ -62,6 +62,87 @@ function IcoRefresh({ cls }: { cls?: string }) {
   );
 }
 
+function IcoSettings({ cls }: { cls?: string }) {
+  return (
+    <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
+interface Reminder {
+  id: string;
+  type: string;
+  enabled: number;
+  last_run: string | null;
+}
+
+const REMINDER_TYPES: { type: string; label: string; description: string }[] = [
+  { type: 'daily_summary', label: 'Résumé quotidien', description: 'Ventes et trésorerie chaque matin à 8h' },
+  { type: 'unpaid_invoices', label: 'Factures impayées', description: 'Rappel des factures à relancer' },
+  { type: 'low_stock', label: 'Stock bas', description: 'Alerte produits en dessous du seuil' },
+];
+
+function RemindersPanel({ entrepriseId, onClose }: { entrepriseId: string; onClose: () => void }) {
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${BASE}/api/ai/reminders`, {
+      headers: { 'x-entreprise-id': entrepriseId },
+      credentials: 'include',
+    })
+      .then(r => r.ok ? r.json() as Promise<{ reminders: Reminder[] }> : null)
+      .then(d => { if (d) setReminders(d.reminders); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [entrepriseId]);
+
+  const toggle = (type: string, enabled: boolean) => {
+    setReminders(prev => prev.map(r => r.type === type ? { ...r, enabled: enabled ? 1 : 0 } : r));
+    const existing = reminders.find(r => r.type === type);
+    if (!existing) {
+      setReminders(prev => [...prev, { id: '', type, enabled: enabled ? 1 : 0, last_run: null }]);
+    }
+    fetch(`${BASE}/api/ai/reminders`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-entreprise-id': entrepriseId },
+      credentials: 'include',
+      body: JSON.stringify({ type, enabled }),
+    }).catch(() => {});
+  };
+
+  const isEnabled = (type: string) => reminders.find(r => r.type === type)?.enabled === 1;
+
+  return (
+    <div className="k-chat-reminders">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <strong style={{ fontSize: 14 }}>Rappels automatiques</strong>
+        <button className="k-icobtn" style={{ width: 28, height: 28 }} onClick={onClose}><IcoX cls="w-3.5 h-3.5" /></button>
+      </div>
+      {loading ? (
+        <p style={{ fontSize: 12, color: 'var(--k-muted)' }}>Chargement…</p>
+      ) : (
+        REMINDER_TYPES.map(rt => (
+          <label key={rt.type} className="k-chat-reminder-row">
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 13, fontWeight: 600 }}>{rt.label}</p>
+              <p style={{ fontSize: 11, color: 'var(--k-muted)', lineHeight: 1.3 }}>{rt.description}</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={isEnabled(rt.type)}
+              onChange={e => toggle(rt.type, e.target.checked)}
+              className="k-chat-toggle"
+            />
+          </label>
+        ))
+      )}
+    </div>
+  );
+}
+
 const TOOL_LABELS: Record<string, string> = {
   stats_jour: 'Statistiques du jour',
   tendance_7_jours: 'Tendance 7 jours',
@@ -329,6 +410,7 @@ export function ChatKombi({ entrepriseId }: { entrepriseId: string }) {
   const [alerts, setAlerts] = useState<ProactiveAlert[]>([]);
   const [alertBadge, setAlertBadge] = useState(0);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [showReminders, setShowReminders] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -492,6 +574,15 @@ export function ChatKombi({ entrepriseId }: { entrepriseId: string }) {
             <button
               className="k-icobtn"
               style={{ width: 34, height: 34 }}
+              onClick={() => setShowReminders(s => !s)}
+              aria-label="Rappels"
+              title="Rappels automatiques"
+            >
+              <IcoSettings cls="w-4 h-4" />
+            </button>
+            <button
+              className="k-icobtn"
+              style={{ width: 34, height: 34 }}
               onClick={newConversation}
               aria-label="Nouvelle conversation"
               title="Nouvelle conversation"
@@ -502,6 +593,11 @@ export function ChatKombi({ entrepriseId }: { entrepriseId: string }) {
               <IcoX cls="w-4 h-4" />
             </button>
           </div>
+
+          {/* Reminders settings */}
+          {showReminders && (
+            <RemindersPanel entrepriseId={entrepriseId} onClose={() => setShowReminders(false)} />
+          )}
 
           {/* Proactive alerts */}
           {alerts.length > 0 && messages.length === 0 && (
@@ -557,7 +653,11 @@ export function ChatKombi({ entrepriseId }: { entrepriseId: string }) {
             <textarea
               ref={inputRef}
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={e => {
+                setInput(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+              }}
               onKeyDown={handleKey}
               placeholder="Écrivez un message…"
               rows={1}

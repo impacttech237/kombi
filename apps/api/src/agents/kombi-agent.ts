@@ -72,6 +72,14 @@ export class KombiAgent extends Think<Bindings> {
       return this.handleAlerts();
     }
 
+    if (path.endsWith('/reminders') && request.method === 'GET') {
+      return this.handleReminders(request);
+    }
+
+    if (path.endsWith('/reminders') && request.method === 'POST') {
+      return this.handleReminderToggle(request);
+    }
+
     // Capture user context from headers for system prompt
     (this as any)._userId = request.headers.get('x-kombi-user-id') ?? 'inconnu';
     (this as any)._userRole = request.headers.get('x-kombi-role') ?? 'membre';
@@ -172,6 +180,139 @@ export class KombiAgent extends Think<Bindings> {
     }
 
     return Response.json({ alertes: proactiveAlerts, resume });
+  }
+
+  // ── Scheduled daily digest via DO alarm ──
+
+  private ensureScheduleTable() {
+    this.ctx.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS scheduled_reminders (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        cron_hour INTEGER NOT NULL DEFAULT 8,
+        last_run TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+  }
+
+  async scheduleNextAlarm() {
+    const now = new Date();
+    const next = new Date(now);
+    next.setUTCHours(7, 0, 0, 0); // 8h WAT (UTC+1)
+    if (next <= now) next.setDate(next.getDate() + 1);
+    await this.ctx.storage.setAlarm(next.getTime());
+  }
+
+  async alarm() {
+    this.ensureScheduleTable();
+    const reminders = [...this.ctx.storage.sql.exec(
+      `SELECT id, type FROM scheduled_reminders WHERE enabled = 1`,
+    )] as { id: string; type: string }[];
+
+    if (reminders.length === 0) {
+      await this.scheduleNextAlarm();
+      return;
+    }
+
+    try {
+      const stub = this.stub;
+      const digest: string[] = [];
+
+      for (const r of reminders) {
+        try {
+          if (r.type === 'daily_summary') {
+            const [stats, soldes] = await Promise.allSettled([
+              stub.statsJour(),
+              stub.soldesTresorerie(),
+            ]);
+            if (stats.status === 'fulfilled') {
+              const s = stats.value as unknown as { nbVentes: number; totalJour: number };
+              digest.push(`Ventes hier : ${s.nbVentes} pour ${s.totalJour.toLocaleString('fr')} FCFA`);
+            }
+            if (soldes.status === 'fulfilled') {
+              const s = soldes.value as unknown as Record<string, number>;
+              const total = (s.especes ?? 0) + (s.mtnMomo ?? 0) + (s.orangeMoney ?? 0) + (s.banque ?? 0);
+              digest.push(`Trésorerie : ${Math.round(total).toLocaleString('fr')} FCFA`);
+            }
+          } else if (r.type === 'unpaid_invoices') {
+            const factures = await stub.listerFacturesImpayees() as unknown as { id: string }[];
+            if (Array.isArray(factures) && factures.length > 0) {
+              digest.push(`${factures.length} facture(s) impayée(s) à relancer`);
+            }
+          } else if (r.type === 'low_stock') {
+            const produits = await stub.listerProduits() as unknown as { en_alerte: number; nom: string }[];
+            if (Array.isArray(produits)) {
+              const alertes = produits.filter(p => p.en_alerte);
+              if (alertes.length > 0) {
+                digest.push(`${alertes.length} produit(s) en stock bas`);
+              }
+            }
+          }
+
+          this.ctx.storage.sql.exec(
+            `UPDATE scheduled_reminders SET last_run = datetime('now') WHERE id = ?`,
+            r.id,
+          );
+        } catch { /* skip individual reminder */ }
+      }
+
+      if (digest.length > 0) {
+        this.saveMessage({
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: `📋 **Résumé quotidien**\n\n${digest.map(d => `- ${d}`).join('\n')}`,
+        });
+      }
+    } catch { /* best-effort */ }
+
+    await this.scheduleNextAlarm();
+  }
+
+  private handleReminders(request: Request): Response {
+    this.ensureScheduleTable();
+    const url = new URL(request.url);
+
+    if (request.method === 'GET') {
+      const rows = [...this.ctx.storage.sql.exec(
+        `SELECT id, type, enabled, cron_hour, last_run FROM scheduled_reminders ORDER BY created_at`,
+      )];
+      return Response.json({ reminders: rows });
+    }
+
+    return Response.json({ erreur: 'Méthode non supportée' }, { status: 405 });
+  }
+
+  private async handleReminderToggle(request: Request): Promise<Response> {
+    this.ensureScheduleTable();
+    const { type, enabled } = await request.json() as { type: string; enabled: boolean };
+
+    const existing = [...this.ctx.storage.sql.exec(
+      `SELECT id FROM scheduled_reminders WHERE type = ?`, type,
+    )];
+
+    if (existing.length === 0) {
+      this.ctx.storage.sql.exec(
+        `INSERT INTO scheduled_reminders (id, type, enabled) VALUES (?, ?, ?)`,
+        crypto.randomUUID(), type, enabled ? 1 : 0,
+      );
+    } else {
+      this.ctx.storage.sql.exec(
+        `UPDATE scheduled_reminders SET enabled = ? WHERE type = ?`,
+        enabled ? 1 : 0, type,
+      );
+    }
+
+    // Ensure alarm is scheduled
+    const anyEnabled = [...this.ctx.storage.sql.exec(
+      `SELECT 1 FROM scheduled_reminders WHERE enabled = 1 LIMIT 1`,
+    )];
+    if (anyEnabled.length > 0) {
+      await this.scheduleNextAlarm();
+    }
+
+    return Response.json({ ok: true });
   }
 
   getModel() {

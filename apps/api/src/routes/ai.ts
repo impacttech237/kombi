@@ -45,3 +45,19 @@ ai.get('/alerts', async (c) => {
   const res = await agent.fetch(new Request('https://do/alerts', { method: 'GET' }));
   return new Response(res.body, { status: res.status, headers: res.headers });
 });
+
+ai.get('/reminders', async (c) => {
+  const agent = getAgent(c);
+  const res = await agent.fetch(new Request('https://do/reminders', { method: 'GET' }));
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});
+
+ai.post('/reminders', async (c) => {
+  const agent = getAgent(c);
+  const res = await agent.fetch(new Request('https://do/reminders', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: c.req.raw.body,
+  }));
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});
