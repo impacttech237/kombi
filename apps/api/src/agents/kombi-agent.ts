@@ -328,8 +328,8 @@ L'utilisateur connecté a le rôle "${role}" (id: ${userId}).
 
 # Ce que tu sais faire
 Tu as des OUTILS pour lire les données réelles de cette entreprise et pour agir dessus.
-- LECTURE : stats_jour, tendance_7_jours, ventes_recentes, ventes_a_credit, soldes_tresorerie, tresorerie_du_jour, depenses_recentes, analyse_depenses, liste_produits, factures_impayees, liste_factures, dettes_fournisseurs, etats_financiers, ca_cumule, marge_cumulee, meilleures_ventes, cockpit, alertes, prevision_tresorerie, comparaison_mensuelle, seuil_rentabilite, problemes_prioritaires, liste_tiers, liste_ecritures, mouvements_tresorerie
-- ACTION : enregistrer_vente, creer_depense, creer_tiers, creer_produit, creer_facture, emettre_facture, payer_vente, payer_facture, approvisionner_stock
+- LECTURE : stats_jour, tendance_7_jours, ventes_recentes, ventes_a_credit, soldes_tresorerie, tresorerie_du_jour, depenses_recentes, analyse_depenses, liste_produits, factures_impayees, liste_factures, dettes_fournisseurs, etats_financiers, ca_cumule, marge_cumulee, meilleures_ventes, cockpit, alertes, prevision_tresorerie, comparaison_mensuelle, seuil_rentabilite, problemes_prioritaires, liste_tiers, detail_tiers, liste_ecritures, mouvements_tresorerie, liste_commandes, marge_par_produit, marge_par_client, budget_du_mois, journal_audit, rapport_periode
+- ACTION : enregistrer_vente, creer_depense, creer_tiers, creer_produit, creer_facture, emettre_facture, payer_vente, payer_facture, approvisionner_stock, creer_commande, changer_statut_commande, annuler_vente, payer_dette_fournisseur, convertir_devis_en_facture, creer_avoir
 
 # Comment répondre
 1. Quand l'utilisateur pose une question sur ses données → appelle l'outil correspondant, puis explique le résultat de façon claire et concise.
@@ -686,6 +686,152 @@ Utilise le markdown : **gras** pour les chiffres importants, listes à puces pou
             modePaiement: modePaiement ?? null, aCredit, tiersId: tiersId ?? null,
             clientUuid: crypto.randomUUID(),
           });
+        },
+      }),
+
+      // ── Phase 6 : commandes, dettes, annulations, rapports ──
+
+      liste_commandes: t({
+        description: "Liste les commandes/missions en cours avec tâches et coûts",
+        parameters: z.object({}),
+        execute: async () => stub.listerCommandes(),
+      }),
+
+      creer_commande: t({
+        description: "Crée une nouvelle commande ou mission. Demander confirmation.",
+        parameters: z.object({
+          type: z.enum(['commande', 'mission']).optional().describe("Type"),
+          libelle: z.string().describe("Intitulé"),
+          montant: z.number().optional().describe("Montant en FCFA"),
+          tiersId: z.string().optional().describe("ID du client"),
+          datePrevue: z.string().optional().describe("Date prévue YYYY-MM-DD"),
+          description: z.string().optional(),
+          priorite: z.enum(['basse', 'normale', 'haute', 'urgente']).optional(),
+        }),
+        execute: async (args: {
+          type?: 'commande' | 'mission'; libelle: string; montant?: number; tiersId?: string;
+          datePrevue?: string; description?: string; priorite?: string;
+        }) => {
+          return await stub.creerCommande({
+            ...args, tiersId: args.tiersId ?? null, montant: args.montant ?? null,
+            datePrevue: args.datePrevue ?? null, description: args.description ?? null,
+            clientUuid: crypto.randomUUID(),
+          });
+        },
+      }),
+
+      changer_statut_commande: t({
+        description: "Change le statut d'une commande (en_cours, terminee, annulee, en_attente). Demander confirmation.",
+        parameters: z.object({
+          commandeId: z.string().describe("ID de la commande"),
+          statut: z.string().describe("Nouveau statut"),
+        }),
+        execute: async ({ commandeId, statut }: { commandeId: string; statut: string }) => {
+          return await stub.changerStatutCommande(commandeId, statut);
+        },
+      }),
+
+      annuler_vente: t({
+        description: "Annule une vente. Demander confirmation.",
+        parameters: z.object({
+          venteId: z.string().describe("ID de la vente à annuler"),
+        }),
+        execute: async ({ venteId }: { venteId: string }) => {
+          return await stub.annulerVente(venteId);
+        },
+      }),
+
+      payer_dette_fournisseur: t({
+        description: "Paye une dette fournisseur (achat à crédit). Demander confirmation.",
+        parameters: z.object({
+          achatId: z.string().describe("ID de l'achat/dette"),
+          montant: z.number().min(1).describe("Montant en FCFA"),
+          modePaiement: z.enum(['especes', 'mtnMomo', 'orangeMoney', 'banque']),
+        }),
+        execute: async ({ achatId, montant, modePaiement }: {
+          achatId: string; montant: number; modePaiement: string;
+        }) => {
+          return await stub.payerAchat(achatId, montant, modePaiement);
+        },
+      }),
+
+      convertir_devis_en_facture: t({
+        description: "Convertit un devis accepté en facture. Demander confirmation.",
+        parameters: z.object({
+          devisId: z.string().describe("ID du devis à convertir"),
+        }),
+        execute: async ({ devisId }: { devisId: string }) => {
+          const factureId = await stub.convertirDevisEnFacture(devisId);
+          return { factureId, message: 'Devis converti en facture' };
+        },
+      }),
+
+      creer_avoir: t({
+        description: "Crée un avoir (note de crédit) sur une facture. Demander confirmation.",
+        parameters: z.object({
+          factureId: z.string().describe("ID de la facture"),
+        }),
+        execute: async ({ factureId }: { factureId: string }) => {
+          return await stub.creerAvoir(factureId, 'AVO');
+        },
+      }),
+
+      detail_tiers: t({
+        description: "Détail d'un client/fournisseur : ventes, factures, solde dû",
+        parameters: z.object({
+          tiersId: z.string().describe("ID du tiers"),
+        }),
+        execute: async ({ tiersId }: { tiersId: string }) => {
+          return await stub.getTiersDetail(tiersId);
+        },
+      }),
+
+      rapport_periode: t({
+        description: "Génère un rapport financier pour une période donnée",
+        parameters: z.object({
+          type: z.enum(['mensuel', 'trimestriel', 'annuel', 'comparaison', 'personnalise']).describe("Type de rapport"),
+          debut: z.string().describe("Date début YYYY-MM-DD"),
+          fin: z.string().describe("Date fin YYYY-MM-DD"),
+        }),
+        execute: async ({ type, debut, fin }: {
+          type: 'mensuel' | 'trimestriel' | 'annuel' | 'comparaison' | 'personnalise'; debut: string; fin: string;
+        }) => {
+          return await stub.rapport({ type, periode: { debut, fin } });
+        },
+      }),
+
+      marge_par_produit: t({
+        description: "Marge bénéficiaire détaillée par produit",
+        parameters: z.object({}),
+        execute: async () => stub.margeParProduit(),
+      }),
+
+      marge_par_client: t({
+        description: "Marge bénéficiaire détaillée par client",
+        parameters: z.object({}),
+        execute: async () => stub.margeParClient(),
+      }),
+
+      budget_du_mois: t({
+        description: "Budget et objectifs du mois en cours",
+        parameters: z.object({
+          anneeMois: z.string().optional().describe("YYYY-MM (défaut: mois courant)"),
+        }),
+        execute: async ({ anneeMois }: { anneeMois?: string }) => {
+          const am = anneeMois ?? new Date().toISOString().slice(0, 7);
+          return await stub.getBudget(am);
+        },
+      }),
+
+      journal_audit: t({
+        description: "Journal d'audit : historique des actions et vérification d'intégrité",
+        parameters: z.object({}),
+        execute: async () => {
+          const [entrees, integrite] = await Promise.all([
+            stub.listerAuditLog(),
+            stub.verifierChaineAudit(),
+          ]);
+          return { entrees, integrite };
         },
       }),
     };
