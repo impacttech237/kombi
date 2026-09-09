@@ -38,6 +38,10 @@ new_sqlite_classes = ["KombiAgent"]
 [ai]
 binding = "AI"
 
+[vars]
+# Modèle LLM pour l'agent IA. Changer ici pour upgrader (ex: @cf/meta/llama-3.3-70b-instruct-fp8-fast).
+AI_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct"
+
 # La PWA (front) est servie par le même Worker → même origine que l'API.
 [assets]
 directory = "../web/dist"

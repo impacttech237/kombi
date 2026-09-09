@@ -7,6 +7,7 @@ export interface Bindings {
   ENTREPRISE: DurableObjectNamespace<EntrepriseDO>; // 1 base par entreprise (D13)
   KOMBI_AGENT: DurableObjectNamespace<KombiAgent>; // agent IA par entreprise
   AI: Ai; // Workers AI (LLM, Vision, Embeddings…)
+  AI_MODEL?: string; // override modèle LLM (défaut: llama-4-scout)
   DOCS: R2Bucket;
   ASSETS: Fetcher; // sert la PWA (front) depuis le même Worker (même origine)
   BETTER_AUTH_SECRET: string;

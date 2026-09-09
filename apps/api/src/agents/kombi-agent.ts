@@ -16,7 +16,9 @@ export class KombiAgent extends Think<Bindings> {
     return ns.get(ns.idFromName(this.entrepriseId));
   }
 
+  private _tablesReady = false;
   private ensureTables() {
+    if (this._tablesReady) return;
     this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS chat_messages (
         id TEXT PRIMARY KEY,
@@ -25,11 +27,8 @@ export class KombiAgent extends Think<Bindings> {
         tool_calls TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
-      CREATE TABLE IF NOT EXISTS chat_meta (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      );
     `);
+    this._tablesReady = true;
   }
 
   private saveMessage(msg: { id: string; role: string; content: string; toolCalls?: unknown[] }) {
@@ -73,83 +72,137 @@ export class KombiAgent extends Think<Bindings> {
       return this.handleAlerts();
     }
 
-    const response = await super.fetch(request);
+    // Capture user context from headers for system prompt
+    (this as any)._userId = request.headers.get('x-kombi-user-id') ?? 'inconnu';
+    (this as any)._userRole = request.headers.get('x-kombi-role') ?? 'membre';
 
+    // Save user message before forwarding to Think
+    let userContent: string | null = null;
     if (request.method === 'POST' && (path.endsWith('/chat') || path === '/')) {
       try {
         const body = await request.clone().json() as { messages?: { role: string; content: string }[] };
         if (body.messages?.length) {
           const last = body.messages[body.messages.length - 1]!;
-          this.saveMessage({ id: crypto.randomUUID(), role: last.role, content: last.content });
+          if (last.role === 'user') {
+            userContent = last.content;
+            this.saveMessage({ id: crypto.randomUUID(), role: 'user', content: last.content });
+          }
         }
       } catch { /* best-effort */ }
+    }
+
+    const response = await super.fetch(request);
+
+    // Intercept stream to capture assistant response
+    if (userContent && response.body) {
+      const original = response.body;
+      const self = this;
+      let assistantText = '';
+
+      const transform = new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) {
+          controller.enqueue(chunk);
+          try {
+            const text = new TextDecoder().decode(chunk);
+            for (const line of text.split('\n')) {
+              if (line.startsWith('0:')) {
+                try { assistantText += JSON.parse(line.slice(2)) as string; } catch {}
+              }
+            }
+          } catch {}
+        },
+        flush() {
+          if (assistantText.trim()) {
+            try {
+              self.saveMessage({ id: crypto.randomUUID(), role: 'assistant', content: assistantText });
+            } catch {}
+          }
+        },
+      });
+
+      const piped = original.pipeThrough(transform);
+      return new Response(piped, {
+        status: response.status,
+        headers: response.headers,
+      });
     }
 
     return response;
   }
 
   private async handleAlerts(): Promise<Response> {
+    const proactiveAlerts: { type: string; gravite: string; message: string }[] = [];
+    let resume: { ventesJour: number; caJour: number; tresorerieTotal: number } | null = null;
+
     try {
       const stub = this.stub;
-      const [alertes, soldes, stats] = await Promise.all([
+
+      // Each call wrapped individually so one failure doesn't break everything
+      const [alertes, soldes, stats] = await Promise.allSettled([
         stub.alertesPilotage(),
         stub.soldesTresorerie(),
         stub.statsJour(),
       ]);
-      const totalTresorerie = (soldes as any).especes + (soldes as any).mtnMomo +
-        (soldes as any).orangeMoney + (soldes as any).banque;
 
-      const proactiveAlerts: { type: string; gravite: string; message: string }[] = [];
-
-      if (Array.isArray(alertes)) {
-        for (const a of alertes as { type: string; gravite: string; libelle: string }[]) {
+      if (alertes.status === 'fulfilled' && Array.isArray(alertes.value)) {
+        for (const a of alertes.value as { type: string; gravite: string; libelle: string }[]) {
           proactiveAlerts.push({ type: a.type, gravite: a.gravite, message: a.libelle });
         }
       }
 
-      if (totalTresorerie < 50_000) {
-        proactiveAlerts.push({
-          type: 'tresorerie_critique',
-          gravite: 'critique',
-          message: `Trésorerie totale très basse : ${Math.round(totalTresorerie).toLocaleString('fr')} FCFA`,
-        });
+      if (soldes.status === 'fulfilled' && soldes.value) {
+        const s = soldes.value as unknown as Record<string, number>;
+        const total = (s.especes ?? 0) + (s.mtnMomo ?? 0) + (s.orangeMoney ?? 0) + (s.banque ?? 0);
+        if (total < 50_000) {
+          proactiveAlerts.push({
+            type: 'tresorerie_critique',
+            gravite: 'critique',
+            message: `Trésorerie totale très basse : ${Math.round(total).toLocaleString('fr')} FCFA`,
+          });
+        }
+        const st = stats.status === 'fulfilled' ? stats.value as unknown as Record<string, number> : null;
+        resume = {
+          ventesJour: st?.nbVentes ?? 0,
+          caJour: st?.totalJour ?? 0,
+          tresorerieTotal: Math.round(total),
+        };
       }
-
-      return Response.json({
-        alertes: proactiveAlerts,
-        resume: {
-          ventesJour: (stats as any).nbVentes ?? 0,
-          caJour: (stats as any).totalJour ?? 0,
-          tresorerieTotal: Math.round(totalTresorerie),
-        },
-      });
-    } catch (e) {
-      return Response.json({ alertes: [], resume: null, erreur: String(e) });
+    } catch {
+      // total failure — return empty
     }
+
+    return Response.json({ alertes: proactiveAlerts, resume });
   }
 
   getModel() {
-    return '@cf/meta/llama-4-scout-17b-16e-instruct';
+    return (this.env as any).AI_MODEL ?? '@cf/meta/llama-4-scout-17b-16e-instruct';
   }
 
   getSystemPrompt(): string {
-    return `Tu es l'assistant IA Kombi pour cette entreprise.
-Tu aides l'entrepreneur avec la gestion quotidienne : ventes, dépenses, trésorerie, stock, factures, fiscalité.
-Tu as accès aux données réelles de l'entreprise via tes outils. Utilise-les pour donner des réponses précises.
-Tu peux aussi AGIR : enregistrer des ventes, créer des dépenses, ajouter des produits, émettre des factures.
+    const userId = (this as any)._userId ?? 'inconnu';
+    const role = (this as any)._userRole ?? 'membre';
 
-Règles :
-- Réponds toujours en français
-- Sois concis et pratique — l'entrepreneur est pressé
-- Donne les montants en FCFA
-- Quand tu utilises un outil de lecture, explique brièvement ce que tu fais
+    return `Tu es Kombi, l'assistant IA de gestion d'entreprise. Tu parles UNIQUEMENT en français.
+L'utilisateur connecté a le rôle "${role}" (id: ${userId}).
 
-Règles pour les actions (écriture) :
-- TOUJOURS résumer l'action et demander "Voulez-vous que je procède ?" AVANT d'appeler un outil d'action
-- Ne JAMAIS exécuter une action sans confirmation explicite de l'utilisateur ("oui", "ok", "vas-y", "confirme")
-- Après une action, confirme ce qui a été fait avec les détails (montant, numéro, etc.)
-- Si tu ne sais pas, dis-le — ne fabrique jamais de chiffres
-- En cas d'erreur, explique clairement ce qui s'est passé`;
+# Ce que tu sais faire
+Tu as des OUTILS pour lire les données réelles de cette entreprise et pour agir dessus.
+- LECTURE : stats_jour, tendance_7_jours, ventes_recentes, ventes_a_credit, soldes_tresorerie, tresorerie_du_jour, depenses_recentes, analyse_depenses, liste_produits, factures_impayees, liste_factures, dettes_fournisseurs, etats_financiers, ca_cumule, marge_cumulee, meilleures_ventes, cockpit, alertes, prevision_tresorerie, comparaison_mensuelle, seuil_rentabilite, problemes_prioritaires, liste_tiers, liste_ecritures, mouvements_tresorerie
+- ACTION : enregistrer_vente, creer_depense, creer_tiers, creer_produit, creer_facture, emettre_facture, payer_vente, payer_facture, approvisionner_stock
+
+# Comment répondre
+1. Quand l'utilisateur pose une question sur ses données → appelle l'outil correspondant, puis explique le résultat de façon claire et concise.
+2. Les montants sont TOUJOURS en FCFA. Formate-les avec des espaces (ex: 1 500 000 FCFA).
+3. Sois direct et pratique. Pas de blabla. L'entrepreneur est pressé.
+4. Si tu ne sais pas ou si l'outil retourne une erreur → dis-le clairement. Ne fabrique JAMAIS de chiffres.
+
+# Règles pour les actions (TRÈS IMPORTANT)
+- AVANT d'appeler un outil d'action, tu DOIS résumer ce que tu vas faire et demander confirmation : "Voulez-vous que je procède ?"
+- N'exécute une action que si l'utilisateur dit explicitement "oui", "ok", "vas-y", "confirme", "fais-le".
+- APRÈS une action réussie, confirme avec les détails (montant, numéro de facture, etc.).
+
+# Format
+Utilise le markdown : **gras** pour les chiffres importants, listes à puces pour les détails, titres ## pour les sections.`;
   }
 
   getTools() {
