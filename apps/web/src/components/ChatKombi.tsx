@@ -6,6 +6,14 @@ interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  toolCalls?: { name: string; status: 'running' | 'done' }[];
+}
+
+interface StreamEvent {
+  type: 'text' | 'tool_start' | 'tool_end';
+  text?: string;
+  toolName?: string;
+  toolCallId?: string;
 }
 
 function IcoSend({ cls }: { cls?: string }) {
@@ -43,7 +51,81 @@ function IcoChevDown({ cls }: { cls?: string }) {
   );
 }
 
-async function* streamChat(entrepriseId: string, messages: { role: string; content: string }[]): AsyncGenerator<string> {
+function IcoRefresh({ cls }: { cls?: string }) {
+  return (
+    <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+      <path d="M16 16h5v5" />
+    </svg>
+  );
+}
+
+const TOOL_LABELS: Record<string, string> = {
+  stats_jour: 'Statistiques du jour',
+  tendance_7_jours: 'Tendance 7 jours',
+  ventes_recentes: 'Ventes récentes',
+  ventes_a_credit: 'Ventes à crédit',
+  soldes_tresorerie: 'Soldes trésorerie',
+  tresorerie_du_jour: 'Trésorerie du jour',
+  depenses_recentes: 'Dépenses récentes',
+  analyse_depenses: 'Analyse des dépenses',
+  liste_produits: 'Produits en stock',
+  factures_impayees: 'Factures impayées',
+  liste_factures: 'Factures',
+  dettes_fournisseurs: 'Dettes fournisseurs',
+  etats_financiers: 'États financiers',
+  ca_cumule: 'CA cumulé',
+  marge_cumulee: 'Marge cumulée',
+  meilleures_ventes: 'Meilleures ventes',
+  cockpit: 'Tableau de bord',
+  alertes: 'Alertes',
+  prevision_tresorerie: 'Prévision trésorerie',
+  comparaison_mensuelle: 'Comparaison mensuelle',
+  seuil_rentabilite: 'Seuil de rentabilité',
+  problemes_prioritaires: 'Problèmes prioritaires',
+  liste_tiers: 'Clients & fournisseurs',
+  liste_ecritures: 'Écritures comptables',
+  mouvements_tresorerie: 'Mouvements trésorerie',
+  enregistrer_vente: 'Enregistrement vente',
+  creer_depense: 'Enregistrement dépense',
+  creer_tiers: 'Création tiers',
+  creer_produit: 'Création produit',
+  creer_facture: 'Création facture',
+  emettre_facture: 'Émission facture',
+  payer_vente: 'Paiement vente',
+  payer_facture: 'Paiement facture',
+  approvisionner_stock: 'Approvisionnement stock',
+};
+
+function toolLabel(name: string): string {
+  return TOOL_LABELS[name] ?? name.replace(/_/g, ' ');
+}
+
+function parseStreamLine(line: string): StreamEvent | null {
+  if (line.startsWith('0:')) {
+    try { return { type: 'text', text: JSON.parse(line.slice(2)) as string }; } catch { return null; }
+  }
+  if (line.startsWith('9:')) {
+    try {
+      const d = JSON.parse(line.slice(2)) as { toolCallId: string; toolName: string };
+      return { type: 'tool_start', toolName: d.toolName, toolCallId: d.toolCallId };
+    } catch { return null; }
+  }
+  if (line.startsWith('a:')) {
+    try {
+      const d = JSON.parse(line.slice(2)) as { toolCallId: string };
+      return { type: 'tool_end', toolCallId: d.toolCallId };
+    } catch { return null; }
+  }
+  return null;
+}
+
+async function* streamChat(
+  entrepriseId: string,
+  messages: { role: string; content: string }[],
+): AsyncGenerator<StreamEvent> {
   const res = await fetch(`${BASE}/api/ai/chat`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-entreprise-id': entrepriseId },
@@ -62,16 +144,11 @@ async function* streamChat(entrepriseId: string, messages: { role: string; conte
     const { done, value } = await reader.read();
     if (done) break;
     buf += decoder.decode(value, { stream: true });
-    // AI SDK data stream: lines like 0:"text chunk"\n
     const lines = buf.split('\n');
     buf = lines.pop() ?? '';
     for (const line of lines) {
-      if (line.startsWith('0:')) {
-        try {
-          const text = JSON.parse(line.slice(2)) as string;
-          yield text;
-        } catch { /* skip malformed */ }
-      }
+      const evt = parseStreamLine(line);
+      if (evt) yield evt;
     }
   }
 }
@@ -84,23 +161,148 @@ function TypingDots() {
   );
 }
 
+function ToolCallChip({ name, status }: { name: string; status: 'running' | 'done' }) {
+  return (
+    <span className={`k-chat-tool-chip ${status}`}>
+      {status === 'running' && <span className="k-chat-tool-spinner" />}
+      {status === 'done' && <span style={{ color: 'var(--k-lime)', marginRight: 4 }}>✓</span>}
+      {toolLabel(name)}
+    </span>
+  );
+}
+
+function renderMarkdown(text: string): JSX.Element {
+  const lines = text.split('\n');
+  const elements: JSX.Element[] = [];
+  let i = 0;
+  let key = 0;
+
+  while (i < lines.length) {
+    const line = lines[i]!;
+
+    if (line.startsWith('```')) {
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i]!.startsWith('```')) {
+        codeLines.push(lines[i]!);
+        i++;
+      }
+      i++;
+      elements.push(<pre key={key++} className="k-chat-code">{codeLines.join('\n')}</pre>);
+      continue;
+    }
+
+    if (line.startsWith('### ')) {
+      elements.push(<strong key={key++} style={{ display: 'block', fontSize: 13, marginTop: 8, marginBottom: 2 }}>{inlineFormat(line.slice(4))}</strong>);
+      i++; continue;
+    }
+    if (line.startsWith('## ')) {
+      elements.push(<strong key={key++} style={{ display: 'block', fontSize: 14, marginTop: 10, marginBottom: 2 }}>{inlineFormat(line.slice(3))}</strong>);
+      i++; continue;
+    }
+    if (line.startsWith('# ')) {
+      elements.push(<strong key={key++} style={{ display: 'block', fontSize: 15, marginTop: 10, marginBottom: 4 }}>{inlineFormat(line.slice(2))}</strong>);
+      i++; continue;
+    }
+
+    if (/^[-*] /.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^[-*] /.test(lines[i]!)) {
+        items.push(lines[i]!.slice(2));
+        i++;
+      }
+      elements.push(
+        <ul key={key++} className="k-chat-list">
+          {items.map((item, j) => <li key={j}>{inlineFormat(item)}</li>)}
+        </ul>,
+      );
+      continue;
+    }
+
+    if (/^\d+\. /.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\d+\. /.test(lines[i]!)) {
+        items.push(lines[i]!.replace(/^\d+\.\s*/, ''));
+        i++;
+      }
+      elements.push(
+        <ol key={key++} className="k-chat-list">
+          {items.map((item, j) => <li key={j}>{inlineFormat(item)}</li>)}
+        </ol>,
+      );
+      continue;
+    }
+
+    if (line.trim() === '') {
+      elements.push(<div key={key++} style={{ height: 6 }} />);
+      i++; continue;
+    }
+
+    elements.push(<p key={key++} style={{ margin: 0 }}>{inlineFormat(line)}</p>);
+    i++;
+  }
+
+  return <>{elements}</>;
+}
+
+function inlineFormat(text: string): (string | JSX.Element)[] {
+  const parts: (string | JSX.Element)[] = [];
+  let remaining = text;
+  let k = 0;
+
+  while (remaining.length > 0) {
+    const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
+    const codeMatch = remaining.match(/`([^`]+)`/);
+
+    let earliest: { idx: number; len: number; el: JSX.Element } | null = null;
+
+    if (boldMatch?.index !== undefined) {
+      const el = <strong key={`b${k++}`}>{boldMatch[1]}</strong>;
+      earliest = { idx: boldMatch.index, len: boldMatch[0].length, el };
+    }
+    if (codeMatch?.index !== undefined) {
+      const candidate = { idx: codeMatch.index, len: codeMatch[0].length, el: <code key={`c${k++}`} className="k-chat-inline-code">{codeMatch[1]}</code> };
+      if (!earliest || candidate.idx < earliest.idx) earliest = candidate;
+    }
+
+    if (!earliest) {
+      parts.push(remaining);
+      break;
+    }
+
+    if (earliest.idx > 0) parts.push(remaining.slice(0, earliest.idx));
+    parts.push(earliest.el);
+    remaining = remaining.slice(earliest.idx + earliest.len);
+  }
+
+  return parts;
+}
+
 function MessageBubble({ msg }: { msg: Message }) {
   const isUser = msg.role === 'user';
   return (
-    <div style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
-      <div style={{
-        maxWidth: '82%',
-        padding: '10px 14px',
-        borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-        background: isUser ? 'var(--k-lime)' : 'var(--k-surface-soft)',
-        color: isUser ? '#fff' : 'var(--k-ink)',
-        fontSize: 14,
-        lineHeight: 1.5,
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
-      }}>
-        {msg.content}
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
+      {msg.toolCalls && msg.toolCalls.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4, maxWidth: '82%' }}>
+          {msg.toolCalls.map((tc, i) => (
+            <ToolCallChip key={i} name={tc.name} status={tc.status} />
+          ))}
+        </div>
+      )}
+      {msg.content && (
+        <div style={{
+          maxWidth: '82%',
+          padding: '10px 14px',
+          borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+          background: isUser ? 'var(--k-lime)' : 'var(--k-surface-soft)',
+          color: isUser ? '#fff' : 'var(--k-ink)',
+          fontSize: 14,
+          lineHeight: 1.5,
+          wordBreak: 'break-word',
+        }}>
+          {isUser ? msg.content : renderMarkdown(msg.content)}
+        </div>
+      )}
     </div>
   );
 }
@@ -112,15 +314,23 @@ const SUGGESTIONS = [
   'Résume mon tableau de bord',
 ];
 
+interface ProactiveAlert {
+  type: string;
+  gravite: string;
+  message: string;
+}
+
 export function ChatKombi({ entrepriseId }: { entrepriseId: string }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [alerts, setAlerts] = useState<ProactiveAlert[]>([]);
+  const [alertBadge, setAlertBadge] = useState(0);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
@@ -131,33 +341,114 @@ export function ChatKombi({ entrepriseId }: { entrepriseId: string }) {
   useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
 
+  // Load conversation history on first open
+  useEffect(() => {
+    if (!open || historyLoaded) return;
+    setHistoryLoaded(true);
+    fetch(`${BASE}/api/ai/history`, {
+      headers: { 'x-entreprise-id': entrepriseId },
+      credentials: 'include',
+    })
+      .then(r => r.ok ? r.json() as Promise<{ messages: { id: string; role: string; content: string }[] }> : null)
+      .then(data => {
+        if (data?.messages?.length) {
+          setMessages(data.messages.map(m => ({
+            id: m.id,
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          })));
+        }
+      })
+      .catch(() => { /* silently ignore */ });
+  }, [open, historyLoaded, entrepriseId]);
+
+  // Poll proactive alerts every 5 minutes
+  useEffect(() => {
+    let cancelled = false;
+    const poll = () => {
+      fetch(`${BASE}/api/ai/alerts`, {
+        headers: { 'x-entreprise-id': entrepriseId },
+        credentials: 'include',
+      })
+        .then(r => r.ok ? r.json() as Promise<{ alertes: ProactiveAlert[] }> : null)
+        .then(data => {
+          if (!cancelled && data?.alertes) {
+            setAlerts(data.alertes);
+            const critiques = data.alertes.filter(a => a.gravite === 'critique').length;
+            setAlertBadge(critiques);
+          }
+        })
+        .catch(() => {});
+    };
+    poll();
+    const timer = setInterval(poll, 5 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [entrepriseId]);
+
+  const newConversation = useCallback(() => {
+    setMessages([]);
+    setError(null);
+    fetch(`${BASE}/api/ai/history`, {
+      method: 'DELETE',
+      headers: { 'x-entreprise-id': entrepriseId },
+      credentials: 'include',
+    }).catch(() => {});
+  }, [entrepriseId]);
+
   const send = useCallback(async (text: string) => {
     if (!text.trim() || streaming) return;
     setError(null);
     const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text.trim() };
-    const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '' };
+    const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', toolCalls: [] };
 
     setMessages(prev => [...prev, userMsg, assistantMsg]);
     setInput('');
     setStreaming(true);
 
     const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }));
+    const toolMap = new Map<string, string>();
 
     try {
-      for await (const chunk of streamChat(entrepriseId, history)) {
-        setMessages(prev => {
-          const copy = [...prev];
-          const last = copy[copy.length - 1]!;
-          copy[copy.length - 1] = { ...last, content: last.content + chunk };
-          return copy;
-        });
+      for await (const evt of streamChat(entrepriseId, history)) {
+        if (evt.type === 'text' && evt.text) {
+          setMessages(prev => {
+            const copy = [...prev];
+            const last = { ...copy[copy.length - 1]! };
+            last.content += evt.text;
+            copy[copy.length - 1] = last;
+            return copy;
+          });
+        } else if (evt.type === 'tool_start' && evt.toolName && evt.toolCallId) {
+          toolMap.set(evt.toolCallId, evt.toolName);
+          const name = evt.toolName;
+          setMessages(prev => {
+            const copy = [...prev];
+            const last = { ...copy[copy.length - 1]! };
+            last.toolCalls = [...(last.toolCalls ?? []), { name, status: 'running' }];
+            copy[copy.length - 1] = last;
+            return copy;
+          });
+        } else if (evt.type === 'tool_end' && evt.toolCallId) {
+          const name = toolMap.get(evt.toolCallId);
+          if (name) {
+            setMessages(prev => {
+              const copy = [...prev];
+              const last = { ...copy[copy.length - 1]! };
+              last.toolCalls = (last.toolCalls ?? []).map(tc =>
+                tc.name === name && tc.status === 'running' ? { ...tc, status: 'done' as const } : tc,
+              );
+              copy[copy.length - 1] = last;
+              return copy;
+            });
+          }
+        }
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Erreur de connexion';
       setError(msg);
       setMessages(prev => {
         const copy = [...prev];
-        if (copy[copy.length - 1]?.content === '') copy.pop();
+        if (copy[copy.length - 1]?.content === '' && !(copy[copy.length - 1]?.toolCalls?.length)) copy.pop();
         return copy;
       });
     } finally {
@@ -176,11 +467,14 @@ export function ChatKombi({ entrepriseId }: { entrepriseId: string }) {
     <>
       {/* FAB */}
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={() => { setOpen(o => !o); setAlertBadge(0); }}
         className="k-chat-fab"
         aria-label={open ? 'Fermer l\'assistant' : 'Ouvrir l\'assistant Kombi'}
       >
         {open ? <IcoChevDown cls="w-6 h-6" /> : <IcoBot cls="w-6 h-6" />}
+        {!open && alertBadge > 0 && (
+          <span className="k-chat-badge">{alertBadge}</span>
+        )}
       </button>
 
       {/* Panel */}
@@ -195,10 +489,35 @@ export function ChatKombi({ entrepriseId }: { entrepriseId: string }) {
                 <p style={{ fontSize: 11, color: 'var(--k-muted)', lineHeight: 1.2 }}>IA · Données en temps réel</p>
               </div>
             </div>
+            <button
+              className="k-icobtn"
+              style={{ width: 34, height: 34 }}
+              onClick={newConversation}
+              aria-label="Nouvelle conversation"
+              title="Nouvelle conversation"
+            >
+              <IcoRefresh cls="w-4 h-4" />
+            </button>
             <button className="k-icobtn" style={{ width: 34, height: 34 }} onClick={() => setOpen(false)} aria-label="Fermer">
               <IcoX cls="w-4 h-4" />
             </button>
           </div>
+
+          {/* Proactive alerts */}
+          {alerts.length > 0 && messages.length === 0 && (
+            <div className="k-chat-alerts">
+              {alerts.map((a, i) => (
+                <button
+                  key={i}
+                  className={`k-chat-alert ${a.gravite}`}
+                  onClick={() => void send(a.message)}
+                >
+                  <span className="k-chat-alert-dot" />
+                  {a.message}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Messages */}
           <div className="k-chat-messages" ref={scrollRef}>
@@ -223,7 +542,7 @@ export function ChatKombi({ entrepriseId }: { entrepriseId: string }) {
             {messages.map(msg => (
               <MessageBubble key={msg.id} msg={msg} />
             ))}
-            {streaming && messages[messages.length - 1]?.content === '' && <TypingDots />}
+            {streaming && messages[messages.length - 1]?.content === '' && !(messages[messages.length - 1]?.toolCalls?.length) && <TypingDots />}
           </div>
 
           {/* Error */}

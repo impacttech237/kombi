@@ -476,6 +476,63 @@ input, button, select, textarea { font-family: inherit; }
 .k-chat-dots span:nth-child(3) { animation-delay: .3s; }
 @keyframes k-dot-bounce { to { opacity: .3; transform: translateY(-4px); } }
 
+/* Alert badge on FAB */
+.k-chat-badge {
+  position: absolute; top: -4px; right: -4px;
+  min-width: 18px; height: 18px; border-radius: 9px;
+  background: var(--k-danger); color: #fff;
+  font-size: 11px; font-weight: 700; line-height: 18px;
+  text-align: center; padding: 0 4px;
+}
+
+/* Proactive alerts banner */
+.k-chat-alerts {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 12px; border-bottom: 1px solid var(--k-line-soft);
+}
+.k-chat-alert {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 10px; border: none;
+  background: var(--k-warn-soft); color: var(--k-ink);
+  font-size: 12px; line-height: 1.4; text-align: left;
+  cursor: pointer; transition: background .15s;
+}
+.k-chat-alert:hover { filter: brightness(.97); }
+.k-chat-alert.critique { background: var(--k-danger-soft); }
+.k-chat-alert-dot {
+  flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--k-warn);
+}
+.k-chat-alert.critique .k-chat-alert-dot { background: var(--k-danger); }
+
+/* Tool call chips */
+.k-chat-tool-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; padding: 3px 8px; border-radius: 10px;
+  background: var(--k-surface-inset); color: var(--k-muted);
+  border: 1px solid var(--k-line-soft);
+}
+.k-chat-tool-chip.done { color: var(--k-ok); }
+.k-chat-tool-spinner {
+  width: 10px; height: 10px; border: 1.5px solid var(--k-line);
+  border-top-color: var(--k-lime); border-radius: 50%;
+  animation: k-spin .6s linear infinite;
+}
+@keyframes k-spin { to { transform: rotate(360deg); } }
+
+/* Markdown in chat */
+.k-chat-list { margin: 4px 0; padding-left: 18px; }
+.k-chat-list li { margin-bottom: 2px; }
+.k-chat-code {
+  background: rgba(0,0,0,.06); padding: 8px 10px; border-radius: 8px;
+  font-size: 12px; overflow-x: auto; margin: 4px 0;
+  font-family: var(--font-mono, 'DM Mono', monospace);
+}
+.k-chat-inline-code {
+  background: rgba(0,0,0,.06); padding: 1px 5px; border-radius: 4px;
+  font-size: 12px; font-family: var(--font-mono, 'DM Mono', monospace);
+}
+
 /* Mobile adjustments */
 @media (max-width: 767px) {
   .k-chat-fab { bottom: 80px; right: 16px; width: 50px; height: 50px; }

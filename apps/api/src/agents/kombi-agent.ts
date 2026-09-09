@@ -16,6 +16,118 @@ export class KombiAgent extends Think<Bindings> {
     return ns.get(ns.idFromName(this.entrepriseId));
   }
 
+  private ensureTables() {
+    this.ctx.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id TEXT PRIMARY KEY,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        tool_calls TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS chat_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
+  }
+
+  private saveMessage(msg: { id: string; role: string; content: string; toolCalls?: unknown[] }) {
+    this.ensureTables();
+    this.ctx.storage.sql.exec(
+      `INSERT OR REPLACE INTO chat_messages (id, role, content, tool_calls) VALUES (?, ?, ?, ?)`,
+      msg.id,
+      msg.role,
+      msg.content,
+      msg.toolCalls ? JSON.stringify(msg.toolCalls) : null,
+    );
+  }
+
+  private loadMessages(): { id: string; role: string; content: string; created_at: string }[] {
+    this.ensureTables();
+    return [...this.ctx.storage.sql.exec(
+      `SELECT id, role, content, created_at FROM chat_messages ORDER BY created_at ASC LIMIT 200`,
+    )] as { id: string; role: string; content: string; created_at: string }[];
+  }
+
+  private clearChatHistory() {
+    this.ensureTables();
+    this.ctx.storage.sql.exec(`DELETE FROM chat_messages`);
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const path = url.pathname;
+
+    if (path.endsWith('/history') && request.method === 'GET') {
+      const messages = this.loadMessages();
+      return Response.json({ messages });
+    }
+
+    if (path.endsWith('/history') && request.method === 'DELETE') {
+      this.clearChatHistory();
+      return Response.json({ ok: true });
+    }
+
+    if (path.endsWith('/alerts') && request.method === 'GET') {
+      return this.handleAlerts();
+    }
+
+    const response = await super.fetch(request);
+
+    if (request.method === 'POST' && (path.endsWith('/chat') || path === '/')) {
+      try {
+        const body = await request.clone().json() as { messages?: { role: string; content: string }[] };
+        if (body.messages?.length) {
+          const last = body.messages[body.messages.length - 1]!;
+          this.saveMessage({ id: crypto.randomUUID(), role: last.role, content: last.content });
+        }
+      } catch { /* best-effort */ }
+    }
+
+    return response;
+  }
+
+  private async handleAlerts(): Promise<Response> {
+    try {
+      const stub = this.stub;
+      const [alertes, soldes, stats] = await Promise.all([
+        stub.alertesPilotage(),
+        stub.soldesTresorerie(),
+        stub.statsJour(),
+      ]);
+      const totalTresorerie = (soldes as any).especes + (soldes as any).mtnMomo +
+        (soldes as any).orangeMoney + (soldes as any).banque;
+
+      const proactiveAlerts: { type: string; gravite: string; message: string }[] = [];
+
+      if (Array.isArray(alertes)) {
+        for (const a of alertes as { type: string; gravite: string; libelle: string }[]) {
+          proactiveAlerts.push({ type: a.type, gravite: a.gravite, message: a.libelle });
+        }
+      }
+
+      if (totalTresorerie < 50_000) {
+        proactiveAlerts.push({
+          type: 'tresorerie_critique',
+          gravite: 'critique',
+          message: `Trésorerie totale très basse : ${Math.round(totalTresorerie).toLocaleString('fr')} FCFA`,
+        });
+      }
+
+      return Response.json({
+        alertes: proactiveAlerts,
+        resume: {
+          ventesJour: (stats as any).nbVentes ?? 0,
+          caJour: (stats as any).totalJour ?? 0,
+          tresorerieTotal: Math.round(totalTresorerie),
+        },
+      });
+    } catch (e) {
+      return Response.json({ alertes: [], resume: null, erreur: String(e) });
+    }
+  }
+
   getModel() {
     return '@cf/meta/llama-4-scout-17b-16e-instruct';
   }

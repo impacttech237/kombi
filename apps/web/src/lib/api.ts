@@ -583,3 +583,40 @@ export async function fichierPdfFacture(entrepriseId: string, id: string, nomFic
 export async function urlPdfFacture(entrepriseId: string, id: string): Promise<string> {
   return URL.createObjectURL(await blobPdfFacture(entrepriseId, id));
 }
+
+// ── Assistant IA ──
+export function streamAiChat(entrepriseId: string, messages: { role: string; content: string }[]): {
+  stream: AsyncGenerator<string>; abort: () => void;
+} {
+  const controller = new AbortController();
+  async function* gen(): AsyncGenerator<string> {
+    const res = await fetch(`${BASE}/api/ai/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-entreprise-id': entrepriseId },
+      credentials: 'include',
+      body: JSON.stringify({ messages }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { erreur?: string };
+      throw new Error(err.erreur ?? `Erreur ${res.status}`);
+    }
+    const reader = res.body?.getReader();
+    if (!reader) return;
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
+      for (const line of lines) {
+        if (line.startsWith('0:')) {
+          try { yield JSON.parse(line.slice(2)) as string; } catch { /* skip */ }
+        }
+      }
+    }
+  }
+  return { stream: gen(), abort: () => controller.abort() };
+}

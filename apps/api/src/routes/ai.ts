@@ -3,12 +3,14 @@ import type { AppEnv } from '../types.js';
 
 export const ai = new Hono<AppEnv>();
 
-ai.post('/chat', async (c) => {
+function getAgent(c: { get(k: 'entrepriseId'): string; env: AppEnv['Bindings'] }) {
   const entrepriseId = c.get('entrepriseId');
   const ns = c.env.KOMBI_AGENT;
-  const agentId = ns.idFromName(entrepriseId);
-  const agent = ns.get(agentId);
+  return ns.get(ns.idFromName(entrepriseId));
+}
 
+ai.post('/chat', async (c) => {
+  const agent = getAgent(c);
   const headers = new Headers(c.req.raw.headers);
   headers.set('x-kombi-user-id', c.get('utilisateurId'));
   headers.set('x-kombi-role', c.get('role'));
@@ -24,4 +26,22 @@ ai.post('/chat', async (c) => {
     status: response.status,
     headers: response.headers,
   });
+});
+
+ai.get('/history', async (c) => {
+  const agent = getAgent(c);
+  const res = await agent.fetch(new Request('https://do/history', { method: 'GET' }));
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});
+
+ai.delete('/history', async (c) => {
+  const agent = getAgent(c);
+  const res = await agent.fetch(new Request('https://do/history', { method: 'DELETE' }));
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});
+
+ai.get('/alerts', async (c) => {
+  const agent = getAgent(c);
+  const res = await agent.fetch(new Request('https://do/alerts', { method: 'GET' }));
+  return new Response(res.body, { status: res.status, headers: res.headers });
 });
